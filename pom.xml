@@ -13,8 +13,11 @@
 		<java.version>17</java.version>
 	</properties>
 	<modules>
-		<!-- Them ten cac service module: -->
-		<!-- <module>services/inventory-service</module> -->
-		<!-- <module>services/order-service</module> -->
+		<module>eureka-server</module>
+		<module>api-gateway</module>
+		<module>product-service</module>
+		<module>warehouse-service</module>
+		<module>inbound-service</module>
+		<module>outbound-service</module>
 	</modules>
 </project>

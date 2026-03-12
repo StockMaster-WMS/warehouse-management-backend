@@ -1,0 +1,19 @@
+server:
+  port: ${PRODUCT_SERVICE_PORT:9002}
+
+spring:
+  application:
+    name: product-service
+  datasource:
+    url: ${PRODUCT_DB_URL:jdbc:postgresql://localhost:5432/db_product}
+    username: ${PRODUCT_DB_USERNAME:postgres}
+    password: ${PRODUCT_DB_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka}

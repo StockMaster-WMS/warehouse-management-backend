@@ -1,0 +1,19 @@
+server:
+  port: ${OUTBOUND_SERVICE_PORT:9005}
+
+spring:
+  application:
+    name: outbound-service
+  datasource:
+    url: ${OUTBOUND_DB_URL:jdbc:postgresql://localhost:5432/db_outbound}
+    username: ${OUTBOUND_DB_USERNAME:postgres}
+    password: ${OUTBOUND_DB_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka}
