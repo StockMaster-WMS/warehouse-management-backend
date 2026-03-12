@@ -1,0 +1,50 @@
+package com.outbound_service.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.UuidGenerator;
+
+import java.util.UUID;
+
+@Entity
+@Table(name = "picking_items",
+        indexes = @Index(name = "idx_pick_items_location", columnList = "location_id"))
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class PickingItem {
+
+    @Id
+    @GeneratedValue
+    @UuidGenerator
+    @Column(name = "id", updatable = false, nullable = false)
+    private UUID id;
+
+    /** Logical reference to sales order item */
+    @Column(name = "so_item_id", nullable = false)
+    private UUID soItemId;
+
+    /** Cross-service reference to product-service */
+    @Column(name = "product_id", nullable = false)
+    private UUID productId;
+
+    /** Cross-service reference to warehouse-service */
+    @Column(name = "location_id", nullable = false)
+    private UUID locationId;
+
+    @Column(name = "qty_to_pick", nullable = false)
+    private Integer qtyToPick;
+
+    @Builder.Default
+    @Column(name = "qty_picked")
+    private Integer qtyPicked = 0;
+
+    @Builder.Default
+    @Column(name = "status", length = 20)
+    private String status = "PENDING";
+
+    @Column(name = "pick_sequence")
+    private Integer pickSequence;
+}
