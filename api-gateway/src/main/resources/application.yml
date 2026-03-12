@@ -1,0 +1,98 @@
+server:
+  port: 8000
+
+spring:
+  application:
+    name: api-gateway
+  
+  # Kích hoạt màu sắc cho log console
+  output:
+    ansi:
+      enabled: always
+
+  cloud:
+    gateway:
+      routes:
+        # === PRODUCT SERVICE ===
+        - id: product-service
+          uri: lb://PRODUCT-SERVICE
+          predicates:
+            - Path=/api/products/**
+          filters:
+            - StripPrefix=1
+
+        # === . WAREHOUSE SERVICE ===
+        - id: warehouse-service
+          uri: lb://WAREHOUSE-SERVICE
+          predicates:
+            - Path=/api/warehouse/**
+          filters:
+            - StripPrefix=1
+
+        # === INBOUND SERVICE (Nghiệp vụ nhập) ===
+        - id: inbound-service
+          uri: lb://INBOUND-SERVICE
+          predicates:
+            - Path=/api/inbound/**
+          filters:
+            - StripPrefix=1
+            #- JwtAuthenticationFilter # Mở ra nếu bạn đã code class này
+
+        # === OUTBOUND SERVICE (Nghiệp vụ xuất) ===
+        - id: outbound-service
+          uri: lb://OUTBOUND-SERVICE
+          predicates:
+            - Path=/api/outbound/**
+          filters:
+            - StripPrefix=1
+            #- JwtAuthenticationFilter
+
+        # === 5. AUTH SERVICE (Xác thực) ===
+        - id: auth-service
+          uri: lb://AUTH-SERVICE
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - StripPrefix=1
+
+# === Cấu hình Discovery (Eureka) ===
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+
+# === Cấu hình Swagger UI ===
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: "1. Danh mục Sản phẩm"
+        url: /api/products/v3/api-docs
+      - name: "2. Quản lý Kho & Tồn"
+        url: /api/warehouse/v3/api-docs
+      - name: "3. Quy trình Nhập hàng"
+        url: /api/inbound/v3/api-docs
+      - name: "4. Quy trình Xuất hàng"
+        url: /api/outbound/v3/api-docs
+      - name: "5. Hệ thống Xác thực"
+        url: /api/auth/v3/api-docs
+
+# === Bảo mật (JWT) ===
+jwt:
+  secret: "YOUR_VERY_SECRET_KEY_THAT_IS_LONG_ENOUGH_FOR_HS256_ALGORITHM_2024"
+  expiration: 86400000 # 1 ngày (ms)
+
+# === Cấu hình Log để dễ quan sát  ===
+logging:
+  level:
+    org.springframework.cloud.gateway: TRACE
+    org.springframework.http.server.reactive: DEBUG
+    org.springframework.web.reactive: DEBUG
+  pattern:
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n"
