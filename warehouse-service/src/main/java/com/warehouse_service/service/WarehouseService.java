@@ -3,6 +3,7 @@ package com.warehouse_service.service;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.warehouse_service.dto.request.CreateWarehouseRequest;
+import com.warehouse_service.dto.request.UpdateWarehouseRequest;
 import com.warehouse_service.dto.response.WarehouseResponse;
 import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.repository.WarehouseRepository;
@@ -31,22 +32,62 @@ public class WarehouseService {
         return toResponse(getWarehouse(id));
     }
 
+    public WarehouseResponse findByCode(String code) {
+        return toResponse(warehouseRepository.findByCode(code)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Warehouse not found")));
+    }
+
     @Transactional
     public WarehouseResponse create(CreateWarehouseRequest request) {
+        if (warehouseRepository.existsByCode(request.code())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Warehouse code already exists");
+        }
+
         Warehouse warehouse = Warehouse.builder()
                 .code(request.code())
-                .name(request.name())
-                .address(request.address())
-                .timezone(request.timezone() == null || request.timezone().isBlank() ? "Asia/Ho_Chi_Minh" : request.timezone())
-                .isActive(request.isActive() == null || request.isActive())
                 .build();
 
+        applyRequest(warehouse, request.name(), request.address(), request.timezone(), request.isActive());
+
         return toResponse(warehouseRepository.save(warehouse));
+    }
+
+    @Transactional
+    public WarehouseResponse update(UUID id, UpdateWarehouseRequest request) {
+        Warehouse warehouse = getWarehouse(id);
+
+        warehouseRepository.findByCode(request.code())
+                .filter(existing -> !existing.getId().equals(id))
+                .ifPresent(existing -> {
+                    throw new AppException(ErrorCode.BAD_REQUEST, "Warehouse code already exists");
+                });
+
+        warehouse.setCode(request.code());
+        applyRequest(warehouse, request.name(), request.address(), request.timezone(), request.isActive());
+
+        return toResponse(warehouseRepository.save(warehouse));
+    }
+
+    @Transactional
+    public void delete(UUID id) {
+        Warehouse warehouse = getWarehouse(id);
+        warehouseRepository.delete(warehouse);
     }
 
     private Warehouse getWarehouse(UUID id) {
         return warehouseRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Warehouse not found"));
+    }
+
+    private void applyRequest(Warehouse warehouse,
+                              String name,
+                              String address,
+                              String timezone,
+                              Boolean isActive) {
+        warehouse.setName(name);
+        warehouse.setAddress(address);
+        warehouse.setTimezone(timezone == null || timezone.isBlank() ? "Asia/Ho_Chi_Minh" : timezone);
+        warehouse.setIsActive(isActive == null || isActive);
     }
 
     private WarehouseResponse toResponse(Warehouse warehouse) {
