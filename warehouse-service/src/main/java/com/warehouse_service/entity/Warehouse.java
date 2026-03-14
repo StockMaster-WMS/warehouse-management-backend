@@ -1,8 +1,8 @@
 package com.warehouse_service.entity;
 
+import com.common.util.UuidUtils;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.UuidGenerator;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -17,8 +17,6 @@ import java.util.UUID;
 public class Warehouse {
 
     @Id
-    @GeneratedValue
-    @UuidGenerator
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
@@ -44,6 +42,7 @@ public class Warehouse {
 
     @PrePersist
     void prePersist() {
+        if (id == null) id = UuidUtils.uuidV7();
         if (createdAt == null) createdAt = OffsetDateTime.now();
     }
 }

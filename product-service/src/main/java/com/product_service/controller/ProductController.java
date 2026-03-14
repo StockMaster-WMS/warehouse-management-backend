@@ -32,38 +32,38 @@ public class ProductController {
     @GetMapping
     @Operation(summary = "Lấy danh sách sản phẩm", description = "Trả về toàn bộ sản phẩm hiện có")
     public ApiResponse<List<ProductResponse>> getAll() {
-        return ApiResponse.success("Fetched products successfully", productService.findAll());
+        return ApiResponse.success("Lấy danh sách sản phẩm thành công", productService.findAll());
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Lấy sản phẩm theo ID", description = "Trả về chi tiết sản phẩm theo UUID")
     public ApiResponse<ProductResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Fetched product successfully", productService.findById(id));
+        return ApiResponse.success("Lấy sản phẩm thành công", productService.findById(id));
     }
 
     @GetMapping("/sku/{sku}")
     @Operation(summary = "Lấy sản phẩm theo SKU", description = "Tìm sản phẩm bằng mã SKU")
     public ApiResponse<ProductResponse> getBySku(@PathVariable String sku) {
-        return ApiResponse.success("Fetched product successfully", productService.findBySku(sku));
+        return ApiResponse.success("Lấy sản phẩm thành công", productService.findBySku(sku));
     }
 
     @PostMapping
     @Operation(summary = "Tạo sản phẩm", description = "Tạo mới một sản phẩm")
     public ApiResponse<ProductResponse> create(@Valid @RequestBody CreateProductRequest request) {
-        return ApiResponse.success("Created product successfully", productService.create(request));
+        return ApiResponse.success("Tạo sản phẩm thành công", productService.create(request));
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "Cập nhật sản phẩm", description = "Cập nhật thông tin sản phẩm theo ID")
     public ApiResponse<ProductResponse> update(@PathVariable UUID id,
-                                               @Valid @RequestBody UpdateProductRequest request) {
-        return ApiResponse.success("Updated product successfully", productService.update(id, request));
+            @Valid @RequestBody UpdateProductRequest request) {
+        return ApiResponse.success("Cập nhật sản phẩm thành công", productService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Xóa sản phẩm", description = "Xóa sản phẩm theo ID")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         productService.delete(id);
-        return ApiResponse.success("Deleted product successfully", id.toString());
+        return ApiResponse.success("Xóa sản phẩm thành công", id.toString());
     }
 }

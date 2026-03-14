@@ -8,6 +8,7 @@ import com.product_service.dto.response.ProductResponse;
 import com.product_service.entity.Category;
 import com.product_service.entity.Product;
 import com.product_service.entity.Supplier;
+import com.product_service.mapper.ProductMapper;
 import com.product_service.repository.CategoryRepository;
 import com.product_service.repository.ProductRepository;
 import com.product_service.repository.SupplierRepository;
@@ -26,21 +27,22 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final SupplierRepository supplierRepository;
+    private final ProductMapper productMapper;
 
     public List<ProductResponse> findAll() {
         return productRepository.findAll()
                 .stream()
-                .map(this::toResponse)
+                .map(productMapper::toResponse)
                 .toList();
     }
 
     public ProductResponse findById(UUID id) {
-        return toResponse(getProduct(id));
+        return productMapper.toResponse(getProduct(id));
     }
 
     public ProductResponse findBySku(String sku) {
-        return toResponse(productRepository.findBySku(sku)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product not found")));
+        return productMapper.toResponse(productRepository.findBySku(sku)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm")));
     }
 
     @Transactional
@@ -48,19 +50,15 @@ public class ProductService {
         validateCreateRequest(request.sku(), request.barcodeEan13());
 
         Category category = categoryRepository.findById(request.categoryId())
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Category not found"));
+            .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy danh mục"));
 
-        Product product = Product.builder()
-                .sku(request.sku())
-                .category(category)
-                .createdBy(request.createdBy())
-                .build();
+        Supplier supplier = resolveSupplier(request.primarySupplierId());
 
-        applyRequest(product, request.barcodeEan13(), request.name(), category, request.primarySupplierId(),
-                request.baseUnit(), request.weightKg(), request.lengthCm(), request.widthCm(), request.heightCm(),
-                request.minStockQty(), request.isLotTracked(), request.isExpiryTracked(), request.status());
+        Product product = productMapper.toEntity(request);
+        product.setCategory(category);
+        product.setPrimarySupplier(supplier);
 
-        return toResponse(productRepository.save(product));
+        return productMapper.toResponse(productRepository.save(product));
     }
 
     @Transactional
@@ -69,14 +67,15 @@ public class ProductService {
         validateUpdateRequest(id, request.sku(), request.barcodeEan13());
 
         Category category = categoryRepository.findById(request.categoryId())
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Category not found"));
+            .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy danh mục"));
 
-        product.setSku(request.sku());
-        applyRequest(product, request.barcodeEan13(), request.name(), category, request.primarySupplierId(),
-                request.baseUnit(), request.weightKg(), request.lengthCm(), request.widthCm(), request.heightCm(),
-                request.minStockQty(), request.isLotTracked(), request.isExpiryTracked(), request.status());
+        Supplier supplier = resolveSupplier(request.primarySupplierId());
 
-        return toResponse(productRepository.save(product));
+        productMapper.updateEntity(request, product);
+        product.setCategory(category);
+        product.setPrimarySupplier(supplier);
+
+        return productMapper.toResponse(productRepository.save(product));
     }
 
     @Transactional
@@ -87,12 +86,12 @@ public class ProductService {
 
     private Product getProduct(UUID id) {
         return productRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Product not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm"));
     }
 
     private void validateCreateRequest(String sku, String barcodeEan13) {
         if (productRepository.existsBySku(sku)) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "SKU already exists");
+            throw new AppException(ErrorCode.BAD_REQUEST, "SKU đã tồn tại");
         }
         validateBarcodeUniqueness(barcodeEan13, null);
     }
@@ -101,7 +100,7 @@ public class ProductService {
         productRepository.findBySku(sku)
                 .filter(existing -> !existing.getId().equals(id))
                 .ifPresent(existing -> {
-                    throw new AppException(ErrorCode.BAD_REQUEST, "SKU already exists");
+                    throw new AppException(ErrorCode.BAD_REQUEST, "SKU đã tồn tại");
                 });
         validateBarcodeUniqueness(barcodeEan13, id);
     }
@@ -113,7 +112,7 @@ public class ProductService {
 
         if (productId == null) {
             if (productRepository.existsByBarcodeEan13(barcodeEan13)) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Barcode already exists");
+                throw new AppException(ErrorCode.BAD_REQUEST, "Mã vạch đã tồn tại");
             }
             return;
         }
@@ -123,66 +122,17 @@ public class ProductService {
                 .filter(product -> !product.getId().equals(productId))
                 .findFirst()
                 .ifPresent(product -> {
-                    throw new AppException(ErrorCode.BAD_REQUEST, "Barcode already exists");
+                    throw new AppException(ErrorCode.BAD_REQUEST, "Mã vạch đã tồn tại");
                 });
     }
 
-    private void applyRequest(Product product,
-                              String barcodeEan13,
-                              String name,
-                              Category category,
-                              UUID primarySupplierId,
-                              String baseUnit,
-                              java.math.BigDecimal weightKg,
-                              java.math.BigDecimal lengthCm,
-                              java.math.BigDecimal widthCm,
-                              java.math.BigDecimal heightCm,
-                              Integer minStockQty,
-                              Boolean isLotTracked,
-                              Boolean isExpiryTracked,
-                              String status) {
-        Supplier supplier = null;
-        if (primarySupplierId != null) {
-            supplier = supplierRepository.findById(primarySupplierId)
-                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Supplier not found"));
+    private Supplier resolveSupplier(UUID primarySupplierId) {
+        if (primarySupplierId == null) {
+            return null;
         }
 
-        product.setBarcodeEan13(barcodeEan13);
-        product.setName(name);
-        product.setCategory(category);
-        product.setPrimarySupplier(supplier);
-        product.setBaseUnit(baseUnit);
-        product.setWeightKg(weightKg);
-        product.setLengthCm(lengthCm);
-        product.setWidthCm(widthCm);
-        product.setHeightCm(heightCm);
-        product.setMinStockQty(minStockQty == null ? 0 : minStockQty);
-        product.setIsLotTracked(Boolean.TRUE.equals(isLotTracked));
-        product.setIsExpiryTracked(Boolean.TRUE.equals(isExpiryTracked));
-        product.setStatus(status == null || status.isBlank() ? "ACTIVE" : status);
+        return supplierRepository.findById(primarySupplierId)
+            .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy nhà cung cấp"));
     }
 
-    private ProductResponse toResponse(Product product) {
-        return new ProductResponse(
-                product.getId(),
-                product.getSku(),
-                product.getBarcodeEan13(),
-                product.getName(),
-                product.getCategory() != null ? product.getCategory().getId() : null,
-                product.getPrimarySupplier() != null ? product.getPrimarySupplier().getId() : null,
-                product.getBaseUnit(),
-                product.getWeightKg(),
-                product.getLengthCm(),
-                product.getWidthCm(),
-                product.getHeightCm(),
-                product.getVolumeCm3(),
-                product.getMinStockQty(),
-                product.getIsLotTracked(),
-                product.getIsExpiryTracked(),
-                product.getStatus(),
-                product.getCreatedAt(),
-                product.getUpdatedAt(),
-                product.getCreatedBy()
-        );
-    }
 }

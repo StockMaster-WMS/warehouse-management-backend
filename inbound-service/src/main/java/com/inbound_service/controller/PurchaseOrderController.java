@@ -32,38 +32,38 @@ public class PurchaseOrderController {
     @GetMapping
     @Operation(summary = "Lấy danh sách đơn nhập", description = "Trả về toàn bộ purchase order")
     public ApiResponse<List<PurchaseOrderResponse>> getAll() {
-        return ApiResponse.success("Fetched purchase orders successfully", purchaseOrderService.findAll());
+        return ApiResponse.success("Lấy danh sách đơn nhập thành công", purchaseOrderService.findAll());
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Lấy đơn nhập theo ID", description = "Trả về chi tiết purchase order theo UUID")
     public ApiResponse<PurchaseOrderResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Fetched purchase order successfully", purchaseOrderService.findById(id));
+        return ApiResponse.success("Lấy đơn nhập thành công", purchaseOrderService.findById(id));
     }
 
     @GetMapping("/number/{poNumber}")
     @Operation(summary = "Lấy đơn nhập theo mã", description = "Tìm purchase order bằng poNumber")
     public ApiResponse<PurchaseOrderResponse> getByPoNumber(@PathVariable String poNumber) {
-        return ApiResponse.success("Fetched purchase order successfully", purchaseOrderService.findByPoNumber(poNumber));
+        return ApiResponse.success("Lấy đơn nhập thành công", purchaseOrderService.findByPoNumber(poNumber));
     }
 
     @PostMapping
     @Operation(summary = "Tạo đơn nhập", description = "Tạo mới một purchase order")
     public ApiResponse<PurchaseOrderResponse> create(@Valid @RequestBody CreatePurchaseOrderRequest request) {
-        return ApiResponse.success("Created purchase order successfully", purchaseOrderService.create(request));
+        return ApiResponse.success("Tạo đơn nhập thành công", purchaseOrderService.create(request));
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "Cập nhật đơn nhập", description = "Cập nhật purchase order theo ID")
     public ApiResponse<PurchaseOrderResponse> update(@PathVariable UUID id,
                                                      @Valid @RequestBody UpdatePurchaseOrderRequest request) {
-        return ApiResponse.success("Updated purchase order successfully", purchaseOrderService.update(id, request));
+        return ApiResponse.success("Cập nhật đơn nhập thành công", purchaseOrderService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Xóa đơn nhập", description = "Xóa purchase order theo ID")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         purchaseOrderService.delete(id);
-        return ApiResponse.success("Deleted purchase order successfully", id.toString());
+        return ApiResponse.success("Xóa đơn nhập thành công", id.toString());
     }
 }

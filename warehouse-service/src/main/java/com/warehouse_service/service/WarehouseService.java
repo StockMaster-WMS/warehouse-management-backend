@@ -6,6 +6,7 @@ import com.warehouse_service.dto.request.CreateWarehouseRequest;
 import com.warehouse_service.dto.request.UpdateWarehouseRequest;
 import com.warehouse_service.dto.response.WarehouseResponse;
 import com.warehouse_service.entity.Warehouse;
+import com.warehouse_service.mapper.WarehouseMapper;
 import com.warehouse_service.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -20,36 +21,33 @@ import java.util.UUID;
 public class WarehouseService {
 
     private final WarehouseRepository warehouseRepository;
+    private final WarehouseMapper warehouseMapper;
 
     public List<WarehouseResponse> findAll() {
         return warehouseRepository.findAll()
                 .stream()
-                .map(this::toResponse)
+                .map(warehouseMapper::toResponse)
                 .toList();
     }
 
     public WarehouseResponse findById(UUID id) {
-        return toResponse(getWarehouse(id));
+        return warehouseMapper.toResponse(getWarehouse(id));
     }
 
     public WarehouseResponse findByCode(String code) {
-        return toResponse(warehouseRepository.findByCode(code)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Warehouse not found")));
+        return warehouseMapper.toResponse(warehouseRepository.findByCode(code)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho")));
     }
 
     @Transactional
     public WarehouseResponse create(CreateWarehouseRequest request) {
         if (warehouseRepository.existsByCode(request.code())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Warehouse code already exists");
+            throw new AppException(ErrorCode.BAD_REQUEST, "Mã kho đã tồn tại");
         }
 
-        Warehouse warehouse = Warehouse.builder()
-                .code(request.code())
-                .build();
+        Warehouse warehouse = warehouseMapper.toEntity(request);
 
-        applyRequest(warehouse, request.name(), request.address(), request.timezone(), request.isActive());
-
-        return toResponse(warehouseRepository.save(warehouse));
+        return warehouseMapper.toResponse(warehouseRepository.save(warehouse));
     }
 
     @Transactional
@@ -59,13 +57,12 @@ public class WarehouseService {
         warehouseRepository.findByCode(request.code())
                 .filter(existing -> !existing.getId().equals(id))
                 .ifPresent(existing -> {
-                    throw new AppException(ErrorCode.BAD_REQUEST, "Warehouse code already exists");
+                    throw new AppException(ErrorCode.BAD_REQUEST, "Mã kho đã tồn tại");
                 });
 
-        warehouse.setCode(request.code());
-        applyRequest(warehouse, request.name(), request.address(), request.timezone(), request.isActive());
+        warehouseMapper.updateEntity(request, warehouse);
 
-        return toResponse(warehouseRepository.save(warehouse));
+        return warehouseMapper.toResponse(warehouseRepository.save(warehouse));
     }
 
     @Transactional
@@ -76,29 +73,7 @@ public class WarehouseService {
 
     private Warehouse getWarehouse(UUID id) {
         return warehouseRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Warehouse not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho"));
     }
 
-    private void applyRequest(Warehouse warehouse,
-                              String name,
-                              String address,
-                              String timezone,
-                              Boolean isActive) {
-        warehouse.setName(name);
-        warehouse.setAddress(address);
-        warehouse.setTimezone(timezone == null || timezone.isBlank() ? "Asia/Ho_Chi_Minh" : timezone);
-        warehouse.setIsActive(isActive == null || isActive);
-    }
-
-    private WarehouseResponse toResponse(Warehouse warehouse) {
-        return new WarehouseResponse(
-                warehouse.getId(),
-                warehouse.getCode(),
-                warehouse.getName(),
-                warehouse.getAddress(),
-                warehouse.getTimezone(),
-                warehouse.getIsActive(),
-                warehouse.getCreatedAt()
-        );
-    }
 }

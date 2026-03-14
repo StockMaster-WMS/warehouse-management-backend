@@ -9,19 +9,19 @@ import java.util.Map;
 import java.util.UUID;
 
 public record CreateSalesOrderRequest(
-        @NotBlank(message = "SO number is required")
-        @Size(max = 30, message = "SO number must not exceed 30 characters")
+        @NotBlank(message = "Mã đơn xuất không được để trống")
+        @Size(max = 30, message = "Mã đơn xuất không được vượt quá 30 ký tự")
         String soNumber,
 
-        @NotBlank(message = "Customer name is required")
-        @Size(max = 200, message = "Customer name must not exceed 200 characters")
+        @NotBlank(message = "Tên khách hàng không được để trống")
+        @Size(max = 200, message = "Tên khách hàng không được vượt quá 200 ký tự")
         String customerName,
 
-        @NotNull(message = "Shipping address is required")
-        @NotEmpty(message = "Shipping address must not be empty")
+        @NotNull(message = "Địa chỉ giao hàng không được để trống")
+        @NotEmpty(message = "Địa chỉ giao hàng không được rỗng")
         Map<String, Object> shippingAddress,
 
-        @NotNull(message = "Warehouse id is required")
+        @NotNull(message = "Mã kho không được để trống")
         UUID warehouseId,
 
         Short priority,

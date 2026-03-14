@@ -32,38 +32,38 @@ public class SalesOrderController {
     @GetMapping
     @Operation(summary = "Lấy danh sách đơn xuất", description = "Trả về toàn bộ sales order")
     public ApiResponse<List<SalesOrderResponse>> getAll() {
-        return ApiResponse.success("Fetched sales orders successfully", salesOrderService.findAll());
+        return ApiResponse.success("Lấy danh sách đơn xuất thành công", salesOrderService.findAll());
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Lấy đơn xuất theo ID", description = "Trả về chi tiết sales order theo UUID")
     public ApiResponse<SalesOrderResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Fetched sales order successfully", salesOrderService.findById(id));
+        return ApiResponse.success("Lấy đơn xuất thành công", salesOrderService.findById(id));
     }
 
     @GetMapping("/number/{soNumber}")
     @Operation(summary = "Lấy đơn xuất theo mã", description = "Tìm sales order bằng soNumber")
     public ApiResponse<SalesOrderResponse> getBySoNumber(@PathVariable String soNumber) {
-        return ApiResponse.success("Fetched sales order successfully", salesOrderService.findBySoNumber(soNumber));
+        return ApiResponse.success("Lấy đơn xuất thành công", salesOrderService.findBySoNumber(soNumber));
     }
 
     @PostMapping
     @Operation(summary = "Tạo đơn xuất", description = "Tạo mới một sales order")
     public ApiResponse<SalesOrderResponse> create(@Valid @RequestBody CreateSalesOrderRequest request) {
-        return ApiResponse.success("Created sales order successfully", salesOrderService.create(request));
+        return ApiResponse.success("Tạo đơn xuất thành công", salesOrderService.create(request));
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "Cập nhật đơn xuất", description = "Cập nhật sales order theo ID")
     public ApiResponse<SalesOrderResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdateSalesOrderRequest request) {
-        return ApiResponse.success("Updated sales order successfully", salesOrderService.update(id, request));
+        return ApiResponse.success("Cập nhật đơn xuất thành công", salesOrderService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Xóa đơn xuất", description = "Xóa sales order theo ID")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         salesOrderService.delete(id);
-        return ApiResponse.success("Deleted sales order successfully", id.toString());
+        return ApiResponse.success("Xóa đơn xuất thành công", id.toString());
     }
 }

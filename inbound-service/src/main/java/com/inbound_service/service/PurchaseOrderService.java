@@ -6,12 +6,12 @@ import com.inbound_service.dto.request.CreatePurchaseOrderRequest;
 import com.inbound_service.dto.request.UpdatePurchaseOrderRequest;
 import com.inbound_service.dto.response.PurchaseOrderResponse;
 import com.inbound_service.entity.PurchaseOrder;
+import com.inbound_service.mapper.PurchaseOrderMapper;
 import com.inbound_service.repository.PurchaseOrderRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -21,37 +21,33 @@ import java.util.UUID;
 public class PurchaseOrderService {
 
     private final PurchaseOrderRepository purchaseOrderRepository;
+    private final PurchaseOrderMapper purchaseOrderMapper;
 
     public List<PurchaseOrderResponse> findAll() {
         return purchaseOrderRepository.findAll()
                 .stream()
-                .map(this::toResponse)
+                .map(purchaseOrderMapper::toResponse)
                 .toList();
     }
 
     public PurchaseOrderResponse findById(UUID id) {
-        return toResponse(getPurchaseOrder(id));
+        return purchaseOrderMapper.toResponse(getPurchaseOrder(id));
     }
 
     public PurchaseOrderResponse findByPoNumber(String poNumber) {
-        return toResponse(purchaseOrderRepository.findByPoNumber(poNumber)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Purchase order not found")));
+        return purchaseOrderMapper.toResponse(purchaseOrderRepository.findByPoNumber(poNumber)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập")));
     }
 
     @Transactional
     public PurchaseOrderResponse create(CreatePurchaseOrderRequest request) {
         if (purchaseOrderRepository.existsByPoNumber(request.poNumber())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "PO number already exists");
+            throw new AppException(ErrorCode.BAD_REQUEST, "Mã đơn nhập đã tồn tại");
         }
 
-        PurchaseOrder purchaseOrder = PurchaseOrder.builder()
-                .poNumber(request.poNumber())
-                .build();
+        PurchaseOrder purchaseOrder = purchaseOrderMapper.toEntity(request);
 
-        applyRequest(purchaseOrder, request.supplierId(), request.warehouseId(), request.status(), request.orderDate(),
-                request.expectedDate(), request.totalAmount());
-
-        return toResponse(purchaseOrderRepository.save(purchaseOrder));
+        return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
     }
 
     @Transactional
@@ -61,14 +57,12 @@ public class PurchaseOrderService {
         purchaseOrderRepository.findByPoNumber(request.poNumber())
                 .filter(existing -> !existing.getId().equals(id))
                 .ifPresent(existing -> {
-                    throw new AppException(ErrorCode.BAD_REQUEST, "PO number already exists");
+                    throw new AppException(ErrorCode.BAD_REQUEST, "Mã đơn nhập đã tồn tại");
                 });
 
-        purchaseOrder.setPoNumber(request.poNumber());
-        applyRequest(purchaseOrder, request.supplierId(), request.warehouseId(), request.status(), request.orderDate(),
-                request.expectedDate(), request.totalAmount());
+        purchaseOrderMapper.updateEntity(request, purchaseOrder);
 
-        return toResponse(purchaseOrderRepository.save(purchaseOrder));
+        return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
     }
 
     @Transactional
@@ -79,35 +73,7 @@ public class PurchaseOrderService {
 
     private PurchaseOrder getPurchaseOrder(UUID id) {
         return purchaseOrderRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Purchase order not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
     }
 
-    private void applyRequest(PurchaseOrder purchaseOrder,
-                              UUID supplierId,
-                              UUID warehouseId,
-                              String status,
-                              java.time.LocalDate orderDate,
-                              java.time.LocalDate expectedDate,
-                              BigDecimal totalAmount) {
-        purchaseOrder.setSupplierId(supplierId);
-        purchaseOrder.setWarehouseId(warehouseId);
-        purchaseOrder.setStatus(status == null || status.isBlank() ? "DRAFT" : status);
-        purchaseOrder.setOrderDate(orderDate);
-        purchaseOrder.setExpectedDate(expectedDate);
-        purchaseOrder.setTotalAmount(totalAmount == null ? BigDecimal.ZERO : totalAmount);
-    }
-
-    private PurchaseOrderResponse toResponse(PurchaseOrder purchaseOrder) {
-        return new PurchaseOrderResponse(
-                purchaseOrder.getId(),
-                purchaseOrder.getPoNumber(),
-                purchaseOrder.getSupplierId(),
-                purchaseOrder.getWarehouseId(),
-                purchaseOrder.getStatus(),
-                purchaseOrder.getOrderDate(),
-                purchaseOrder.getExpectedDate(),
-                purchaseOrder.getTotalAmount(),
-                purchaseOrder.getCreatedAt()
-        );
-    }
 }

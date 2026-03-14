@@ -4,12 +4,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record UpdateWarehouseRequest(
-        @NotBlank(message = "Warehouse code is required")
-        @Size(max = 20, message = "Warehouse code must not exceed 20 characters")
+        @NotBlank(message = "Mã kho không được để trống")
+        @Size(max = 20, message = "Mã kho không được vượt quá 20 ký tự")
         String code,
 
-        @NotBlank(message = "Warehouse name is required")
-        @Size(max = 150, message = "Warehouse name must not exceed 150 characters")
+        @NotBlank(message = "Tên kho không được để trống")
+        @Size(max = 150, message = "Tên kho không được vượt quá 150 ký tự")
         String name,
 
         String address,

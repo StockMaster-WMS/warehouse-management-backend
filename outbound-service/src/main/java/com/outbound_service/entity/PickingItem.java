@@ -1,8 +1,8 @@
 package com.outbound_service.entity;
 
+import com.common.util.UuidUtils;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.UuidGenerator;
 
 import java.util.UUID;
 
@@ -17,8 +17,6 @@ import java.util.UUID;
 public class PickingItem {
 
     @Id
-    @GeneratedValue
-    @UuidGenerator
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
@@ -47,4 +45,9 @@ public class PickingItem {
 
     @Column(name = "pick_sequence")
     private Integer pickSequence;
+
+    @PrePersist
+    void prePersist() {
+        if (id == null) id = UuidUtils.uuidV7();
+    }
 }

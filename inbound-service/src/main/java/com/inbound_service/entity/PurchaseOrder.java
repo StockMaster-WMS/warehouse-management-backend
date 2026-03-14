@@ -1,9 +1,8 @@
 package com.inbound_service.entity;
 
+import com.common.util.UuidUtils;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.UuidGenerator;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -19,8 +18,6 @@ import java.util.UUID;
 public class PurchaseOrder {
 
     @Id
-    @GeneratedValue
-    @UuidGenerator
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
@@ -54,6 +51,7 @@ public class PurchaseOrder {
 
     @PrePersist
     void prePersist() {
+        if (id == null) id = UuidUtils.uuidV7();
         if (createdAt == null) createdAt = OffsetDateTime.now();
     }
 }

@@ -32,38 +32,38 @@ public class WarehouseController {
     @GetMapping
     @Operation(summary = "Lấy danh sách kho", description = "Trả về toàn bộ kho trong hệ thống")
     public ApiResponse<List<WarehouseResponse>> getAll() {
-        return ApiResponse.success("Fetched warehouses successfully", warehouseService.findAll());
+        return ApiResponse.success("Lấy danh sách kho thành công", warehouseService.findAll());
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Lấy kho theo ID", description = "Trả về chi tiết kho theo UUID")
     public ApiResponse<WarehouseResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Fetched warehouse successfully", warehouseService.findById(id));
+        return ApiResponse.success("Lấy kho thành công", warehouseService.findById(id));
     }
 
     @GetMapping("/code/{code}")
     @Operation(summary = "Lấy kho theo mã", description = "Tìm kho bằng mã code")
     public ApiResponse<WarehouseResponse> getByCode(@PathVariable String code) {
-        return ApiResponse.success("Fetched warehouse successfully", warehouseService.findByCode(code));
+        return ApiResponse.success("Lấy kho thành công", warehouseService.findByCode(code));
     }
 
     @PostMapping
     @Operation(summary = "Tạo kho", description = "Tạo mới một kho")
     public ApiResponse<WarehouseResponse> create(@Valid @RequestBody CreateWarehouseRequest request) {
-        return ApiResponse.success("Created warehouse successfully", warehouseService.create(request));
+        return ApiResponse.success("Tạo kho thành công", warehouseService.create(request));
     }
 
     @PutMapping("/{id}")
     @Operation(summary = "Cập nhật kho", description = "Cập nhật thông tin kho theo ID")
     public ApiResponse<WarehouseResponse> update(@PathVariable UUID id,
                                                  @Valid @RequestBody UpdateWarehouseRequest request) {
-        return ApiResponse.success("Updated warehouse successfully", warehouseService.update(id, request));
+        return ApiResponse.success("Cập nhật kho thành công", warehouseService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @Operation(summary = "Xóa kho", description = "Xóa kho theo ID")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         warehouseService.delete(id);
-        return ApiResponse.success("Deleted warehouse successfully", id.toString());
+        return ApiResponse.success("Xóa kho thành công", id.toString());
     }
 }
