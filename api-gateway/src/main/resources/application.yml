@@ -12,48 +12,88 @@ spring:
 
   cloud:
     gateway:
-      routes:
-        # === PRODUCT SERVICE ===
-        - id: product-service
-          uri: lb://PRODUCT-SERVICE
-          predicates:
-            - Path=/api/products/**
-          filters:
-            - StripPrefix=1
+      server:
+        webmvc:
+          routes:
+            # === PRODUCT SERVICE DOCS ===
+            - id: product-service-docs
+              uri: lb://PRODUCT-SERVICE
+              predicates:
+                - Path=/api/products/v3/api-docs
+              filters:
+                - SetPath=/v3/api-docs
 
-        # === WAREHOUSE SERVICE ===
-        - id: warehouse-service
-          uri: lb://WAREHOUSE-SERVICE
-          predicates:
-            - Path=/api/warehouse/**
-          filters:
-            - StripPrefix=1
+            # === PRODUCT SERVICE ===
+            - id: product-service
+              uri: lb://PRODUCT-SERVICE
+              predicates:
+                - Path=/api/products/**
 
-        # === INBOUND SERVICE (Nghiep vu nhap) ===
-        - id: inbound-service
-          uri: lb://INBOUND-SERVICE
-          predicates:
-            - Path=/api/inbound/**
-          filters:
-            - StripPrefix=1
-            # - JwtAuthenticationFilter
+            # === WAREHOUSE SERVICE DOCS ===
+            - id: warehouse-service-docs
+              uri: lb://WAREHOUSE-SERVICE
+              predicates:
+                - Path=/api/warehouse/v3/api-docs
+              filters:
+                - SetPath=/v3/api-docs
 
-        # === OUTBOUND SERVICE (Nghiep vu xuat) ===
-        - id: outbound-service
-          uri: lb://OUTBOUND-SERVICE
-          predicates:
-            - Path=/api/outbound/**
-          filters:
-            - StripPrefix=1
-            # - JwtAuthenticationFilter
+            # === WAREHOUSE SERVICE ===
+            - id: warehouse-service
+              uri: lb://WAREHOUSE-SERVICE
+              predicates:
+                - Path=/api/warehouse/**
+              filters:
+                - StripPrefix=1
 
-        # === AUTH SERVICE (Xac thuc) ===
-        - id: auth-service
-          uri: lb://AUTH-SERVICE
-          predicates:
-            - Path=/api/auth/**
-          filters:
-            - StripPrefix=1
+            # === INBOUND SERVICE DOCS ===
+            - id: inbound-service-docs
+              uri: lb://INBOUND-SERVICE
+              predicates:
+                - Path=/api/inbound/v3/api-docs
+              filters:
+                - SetPath=/v3/api-docs
+
+            # === INBOUND SERVICE (Nghiep vu nhap) ===
+            - id: inbound-service
+              uri: lb://INBOUND-SERVICE
+              predicates:
+                - Path=/api/inbound/**
+              filters:
+                - StripPrefix=1
+                # - JwtAuthenticationFilter
+
+            # === OUTBOUND SERVICE DOCS ===
+            - id: outbound-service-docs
+              uri: lb://OUTBOUND-SERVICE
+              predicates:
+                - Path=/api/outbound/v3/api-docs
+              filters:
+                - SetPath=/v3/api-docs
+
+            # === OUTBOUND SERVICE (Nghiep vu xuat) ===
+            - id: outbound-service
+              uri: lb://OUTBOUND-SERVICE
+              predicates:
+                - Path=/api/outbound/**
+              filters:
+                - StripPrefix=1
+                # - JwtAuthenticationFilter
+
+            # === AUTH SERVICE DOCS ===
+            - id: auth-service-docs
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/api/auth/v3/api-docs
+              filters:
+                - SetPath=/v3/api-docs
+
+            # === AUTH SERVICE (Xac thuc) ===
+            - id: auth-service
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/api/auth/**
+              filters:
+                - StripPrefix=1
 
 # === Cau hinh Discovery (Eureka) ===
 eureka:

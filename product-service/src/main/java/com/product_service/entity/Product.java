@@ -1,8 +1,8 @@
 package com.product_service.entity;
 
+import com.common.util.UuidUtils;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.UuidGenerator;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -22,8 +22,6 @@ import java.util.UUID;
 public class Product {
 
     @Id
-    @GeneratedValue
-    @UuidGenerator
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
@@ -91,6 +89,7 @@ public class Product {
     @PrePersist
     void prePersist() {
         OffsetDateTime now = OffsetDateTime.now();
+        if (id == null) id = UuidUtils.uuidV7();
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
     }
