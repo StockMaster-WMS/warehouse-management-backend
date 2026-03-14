@@ -117,10 +117,8 @@ public class ProductService {
             return;
         }
 
-        productRepository.findAll().stream()
-                .filter(product -> barcodeEan13.equals(product.getBarcodeEan13()))
+        productRepository.findByBarcodeEan13(barcodeEan13)
                 .filter(product -> !product.getId().equals(productId))
-                .findFirst()
                 .ifPresent(product -> {
                     throw new AppException(ErrorCode.BAD_REQUEST, "Mã vạch đã tồn tại");
                 });

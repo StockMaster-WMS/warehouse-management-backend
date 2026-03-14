@@ -11,7 +11,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
-    show-sql: true
+    show-sql: ${INBOUND_SHOW_SQL:false}
   flyway:
     enabled: true
     locations: classpath:db/migration

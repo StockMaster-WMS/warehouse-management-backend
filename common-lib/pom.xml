@@ -5,10 +5,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.3</version>
-        <relativePath/>
+        <groupId>com</groupId>
+        <artifactId>warehouse-management-backend</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <groupId>com</groupId>
@@ -16,10 +16,6 @@
     <version>0.0.1-SNAPSHOT</version>
     <name>common-lib</name>
     <description>Shared response and exception handling library</description>
-
-    <properties>
-        <java.version>17</java.version>
-    </properties>
 
     <dependencies>
         <dependency>
