@@ -1,0 +1,96 @@
+package com.inbound_service.service;
+
+import com.common.exception.AppException;
+import com.common.exception.ErrorCode;
+import com.inbound_service.dto.request.CreatePoItemRequest;
+import com.inbound_service.dto.request.UpdatePoItemRequest;
+import com.inbound_service.dto.response.PoItemResponse;
+import com.inbound_service.entity.PoItem;
+import com.inbound_service.entity.PurchaseOrder;
+import com.inbound_service.mapper.PoItemMapper;
+import com.inbound_service.repository.PoItemRepository;
+import com.inbound_service.repository.PurchaseOrderRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class PoItemService {
+
+    private final PoItemRepository poItemRepository;
+    private final PurchaseOrderRepository purchaseOrderRepository;
+    private final PoItemMapper poItemMapper;
+
+    public List<PoItemResponse> findAll(UUID purchaseOrderId) {
+        List<PoItem> items = purchaseOrderId == null
+                ? poItemRepository.findAll()
+                : poItemRepository.findByPurchaseOrderId(purchaseOrderId);
+
+        return items.stream().map(poItemMapper::toResponse).toList();
+    }
+
+    public PoItemResponse findById(UUID id) {
+        return poItemMapper.toResponse(getPoItem(id));
+    }
+
+    @Transactional
+    public PoItemResponse create(CreatePoItemRequest request) {
+        PurchaseOrder purchaseOrder = getPurchaseOrder(request.purchaseOrderId());
+        validateQuantities(request.orderedQty(), request.receivedQty());
+        ensureLineNumberUnique(request.purchaseOrderId(), request.lineNumber(), null);
+
+        PoItem item = poItemMapper.toEntity(request);
+        item.setPurchaseOrder(purchaseOrder);
+
+        return poItemMapper.toResponse(poItemRepository.save(item));
+    }
+
+    @Transactional
+    public PoItemResponse update(UUID id, UpdatePoItemRequest request) {
+        PoItem item = getPoItem(id);
+        PurchaseOrder purchaseOrder = getPurchaseOrder(request.purchaseOrderId());
+        validateQuantities(request.orderedQty(), request.receivedQty());
+        ensureLineNumberUnique(request.purchaseOrderId(), request.lineNumber(), id);
+
+        poItemMapper.updateEntity(request, item);
+        item.setPurchaseOrder(purchaseOrder);
+
+        return poItemMapper.toResponse(poItemRepository.save(item));
+    }
+
+    @Transactional
+    public void delete(UUID id) {
+        PoItem item = getPoItem(id);
+        poItemRepository.delete(item);
+    }
+
+    private PoItem getPoItem(UUID id) {
+        return poItemRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn nhập"));
+    }
+
+    private PurchaseOrder getPurchaseOrder(UUID id) {
+        return purchaseOrderRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
+    }
+
+    private void ensureLineNumberUnique(UUID poId, Short lineNumber, UUID currentItemId) {
+        poItemRepository.findByPurchaseOrderIdAndLineNumber(poId, lineNumber)
+                .filter(existing -> currentItemId == null || !existing.getId().equals(currentItemId))
+                .ifPresent(existing -> {
+                    throw new AppException(ErrorCode.BAD_REQUEST, "Số dòng đã tồn tại trong đơn nhập");
+                });
+    }
+
+    private void validateQuantities(Integer orderedQty, Integer receivedQty) {
+        int received = receivedQty == null ? 0 : receivedQty;
+        if (orderedQty <= 0 || received < 0 || received > orderedQty) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng đặt/nhận không hợp lệ");
+        }
+    }
+}
