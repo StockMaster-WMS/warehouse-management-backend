@@ -10,6 +10,8 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
 
 	Optional<Supplier> findByCode(String code);
 
+	Optional<Supplier> findByTaxCode(String taxCode);
+
 	boolean existsByCode(String code);
 
 	boolean existsByTaxCode(String taxCode);

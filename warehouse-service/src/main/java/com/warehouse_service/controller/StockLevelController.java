@@ -1,0 +1,72 @@
+package com.warehouse_service.controller;
+
+import com.common.api.ApiResponse;
+import com.warehouse_service.dto.request.CreateStockLevelRequest;
+import com.warehouse_service.dto.request.UpdateStockLevelRequest;
+import com.warehouse_service.dto.response.StockLevelResponse;
+import com.warehouse_service.service.StockLevelService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/stocks")
+@Tag(name = "Stock APIs", description = "Quản lý tồn kho nội bộ theo vị trí")
+public class StockLevelController {
+
+    private final StockLevelService stockLevelService;
+
+    @GetMapping
+    @Operation(summary = "Lấy danh sách tồn kho", description = "Lọc theo kho, vị trí hoặc sản phẩm")
+    public ApiResponse<List<StockLevelResponse>> getAll(
+            @Parameter(description = "ID kho")
+            @RequestParam(required = false) UUID warehouseId,
+            @Parameter(description = "ID vị trí")
+            @RequestParam(required = false) UUID locationId,
+            @Parameter(description = "ID sản phẩm")
+            @RequestParam(required = false) UUID productId) {
+        return ApiResponse.success("Lấy danh sách tồn kho thành công",
+                stockLevelService.findAll(warehouseId, locationId, productId));
+    }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Lấy tồn kho theo ID")
+    public ApiResponse<StockLevelResponse> getById(@PathVariable UUID id) {
+        return ApiResponse.success("Lấy tồn kho thành công", stockLevelService.findById(id));
+    }
+
+    @PostMapping
+    @Operation(summary = "Tạo tồn kho")
+    public ApiResponse<StockLevelResponse> create(@Valid @RequestBody CreateStockLevelRequest request) {
+        return ApiResponse.success("Tạo tồn kho thành công", stockLevelService.create(request));
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Cập nhật tồn kho")
+    public ApiResponse<StockLevelResponse> update(@PathVariable UUID id,
+                                                  @Valid @RequestBody UpdateStockLevelRequest request) {
+        return ApiResponse.success("Cập nhật tồn kho thành công", stockLevelService.update(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Xóa tồn kho")
+    public ApiResponse<String> delete(@PathVariable UUID id) {
+        stockLevelService.delete(id);
+        return ApiResponse.success("Xóa tồn kho thành công", id.toString());
+    }
+}

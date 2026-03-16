@@ -98,10 +98,8 @@ public class SupplierService {
             return;
         }
 
-        supplierRepository.findAll().stream()
-                .filter(supplier -> taxCode.equals(supplier.getTaxCode()))
+        supplierRepository.findByTaxCode(taxCode)
                 .filter(supplier -> !supplier.getId().equals(supplierId))
-                .findFirst()
                 .ifPresent(supplier -> {
                     throw new AppException(ErrorCode.BAD_REQUEST, "Mã số thuế đã tồn tại");
                 });

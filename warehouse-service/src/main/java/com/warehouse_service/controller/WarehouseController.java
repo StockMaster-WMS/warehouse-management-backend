@@ -56,7 +56,7 @@ public class WarehouseController {
     @PutMapping("/{id}")
     @Operation(summary = "Cập nhật kho", description = "Cập nhật thông tin kho theo ID")
     public ApiResponse<WarehouseResponse> update(@PathVariable UUID id,
-                                                 @Valid @RequestBody UpdateWarehouseRequest request) {
+            @Valid @RequestBody UpdateWarehouseRequest request) {
         return ApiResponse.success("Cập nhật kho thành công", warehouseService.update(id, request));
     }
 
