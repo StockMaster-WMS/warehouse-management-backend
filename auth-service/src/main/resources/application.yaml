@@ -10,7 +10,7 @@ spring:
     password: ${AUTH_DB_PASSWORD:postgres}
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update 
     show-sql: ${AUTH_SHOW_SQL:false}
   flyway:
     enabled: true
