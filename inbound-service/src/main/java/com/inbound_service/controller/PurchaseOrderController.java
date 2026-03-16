@@ -56,7 +56,7 @@ public class PurchaseOrderController {
     @PutMapping("/{id}")
     @Operation(summary = "Cập nhật đơn nhập", description = "Cập nhật purchase order theo ID")
     public ApiResponse<PurchaseOrderResponse> update(@PathVariable UUID id,
-                                                     @Valid @RequestBody UpdatePurchaseOrderRequest request) {
+            @Valid @RequestBody UpdatePurchaseOrderRequest request) {
         return ApiResponse.success("Cập nhật đơn nhập thành công", purchaseOrderService.update(id, request));
     }
 
