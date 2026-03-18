@@ -1,5 +1,6 @@
 package com.product_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.product_service.dto.request.CreateProductRequest;
@@ -11,12 +12,15 @@ import com.product_service.entity.Supplier;
 import com.product_service.mapper.ProductMapper;
 import com.product_service.repository.CategoryRepository;
 import com.product_service.repository.ProductRepository;
+import com.product_service.repository.ProductSpecification;
 import com.product_service.repository.SupplierRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -29,11 +33,20 @@ public class ProductService {
     private final SupplierRepository supplierRepository;
     private final ProductMapper productMapper;
 
-    public List<ProductResponse> findAll() {
-        return productRepository.findAll()
-                .stream()
-                .map(productMapper::toResponse)
-                .toList();
+    public PagedResponse<ProductResponse> findAll(Pageable pageable, String keyword, UUID categoryId,
+            String status) {
+        Specification<Product> spec = Specification
+                .where(ProductSpecification.hasKeyword(keyword))
+                .and(ProductSpecification.hasCategory(categoryId))
+                .and(ProductSpecification.hasStatus(status));
+        Page<Product> page = productRepository.findAll(spec, pageable);
+        Page<ProductResponse> mappedPage = page.map(productMapper::toResponse);
+        return new com.common.api.PagedResponse<>(
+                mappedPage.getContent(),
+                mappedPage.getNumber(),
+                mappedPage.getSize(),
+                mappedPage.getTotalElements(),
+                mappedPage.getTotalPages());
     }
 
     public ProductResponse findById(UUID id) {
@@ -50,7 +63,7 @@ public class ProductService {
         validateCreateRequest(request.sku(), request.barcodeEan13());
 
         Category category = categoryRepository.findById(request.categoryId())
-            .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy danh mục"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy danh mục"));
 
         Supplier supplier = resolveSupplier(request.primarySupplierId());
 
@@ -67,7 +80,7 @@ public class ProductService {
         validateUpdateRequest(id, request.sku(), request.barcodeEan13());
 
         Category category = categoryRepository.findById(request.categoryId())
-            .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy danh mục"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy danh mục"));
 
         Supplier supplier = resolveSupplier(request.primarySupplierId());
 
@@ -97,11 +110,11 @@ public class ProductService {
     }
 
     private void validateUpdateRequest(UUID id, String sku, String barcodeEan13) {
-        productRepository.findBySku(sku)
-                .filter(existing -> !existing.getId().equals(id))
-                .ifPresent(existing -> {
-                    throw new AppException(ErrorCode.BAD_REQUEST, "SKU đã tồn tại");
-                });
+        productRepository.findBySku(sku).ifPresent(existing -> {
+            if (!existing.getId().equals(id)) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "SKU đã tồn tại");
+            }
+        });
         validateBarcodeUniqueness(barcodeEan13, id);
     }
 
@@ -110,18 +123,11 @@ public class ProductService {
             return;
         }
 
-        if (productId == null) {
-            if (productRepository.existsByBarcodeEan13(barcodeEan13)) {
+        productRepository.findByBarcodeEan13(barcodeEan13).ifPresent(product -> {
+            if (productId == null || !product.getId().equals(productId)) {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Mã vạch đã tồn tại");
             }
-            return;
-        }
-
-        productRepository.findByBarcodeEan13(barcodeEan13)
-                .filter(product -> !product.getId().equals(productId))
-                .ifPresent(product -> {
-                    throw new AppException(ErrorCode.BAD_REQUEST, "Mã vạch đã tồn tại");
-                });
+        });
     }
 
     private Supplier resolveSupplier(UUID primarySupplierId) {
@@ -130,7 +136,7 @@ public class ProductService {
         }
 
         return supplierRepository.findById(primarySupplierId)
-            .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy nhà cung cấp"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy nhà cung cấp"));
     }
 
 }

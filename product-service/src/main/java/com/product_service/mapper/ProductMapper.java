@@ -35,13 +35,13 @@ public interface ProductMapper {
 
     @AfterMapping
     default void setDefaultsOnCreate(CreateProductRequest request,
-                                     @MappingTarget Product product) {
+            @MappingTarget Product product) {
         applyDefaults(product);
     }
 
     @AfterMapping
     default void setDefaultsOnUpdate(UpdateProductRequest request,
-                                     @MappingTarget Product product) {
+            @MappingTarget Product product) {
         applyDefaults(product);
     }
 
