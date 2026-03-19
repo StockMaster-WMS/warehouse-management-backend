@@ -61,7 +61,7 @@ spring:
         - id: product-service
           uri: lb://PRODUCT-SERVICE
           predicates:
-            - Path=/api/products/**
+            - Path=/api/products/**, /api/categories/**, /api/suppliers/**
 
         # === WAREHOUSE SERVICE DOCS ===
         - id: warehouse-service-docs
@@ -72,14 +72,10 @@ spring:
             - SetPath=/v3/api-docs
 
         # === WAREHOUSE SERVICE ===
-        # FIX: Bỏ StripPrefix nếu service dùng path /api/warehouse/**
-        # Giữ StripPrefix=1 nếu service chỉ dùng /warehouse/**
         - id: warehouse-service
           uri: lb://WAREHOUSE-SERVICE
           predicates:
-            - Path=/api/warehouse/**, /api/warehouses/**
-          # filters:
-          #   - StripPrefix=1   ← Bật lại nếu service KHÔNG có prefix /api
+            - Path=/api/warehouse/**, /api/warehouses/**, /api/locations/**, /api/stocks/**
 
         # === INBOUND SERVICE DOCS ===
         - id: inbound-service-docs
@@ -90,13 +86,10 @@ spring:
             - SetPath=/v3/api-docs
 
         # === INBOUND SERVICE ===
-        # FIX: Bỏ StripPrefix nếu service dùng path /api/inbound/**
         - id: inbound-service
           uri: lb://INBOUND-SERVICE
           predicates:
-            - Path=/api/inbound/**, /api/inbounds/**
-          # filters:
-          #   - StripPrefix=1   ← Bật lại nếu service KHÔNG có prefix /api
+            - Path=/api/inbound/**, /api/inbounds/**, /api/purchase-orders/**, /api/po-items/**
 
         # === OUTBOUND SERVICE DOCS ===
         - id: outbound-service-docs
@@ -107,13 +100,10 @@ spring:
             - SetPath=/v3/api-docs
 
         # === OUTBOUND SERVICE ===
-        # FIX: Bỏ StripPrefix nếu service dùng path /api/outbound/**
         - id: outbound-service
           uri: lb://OUTBOUND-SERVICE
           predicates:
-            - Path=/api/outbound/**, /api/outbounds/**
-          # filters:
-          #   - StripPrefix=1   ← Bật lại nếu service KHÔNG có prefix /api
+            - Path=/api/outbound/**, /api/outbounds/**, /api/sales-orders/**, /api/picking-items/**
 
 # === Cau hinh Discovery (Eureka) ===
 eureka:
