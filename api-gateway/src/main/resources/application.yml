@@ -108,15 +108,15 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     urls:
-      - name: "0. Xac thuc"
+      - name: "Xác thực"
         url: /api/auth/v3/api-docs
-      - name: "1. Danh muc San pham"
+      - name: "Sản phẩm"
         url: /api/products/v3/api-docs
-      - name: "2. Quan ly Kho & Ton"
+      - name: "Kho & Tồn"
         url: /api/warehouse/v3/api-docs
-      - name: "3. Quy trinh Nhap hang"
+      - name: "Nhập hàng"
         url: /api/inbound/v3/api-docs
-      - name: "4. Quy trinh Xuat hang"
+      - name: "Xuất hàng"
         url: /api/outbound/v3/api-docs
 
 # === Cau hinh log de de quan sat ===
