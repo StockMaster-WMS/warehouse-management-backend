@@ -35,8 +35,8 @@ public class ProductService {
 
     public PagedResponse<ProductResponse> findAll(Pageable pageable, String keyword, UUID categoryId,
             String status) {
-        Specification<Product> spec = Specification
-                .where(ProductSpecification.hasKeyword(keyword))
+        Specification<Product> spec = ProductSpecification
+                .hasKeyword(keyword)
                 .and(ProductSpecification.hasCategory(categoryId))
                 .and(ProductSpecification.hasStatus(status));
         Page<Product> page = productRepository.findAll(spec, pageable);
