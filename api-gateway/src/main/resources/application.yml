@@ -15,6 +15,20 @@ spring:
       server:
         webmvc:
           routes:
+            # === AUTH SERVICE DOCS ===
+            - id: auth-service-docs
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/api/auth/v3/api-docs
+              filters:
+                - SetPath=/v3/api-docs
+
+            # === AUTH SERVICE ===
+            - id: auth-service
+              uri: lb://AUTH-SERVICE
+              predicates:
+                - Path=/api/auth/**
+
             # === PRODUCT SERVICE DOCS ===
             - id: product-service-docs
               uri: lb://PRODUCT-SERVICE
@@ -94,6 +108,8 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     urls:
+      - name: "0. Xac thuc"
+        url: /api/auth/v3/api-docs
       - name: "1. Danh muc San pham"
         url: /api/products/v3/api-docs
       - name: "2. Quan ly Kho & Ton"
@@ -103,11 +119,6 @@ springdoc:
       - name: "4. Quy trinh Xuat hang"
         url: /api/outbound/v3/api-docs
 
-# === Bao mat (JWT) ===
-jwt:
-  secret: "YOUR_VERY_SECRET_KEY_THAT_IS_LONG_ENOUGH_FOR_HS256_ALGORITHM_2024"
-  expiration: 86400000 # 1 ngay (ms)
-
 # === Cau hinh log de de quan sat ===
 logging:
   level:
@@ -116,3 +127,8 @@ logging:
     org.springframework.web.reactive: ${API_GATEWAY_WEB_LOG_LEVEL:WARN}
   pattern:
     console: "%clr(%d{yyyy-MM-dd HH:mm:ss}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n"
+
+gateway:
+  security:
+    enabled: ${GATEWAY_SECURITY_ENABLED:true}
+    jwt-secret: ${GATEWAY_JWT_SECRET:dev-auth-jwt-secret-change-this-before-staging-or-production-2026}

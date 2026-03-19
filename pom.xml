@@ -35,6 +35,7 @@
 		<module>common-lib</module>
 		<module>eureka-server</module>
 		<module>api-gateway</module>
+		<module>auth-service</module>
 		<module>product-service</module>
 		<module>warehouse-service</module>
 		<module>inbound-service</module>
