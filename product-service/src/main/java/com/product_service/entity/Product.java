@@ -92,6 +92,9 @@ public class Product {
         if (id == null) id = UuidUtils.uuidV7();
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
+        if (createdBy == null) {
+            createdBy = UUID.fromString("00000000-0000-0000-0000-000000000000");
+        }
     }
 
     @PreUpdate

@@ -40,7 +40,7 @@ CREATE TABLE suppliers (
 
 -- TABLE: products
 CREATE TABLE products (
-    id                  UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID           PRIMARY KEY,
     sku                 VARCHAR(50)    UNIQUE NOT NULL,
     barcode_ean13       VARCHAR(13)    UNIQUE,
     name                VARCHAR(255)   NOT NULL,

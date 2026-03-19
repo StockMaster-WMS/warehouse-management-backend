@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Size;
 import java.util.UUID;
 
 public record UpdateCategoryRequest(
-        @NotBlank(message = "Mã danh mục không được để trống")
         @Size(max = 30, message = "Mã danh mục không được vượt quá 30 ký tự")
         @Schema(example = "DM-001")
         String code,
