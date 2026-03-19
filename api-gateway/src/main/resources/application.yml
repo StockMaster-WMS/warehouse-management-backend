@@ -4,7 +4,7 @@ server:
 spring:
   application:
     name: api-gateway
-  
+
   autoconfigure:
     exclude:
       - org.springframework.cloud.autoconfigure.LifecycleMvcEndpointAutoConfiguration
@@ -17,95 +17,103 @@ spring:
   cloud:
     gateway:
       globalcors:
+        add-to-simple-url-handler-mapping: true   # FIX: Cho phép OPTIONS đi qua handler
         corsConfigurations:
           '[/**]':
-            allowedOrigins: "http://localhost:3000"
+            allowedOriginPatterns: "*"             # FIX: Dùng Pattern thay vì Origins
             allowedMethods:
               - GET
               - POST
               - PUT
               - DELETE
               - OPTIONS
+              - PATCH
             allowedHeaders: "*"
-            allowCredentials: true
+            maxAge: 3600
+
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+
       routes:
-            # === AUTH SERVICE DOCS ===
-            - id: auth-service-docs
-              uri: lb://AUTH-SERVICE
-              predicates:
-                - Path=/api/auth/v3/api-docs
-              filters:
-                - SetPath=/v3/api-docs
+        # === AUTH SERVICE DOCS ===
+        - id: auth-service-docs
+          uri: lb://AUTH-SERVICE
+          predicates:
+            - Path=/api/auth/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
 
-            # === AUTH SERVICE ===
-            - id: auth-service
-              uri: lb://AUTH-SERVICE
-              predicates:
-                - Path=/api/auth/**
+        # === AUTH SERVICE ===
+        - id: auth-service
+          uri: lb://AUTH-SERVICE
+          predicates:
+            - Path=/api/auth/**
 
-            # === PRODUCT SERVICE DOCS ===
-            - id: product-service-docs
-              uri: lb://PRODUCT-SERVICE
-              predicates:
-                - Path=/api/products/v3/api-docs
-              filters:
-                - SetPath=/v3/api-docs
+        # === PRODUCT SERVICE DOCS ===
+        - id: product-service-docs
+          uri: lb://PRODUCT-SERVICE
+          predicates:
+            - Path=/api/products/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
 
-            # === PRODUCT SERVICE ===
-            - id: product-service
-              uri: lb://PRODUCT-SERVICE
-              predicates:
-                - Path=/api/products/**
+        # === PRODUCT SERVICE ===
+        - id: product-service
+          uri: lb://PRODUCT-SERVICE
+          predicates:
+            - Path=/api/products/**
 
-            # === WAREHOUSE SERVICE DOCS ===
-            - id: warehouse-service-docs
-              uri: lb://WAREHOUSE-SERVICE
-              predicates:
-                - Path=/api/warehouse/v3/api-docs
-              filters:
-                - SetPath=/v3/api-docs
+        # === WAREHOUSE SERVICE DOCS ===
+        - id: warehouse-service-docs
+          uri: lb://WAREHOUSE-SERVICE
+          predicates:
+            - Path=/api/warehouse/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
 
-            # === WAREHOUSE SERVICE ===
-            - id: warehouse-service
-              uri: lb://WAREHOUSE-SERVICE
-              predicates:
-                - Path=/api/warehouse/**
-              filters:
-                - StripPrefix=1
+        # === WAREHOUSE SERVICE ===
+        # FIX: Bỏ StripPrefix nếu service dùng path /api/warehouse/**
+        # Giữ StripPrefix=1 nếu service chỉ dùng /warehouse/**
+        - id: warehouse-service
+          uri: lb://WAREHOUSE-SERVICE
+          predicates:
+            - Path=/api/warehouse/**, /api/warehouses/**
+          # filters:
+          #   - StripPrefix=1   ← Bật lại nếu service KHÔNG có prefix /api
 
-            # === INBOUND SERVICE DOCS ===
-            - id: inbound-service-docs
-              uri: lb://INBOUND-SERVICE
-              predicates:
-                - Path=/api/inbound/v3/api-docs
-              filters:
-                - SetPath=/v3/api-docs
+        # === INBOUND SERVICE DOCS ===
+        - id: inbound-service-docs
+          uri: lb://INBOUND-SERVICE
+          predicates:
+            - Path=/api/inbound/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
 
-            # === INBOUND SERVICE (Nghiep vu nhap) ===
-            - id: inbound-service
-              uri: lb://INBOUND-SERVICE
-              predicates:
-                - Path=/api/inbound/**
-              filters:
-                - StripPrefix=1
-                # - JwtAuthenticationFilter
+        # === INBOUND SERVICE ===
+        # FIX: Bỏ StripPrefix nếu service dùng path /api/inbound/**
+        - id: inbound-service
+          uri: lb://INBOUND-SERVICE
+          predicates:
+            - Path=/api/inbound/**, /api/inbounds/**
+          # filters:
+          #   - StripPrefix=1   ← Bật lại nếu service KHÔNG có prefix /api
 
-            # === OUTBOUND SERVICE DOCS ===
-            - id: outbound-service-docs
-              uri: lb://OUTBOUND-SERVICE
-              predicates:
-                - Path=/api/outbound/v3/api-docs
-              filters:
-                - SetPath=/v3/api-docs
+        # === OUTBOUND SERVICE DOCS ===
+        - id: outbound-service-docs
+          uri: lb://OUTBOUND-SERVICE
+          predicates:
+            - Path=/api/outbound/v3/api-docs
+          filters:
+            - SetPath=/v3/api-docs
 
-            # === OUTBOUND SERVICE (Nghiep vu xuat) ===
-            - id: outbound-service
-              uri: lb://OUTBOUND-SERVICE
-              predicates:
-                - Path=/api/outbound/**
-              filters:
-                - StripPrefix=1
-                # - JwtAuthenticationFilter
+        # === OUTBOUND SERVICE ===
+        # FIX: Bỏ StripPrefix nếu service dùng path /api/outbound/**
+        - id: outbound-service
+          uri: lb://OUTBOUND-SERVICE
+          predicates:
+            - Path=/api/outbound/**, /api/outbounds/**
+          # filters:
+          #   - StripPrefix=1   ← Bật lại nếu service KHÔNG có prefix /api
 
 # === Cau hinh Discovery (Eureka) ===
 eureka:
@@ -133,7 +141,7 @@ springdoc:
       - name: "Xuất hàng"
         url: /api/outbound/v3/api-docs
 
-# === Cau hinh log de de quan sat ===
+# === Cau hinh log de quan sat ===
 logging:
   level:
     "[org.springframework.cloud.gateway]": ${API_GATEWAY_LOG_LEVEL:INFO}
@@ -145,5 +153,5 @@ logging:
 app:
   gateway:
     security:
-      enabled: ${GATEWAY_SECURITY_ENABLED:true}
+      enabled: false
       jwt-secret: ${GATEWAY_JWT_SECRET:dev-auth-jwt-secret-change-this-before-staging-or-production-2026}

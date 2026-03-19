@@ -1,4 +1,4 @@
-package com.auth_service.config;
+package com.warehouse_service.config;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -21,7 +21,7 @@ public class OpenApiConfig {
     public OpenAPI openAPI() {
         return new OpenAPI()
             .info(new Info()
-                .title("Auth Service API")
+                .title("Warehouse Service API")
                 .version("1.0"))
             .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
             .components(new Components()
