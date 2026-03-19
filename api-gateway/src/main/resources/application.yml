@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: api-gateway
+  
+  autoconfigure:
+    exclude:
+      - org.springframework.cloud.autoconfigure.LifecycleMvcEndpointAutoConfiguration
 
   # Kich hoat mau sac cho log console
   output:
@@ -24,9 +28,7 @@ spring:
               - OPTIONS
             allowedHeaders: "*"
             allowCredentials: true
-      server:
-        webmvc:
-          routes:
+      routes:
             # === AUTH SERVICE DOCS ===
             - id: auth-service-docs
               uri: lb://AUTH-SERVICE
@@ -134,13 +136,14 @@ springdoc:
 # === Cau hinh log de de quan sat ===
 logging:
   level:
-    org.springframework.cloud.gateway: ${API_GATEWAY_LOG_LEVEL:INFO}
-    org.springframework.http.server.reactive: ${API_GATEWAY_HTTP_LOG_LEVEL:WARN}
-    org.springframework.web.reactive: ${API_GATEWAY_WEB_LOG_LEVEL:WARN}
+    "[org.springframework.cloud.gateway]": ${API_GATEWAY_LOG_LEVEL:INFO}
+    "[org.springframework.http.server.reactive]": ${API_GATEWAY_HTTP_LOG_LEVEL:WARN}
+    "[org.springframework.web.reactive]": ${API_GATEWAY_WEB_LOG_LEVEL:WARN}
   pattern:
     console: "%clr(%d{yyyy-MM-dd HH:mm:ss}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n"
 
-gateway:
-  security:
-    enabled: ${GATEWAY_SECURITY_ENABLED:true}
-    jwt-secret: ${GATEWAY_JWT_SECRET:dev-auth-jwt-secret-change-this-before-staging-or-production-2026}
+app:
+  gateway:
+    security:
+      enabled: ${GATEWAY_SECURITY_ENABLED:true}
+      jwt-secret: ${GATEWAY_JWT_SECRET:dev-auth-jwt-secret-change-this-before-staging-or-production-2026}
