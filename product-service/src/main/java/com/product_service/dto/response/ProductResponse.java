@@ -16,6 +16,8 @@ public record ProductResponse(
         String name,
         @Schema(example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
         UUID categoryId,
+        @Schema(example = "Thực phẩm")
+        String categoryName,
         @Schema(example = "1d9f9f8b-9a6c-4c3e-b3e5-9f7e7a9f1234")
         UUID primarySupplierId,
         @Schema(example = "goi")

@@ -3,6 +3,7 @@ package com.product_service.service;
 import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.common.util.CodeGenerator;
 import com.product_service.dto.request.CreateProductRequest;
 import com.product_service.dto.request.UpdateProductRequest;
 import com.product_service.dto.response.ProductResponse;
@@ -27,6 +28,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ProductService {
+
+    private static final String PRODUCT_SKU_PREFIX = "SP";
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
@@ -60,7 +63,7 @@ public class ProductService {
 
     @Transactional
     public ProductResponse create(CreateProductRequest request) {
-        validateCreateRequest(request.sku(), request.barcodeEan13());
+        validateBarcodeUniqueness(request.barcodeEan13(), null);
 
         Category category = categoryRepository.findById(request.categoryId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy danh mục"));
@@ -68,6 +71,7 @@ public class ProductService {
         Supplier supplier = resolveSupplier(request.primarySupplierId());
 
         Product product = productMapper.toEntity(request);
+        product.setSku(generateUniqueSku());
         product.setCategory(category);
         product.setPrimarySupplier(supplier);
 
@@ -102,11 +106,15 @@ public class ProductService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm"));
     }
 
-    private void validateCreateRequest(String sku, String barcodeEan13) {
-        if (productRepository.existsBySku(sku)) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "SKU đã tồn tại");
+    private String generateUniqueSku() {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            String sku = CodeGenerator.generate(PRODUCT_SKU_PREFIX);
+            if (!productRepository.existsBySku(sku)) {
+                return sku;
+            }
         }
-        validateBarcodeUniqueness(barcodeEan13, null);
+        throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR,
+                "Không thể tạo mã SKU duy nhất, vui lòng thử lại");
     }
 
     private void validateUpdateRequest(UUID id, String sku, String barcodeEan13) {

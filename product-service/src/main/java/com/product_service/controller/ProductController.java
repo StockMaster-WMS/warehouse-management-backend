@@ -60,7 +60,8 @@ public class ProductController {
     }
 
     @PostMapping
-    @Operation(summary = "Tạo sản phẩm", description = "Tạo mới một sản phẩm")
+    @Operation(summary = "Tạo sản phẩm",
+            description = "Tạo mới sản phẩm; mã SKU do hệ thống tự sinh (tiền tố SP)")
     public ApiResponse<ProductResponse> create(@Valid @RequestBody CreateProductRequest request) {
         return ApiResponse.success("Tạo sản phẩm thành công", productService.create(request));
     }
