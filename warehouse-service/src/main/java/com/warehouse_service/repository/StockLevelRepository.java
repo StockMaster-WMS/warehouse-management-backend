@@ -2,6 +2,7 @@ package com.warehouse_service.repository;
 
 import com.warehouse_service.entity.StockLevel;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 import java.util.Optional;
@@ -18,4 +19,7 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID> {
 	List<StockLevel> findByWarehouseIdAndProductId(UUID warehouseId, UUID productId);
 
 	Optional<StockLevel> findByLocationIdAndProductIdAndLotNumber(UUID locationId, UUID productId, String lotNumber);
+
+	@Query("select count(distinct s.warehouse.id) from StockLevel s where s.qtyOnHand > 0")
+	long countWarehousesWithStock();
 }

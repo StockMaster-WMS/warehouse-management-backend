@@ -8,8 +8,10 @@ public record WarehouseResponse(
         String code,
         String name,
         String address,
+        String managerName,
         String timezone,
         Boolean isActive,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt
 ) {
 }

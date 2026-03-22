@@ -1,14 +1,21 @@
 package com.warehouse_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.warehouse_service.dto.request.CreateWarehouseRequest;
 import com.warehouse_service.dto.request.UpdateWarehouseRequest;
 import com.warehouse_service.dto.response.WarehouseResponse;
+import com.warehouse_service.dto.response.WarehouseSummaryResponse;
 import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.mapper.WarehouseMapper;
+import com.warehouse_service.repository.StockLevelRepository;
 import com.warehouse_service.repository.WarehouseRepository;
+import com.warehouse_service.repository.WarehouseSpecification;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,13 +28,40 @@ import java.util.UUID;
 public class WarehouseService {
 
     private final WarehouseRepository warehouseRepository;
+    private final StockLevelRepository stockLevelRepository;
     private final WarehouseMapper warehouseMapper;
 
-    public List<WarehouseResponse> findAll() {
-        return warehouseRepository.findAll()
-                .stream()
+    public PagedResponse<WarehouseResponse> findAll(Pageable pageable, String keyword, Boolean isActive,
+            String timezone) {
+        Specification<Warehouse> spec = WarehouseSpecification
+                .hasKeyword(keyword)
+                .and(WarehouseSpecification.hasActive(isActive))
+                .and(WarehouseSpecification.hasTimezone(timezone));
+
+        Page<Warehouse> page = warehouseRepository.findAll(spec, pageable);
+        List<WarehouseResponse> content = page.getContent().stream()
                 .map(warehouseMapper::toResponse)
                 .toList();
+
+        return new PagedResponse<>(
+                content,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages());
+    }
+
+    public WarehouseSummaryResponse getSummary() {
+        long totalWarehouses = warehouseRepository.count();
+        long activeWarehouses = warehouseRepository.countByIsActiveTrue();
+        long inactiveWarehouses = warehouseRepository.countByIsActiveFalse();
+        long warehousesWithStock = stockLevelRepository.countWarehousesWithStock();
+
+        return new WarehouseSummaryResponse(
+                totalWarehouses,
+                activeWarehouses,
+                inactiveWarehouses,
+                warehousesWithStock);
     }
 
     public WarehouseResponse findById(UUID id) {
@@ -35,8 +69,9 @@ public class WarehouseService {
     }
 
     public WarehouseResponse findByCode(String code) {
-        return warehouseMapper.toResponse(warehouseRepository.findByCode(code)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho")));
+        Warehouse warehouse = warehouseRepository.findByCode(code)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho"));
+        return warehouseMapper.toResponse(warehouse);
     }
 
     @Transactional
@@ -46,8 +81,8 @@ public class WarehouseService {
         }
 
         Warehouse warehouse = warehouseMapper.toEntity(request);
-
-        return warehouseMapper.toResponse(warehouseRepository.save(warehouse));
+        Warehouse saved = warehouseRepository.save(warehouse);
+        return warehouseMapper.toResponse(saved);
     }
 
     @Transactional
@@ -61,8 +96,8 @@ public class WarehouseService {
                 });
 
         warehouseMapper.updateEntity(request, warehouse);
-
-        return warehouseMapper.toResponse(warehouseRepository.save(warehouse));
+        Warehouse saved = warehouseRepository.save(warehouse);
+        return warehouseMapper.toResponse(saved);
     }
 
     @Transactional
