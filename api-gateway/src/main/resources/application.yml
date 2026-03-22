@@ -5,7 +5,10 @@ spring:
   application:
     name: api-gateway
   config:
-    import: optional:file:../.env[.properties]
+    # ./.env khi chạy từ gốc repo; ../.env khi chạy từ thư mục module (vd. cd api-gateway)
+    import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
 
   autoconfigure:
     exclude:

@@ -4,8 +4,14 @@ server:
 spring:
   application:
     name: product-service
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
   config:
-    import: optional:file:../.env[.properties]
+    import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
   datasource:
     url: ${PRODUCT_DB_URL:jdbc:postgresql://localhost:5432/db_product}
     username: ${PRODUCT_DB_USERNAME:postgres}

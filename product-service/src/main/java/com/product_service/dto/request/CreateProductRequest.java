@@ -9,11 +9,6 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public record CreateProductRequest(
-        @NotBlank(message = "SKU không được để trống")
-        @Size(max = 50, message = "SKU không được vượt quá 50 ký tự")
-        @Schema(example = "SP-0001")
-        String sku,
-
         @Size(max = 13, message = "Mã vạch không được vượt quá 13 ký tự")
         @Schema(example = "8938505974192")
         String barcodeEan13,

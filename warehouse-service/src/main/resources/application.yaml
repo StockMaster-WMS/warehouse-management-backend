@@ -5,7 +5,9 @@ spring:
   application:
     name: warehouse-service
   config:
-    import: optional:file:../.env[.properties]
+    import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
   datasource:
     url: ${WAREHOUSE_DB_URL:jdbc:postgresql://localhost:5432/db_warehouse}
     username: ${WAREHOUSE_DB_USERNAME:postgres}

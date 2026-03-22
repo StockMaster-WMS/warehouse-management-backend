@@ -4,15 +4,19 @@ import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.product_service.dto.request.CreateProductRequest;
 import com.product_service.dto.request.UpdateProductRequest;
+import com.product_service.dto.response.ProductImportResponse;
 import com.product_service.dto.response.ProductResponse;
+import com.product_service.service.ProductExcelImportService;
 import com.product_service.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,7 +25,9 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.UUID;
 
@@ -32,6 +38,7 @@ import java.util.UUID;
 public class ProductController {
 
     private final ProductService productService;
+    private final ProductExcelImportService productExcelImportService;
 
     @GetMapping
     @Operation(summary = "Lấy danh sách sản phẩm", description = "Trả về danh sách sản phẩm hỗ trợ phân trang và tìm kiếm")
@@ -60,9 +67,23 @@ public class ProductController {
     }
 
     @PostMapping
-    @Operation(summary = "Tạo sản phẩm", description = "Tạo mới một sản phẩm")
+    @Operation(summary = "Tạo sản phẩm",
+            description = "Tạo mới sản phẩm; mã SKU do hệ thống tự sinh (tiền tố SP)")
     public ApiResponse<ProductResponse> create(@Valid @RequestBody CreateProductRequest request) {
         return ApiResponse.success("Tạo sản phẩm thành công", productService.create(request));
+    }
+
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Import sản phẩm từ Excel (.xlsx)",
+            description = "Cột: name, baseUnit; categoryId (UUID) hoặc categoryCode. "
+                    + "Nên dùng categoryId khi kéo fill — Excel dễ làm sai mã DM-… (B66C→B67C). "
+                    + "SKU tự sinh; createdBy query tùy chọn.")
+    public ApiResponse<ProductImportResponse> importXlsx(
+            @RequestPart("file") MultipartFile file,
+            @Parameter(description = "UUID người tạo; bỏ trống = import hệ thống")
+            @RequestParam(required = false) UUID createdBy) {
+        ProductImportResponse result = productExcelImportService.importFromXlsx(file, createdBy);
+        return ApiResponse.success("Import hoàn tất", result);
     }
 
     @PutMapping("/{id}")
