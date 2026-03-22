@@ -24,9 +24,6 @@ public interface WarehouseMapper {
     @Mapping(target = "managerName", ignore = true)
     void updateEntity(UpdateWarehouseRequest request, @MappingTarget Warehouse warehouse);
 
-    @Mapping(target = "zonesCount", ignore = true)
-    @Mapping(target = "binsCount", ignore = true)
-    @Mapping(target = "fillRatePercent", ignore = true)
     WarehouseResponse toResponse(Warehouse warehouse);
 
     @AfterMapping

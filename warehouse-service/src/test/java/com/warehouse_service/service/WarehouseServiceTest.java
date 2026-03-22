@@ -6,7 +6,6 @@ import com.warehouse_service.dto.request.UpdateWarehouseRequest;
 import com.warehouse_service.dto.response.WarehouseResponse;
 import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.mapper.WarehouseMapper;
-import com.warehouse_service.repository.LocationRepository;
 import com.warehouse_service.repository.StockLevelRepository;
 import com.warehouse_service.repository.WarehouseRepository;
 import org.junit.jupiter.api.Assertions;
@@ -40,13 +39,10 @@ class WarehouseServiceTest {
     private WarehouseRepository warehouseRepository;
 
     @Mock
+    private StockLevelRepository stockLevelRepository;
+
+    @Mock
     private WarehouseMapper warehouseMapper;
-
-        @Mock
-        private LocationRepository locationRepository;
-
-        @Mock
-        private StockLevelRepository stockLevelRepository;
 
     @InjectMocks
     private WarehouseService warehouseService;
@@ -78,8 +74,6 @@ class WarehouseServiceTest {
         Page<Warehouse> page = new PageImpl<>(List.of(warehouseA, warehouseB), pageable, 5);
 
         when(warehouseRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(page);
-        when(locationRepository.getLocationStatsByWarehouseIds(any())).thenReturn(List.of());
-        when(stockLevelRepository.getStockedBinsByWarehouseIds(any())).thenReturn(List.of());
         when(warehouseMapper.toResponse(warehouseA)).thenReturn(new WarehouseResponse(
                 warehouseA.getId(),
                 warehouseA.getCode(),
@@ -89,10 +83,7 @@ class WarehouseServiceTest {
                 warehouseA.getTimezone(),
                 warehouseA.getIsActive(),
                 warehouseA.getCreatedAt(),
-                warehouseA.getCreatedAt(),
-                null,
-                null,
-                null));
+                warehouseA.getCreatedAt()));
         when(warehouseMapper.toResponse(warehouseB)).thenReturn(new WarehouseResponse(
                 warehouseB.getId(),
                 warehouseB.getCode(),
@@ -102,10 +93,7 @@ class WarehouseServiceTest {
                 warehouseB.getTimezone(),
                 warehouseB.getIsActive(),
                 warehouseB.getCreatedAt(),
-                warehouseB.getCreatedAt(),
-                null,
-                null,
-                null));
+                warehouseB.getCreatedAt()));
 
         var result = warehouseService.findAll(pageable, "hcm", true, "Asia/Ho_Chi_Minh");
 
@@ -209,8 +197,6 @@ class WarehouseServiceTest {
         when(warehouseRepository.findById(warehouseId)).thenReturn(Optional.of(current));
         when(warehouseRepository.findByCode("WH-01")).thenReturn(Optional.of(current));
         when(warehouseRepository.save(current)).thenReturn(current);
-        when(locationRepository.getLocationStatsByWarehouseIds(any())).thenReturn(List.of());
-        when(stockLevelRepository.getStockedBinsByWarehouseIds(any())).thenReturn(List.of());
         when(warehouseMapper.toResponse(current)).thenReturn(new WarehouseResponse(
                 current.getId(),
                 current.getCode(),
@@ -220,10 +206,7 @@ class WarehouseServiceTest {
                 current.getTimezone(),
                 current.getIsActive(),
                 current.getCreatedAt(),
-                current.getCreatedAt(),
-                null,
-                null,
-                null));
+                current.getCreatedAt()));
 
         warehouseService.update(warehouseId, request);
 

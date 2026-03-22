@@ -12,9 +12,6 @@ public record WarehouseResponse(
         String timezone,
         Boolean isActive,
         OffsetDateTime createdAt,
-        OffsetDateTime updatedAt,
-        Integer zonesCount,
-        Integer binsCount,
-        Double fillRatePercent
+        OffsetDateTime updatedAt
 ) {
 }
