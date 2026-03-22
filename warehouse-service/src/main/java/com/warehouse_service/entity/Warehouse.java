@@ -29,6 +29,9 @@ public class Warehouse {
     @Column(name = "address", columnDefinition = "TEXT")
     private String address;
 
+    @Column(name = "manager_name", length = 120)
+    private String managerName;
+
     @Builder.Default
     @Column(name = "timezone", length = 50)
     private String timezone = "Asia/Ho_Chi_Minh";
@@ -40,9 +43,18 @@ public class Warehouse {
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
 
+    @Column(name = "updated_at")
+    private OffsetDateTime updatedAt;
+
     @PrePersist
     void prePersist() {
         if (id == null) id = UuidUtils.uuidV7();
         if (createdAt == null) createdAt = OffsetDateTime.now();
+        if (updatedAt == null) updatedAt = createdAt;
+    }
+
+    @PreUpdate
+    void preUpdate() {
+        updatedAt = OffsetDateTime.now();
     }
 }
