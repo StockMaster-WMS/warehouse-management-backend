@@ -15,10 +15,15 @@
     <artifactId>common-lib</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>common-lib</name>
-    <description>Shared response and exception handling library</description>
+    <description>Shared API, exception handling, utilities, Excel (.xlsx) helpers</description>
 
     <dependencies>
 
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-json</artifactId>

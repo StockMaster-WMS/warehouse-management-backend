@@ -15,7 +15,7 @@ public class ProductSpecification {
             }
             String pattern = "%" + keyword.toLowerCase() + "%";
             return cb.or(
-                    cb.like(cb.lower(root.get("productName")), pattern),
+                    cb.like(cb.lower(root.get("name")), pattern),
                     cb.like(cb.lower(root.get("sku")), pattern)
             );
         };

@@ -5,7 +5,9 @@ spring:
   application:
     name: inbound-service
   config:
-    import: optional:file:../.env[.properties]
+    import:
+      - optional:file:./.env[.properties]
+      - optional:file:../.env[.properties]
   datasource:
     url: ${INBOUND_DB_URL:jdbc:postgresql://localhost:5432/db_inbound}
     username: ${INBOUND_DB_USERNAME:postgres}
