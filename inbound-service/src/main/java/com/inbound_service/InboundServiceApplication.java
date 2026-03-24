@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 
 @SpringBootApplication(scanBasePackages = {"com.inbound_service", "com.common"})
-@EnableFeignClients(basePackages = "com.inbound_service.client")
+@EnableFeignClients(basePackages = "com.common.client.warehouse")
 public class InboundServiceApplication {
 
 	public static void main(String[] args) {

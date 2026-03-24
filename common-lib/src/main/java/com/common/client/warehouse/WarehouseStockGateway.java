@@ -1,18 +1,22 @@
-package com.inbound_service.client;
+package com.common.client.warehouse;
 
 import com.common.api.ApiResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import feign.FeignException;
-import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
+@ConditionalOnBean(WarehouseStockClient.class)
 public class WarehouseStockGateway {
 
     private final WarehouseStockClient warehouseStockClient;
+
+    public WarehouseStockGateway(WarehouseStockClient warehouseStockClient) {
+        this.warehouseStockClient = warehouseStockClient;
+    }
 
     public void adjustOrThrow(StockAdjustCommand command) {
         try {

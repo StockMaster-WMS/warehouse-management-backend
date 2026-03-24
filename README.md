@@ -1,34 +1,32 @@
 # warehouse-management-backend
 
-Thư mục này được chuyển thành **thư mục cha (parent)** cho dự án kiến trúc multi-service.
+Parent Maven (multi-module) cho hệ thống warehouse-management.
 
-## Giới thiệu
+## Cấu trúc module
 
-Đây là project Maven dạng **parent/aggregator**, dùng để quản lý các service con trong hệ thống `warehouse-management` theo mô hình multi-module.
+| Module | Mô tả |
+|--------|--------|
+| `common-lib` | DTO/API chung, exception, Excel, OpenFeign client gọi warehouse (`com.common.client.warehouse`) |
+| `eureka-server` | Service discovery |
+| `api-gateway` | Spring Cloud Gateway, route tới các service |
+| `auth-service` | Đăng ký / đăng nhập / JWT |
+| `product-service` | Sản phẩm, danh mục, nhà cung cấp |
+| `warehouse-service` | Kho, vị trí, tồn kho |
+| `inbound-service` | Đơn nhập, putaway; gọi warehouse qua Feign |
+| `outbound-service` | Đơn xuất; gọi warehouse qua Feign |
 
-## Mục đích
+## Build
 
-- Quản lý tập trung các service con bằng Maven multi-module.
-- Không chứa mã nguồn nghiệp vụ trực tiếp ở cấp parent.
+Từ thư mục gốc:
 
-## Cấu trúc gợi ý
-
-```text
-warehouse-management-backend/
-	pom.xml                  # parent/aggregator
-	services/
-		inventory-service/
-		order-service/
+```bash
+./mvnw.cmd -DskipTests compile
+./mvnw.cmd test
 ```
+
+(Trên Linux/macOS: `./mvnw`.)
 
 ## Thêm service mới
 
-1. Tạo thư mục service con (ví dụ: `services/inventory-service`).
-2. Tạo `pom.xml` cho service con.
-3. Khai báo module trong `pom.xml` của parent:
-
-```xml
-<modules>
-		<module>services/inventory-service</module>
-</modules>
-```
+1. Tạo thư mục module cùng cấp với các service hiện có (ví dụ `inventory-service`).
+2. Thêm `<module>inventory-service</module>` vào `pom.xml` của parent.

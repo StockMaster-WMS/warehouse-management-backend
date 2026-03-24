@@ -15,6 +15,10 @@ public interface CategoryMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "parent", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "level", ignore = true)
+    @Mapping(target = "isActive", ignore = true)
+    @Mapping(target = "path", ignore = true)
+    @Mapping(target = "code", ignore = true)
     Category toEntity(CreateCategoryRequest request);
 
     @Mapping(target = "id", ignore = true)

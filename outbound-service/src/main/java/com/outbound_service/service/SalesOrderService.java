@@ -3,7 +3,7 @@ package com.outbound_service.service;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
-import com.outbound_service.client.WarehouseStockGateway;
+import com.common.client.warehouse.WarehouseStockGateway;
 import com.outbound_service.dto.request.CreateSalesOrderRequest;
 import com.outbound_service.dto.request.UpdateSalesOrderRequest;
 import com.outbound_service.dto.response.SalesOrderResponse;
