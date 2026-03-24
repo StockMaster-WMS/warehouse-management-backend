@@ -1,5 +1,6 @@
 package com.product_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.common.util.CodeGenerator;
@@ -9,12 +10,15 @@ import com.product_service.dto.response.CategoryResponse;
 import com.product_service.entity.Category;
 import com.product_service.mapper.CategoryMapper;
 import com.product_service.repository.CategoryRepository;
+import com.product_service.repository.CategorySpecification;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -29,11 +33,17 @@ public class CategoryService {
 
     // ================= READ =================
 
-    public List<CategoryResponse> findAll() {
-        return repository.findAll()
-                .stream()
-                .map(mapper::toResponse)
-                .toList();
+    public PagedResponse<CategoryResponse> findAll(Pageable pageable, String keyword, Boolean isActive) {
+        Specification<Category> spec = CategorySpecification.hasKeyword(keyword)
+                .and(CategorySpecification.hasActive(isActive));
+        Page<Category> page = repository.findAll(spec, pageable);
+        Page<CategoryResponse> mapped = page.map(mapper::toResponse);
+        return new PagedResponse<>(
+                mapped.getContent(),
+                mapped.getNumber(),
+                mapped.getSize(),
+                mapped.getTotalElements(),
+                mapped.getTotalPages());
     }
 
     public CategoryResponse findById(UUID id) {
@@ -49,29 +59,34 @@ public class CategoryService {
 
     @Transactional
     public CategoryResponse create(CreateCategoryRequest request) {
+        Category parent = resolveParent(request.parentId());
+        short level = computeLevel(parent);
 
         for (int i = 0; i < 10; i++) {
+            String code = CodeGenerator.generate(PREFIX);
+            String path = computePath(parent, code);
+
+            Category entity = mapper.toEntity(request);
+            entity.setCode(code);
+            entity.setLevel(level);
+            entity.setPath(path);
+            entity.setParent(parent);
+
             try {
-                String code = CodeGenerator.generate(PREFIX);
-
-                Category parent = resolveParent(request.parentId());
-                short level = computeLevel(parent);
-                String path = computePath(parent, code);
-
-                Category entity = mapper.toEntity(request);
-                entity.setCode(code);
-                entity.setLevel(level);
-                entity.setPath(path);
-                entity.setParent(parent);
-
                 return mapper.toResponse(repository.save(entity));
-
             } catch (DataIntegrityViolationException e) {
-                // retry nếu trùng code
+                if (!isDuplicateCode(e)) {
+                    throw e;
+                }
             }
         }
 
-        throw new AppException(ErrorCode.BAD_REQUEST, "Không thể tạo mã duy nhất");
+        throw new AppException(ErrorCode.BAD_REQUEST, "Không thể tạo mã duy nhất sau 10 lần thử");
+    }
+
+    private boolean isDuplicateCode(DataIntegrityViolationException e) {
+        String message = e.getMostSpecificCause().getMessage();
+        return message != null && message.contains("code");
     }
 
     // ================= UPDATE =================
@@ -80,7 +95,6 @@ public class CategoryService {
     public CategoryResponse update(UUID id, UpdateCategoryRequest request) {
         Category entity = get(id);
 
-        // 🔥 giữ nguyên code
         String code = entity.getCode();
 
         Category parent = resolveParent(request.parentId());

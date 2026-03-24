@@ -1,6 +1,8 @@
 package com.warehouse_service.controller;
 
 import com.common.api.ApiResponse;
+import com.common.api.PagedResponse;
+import com.common.api.stock.StockAdjustCommand;
 import com.warehouse_service.dto.request.CreateStockLevelRequest;
 import com.warehouse_service.dto.request.UpdateStockLevelRequest;
 import com.warehouse_service.dto.response.StockLevelResponse;
@@ -10,6 +12,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,7 +25,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -32,22 +36,33 @@ public class StockLevelController {
     private final StockLevelService stockLevelService;
 
     @GetMapping
-    @Operation(summary = "Lấy danh sách tồn kho", description = "Lọc theo kho, vị trí hoặc sản phẩm")
-    public ApiResponse<List<StockLevelResponse>> getAll(
+    @Operation(summary = "Lấy danh sách tồn kho", description = "Phân trang; lọc theo kho, vị trí hoặc sản phẩm")
+    public ApiResponse<PagedResponse<StockLevelResponse>> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "updatedAt") String sort,
+            @RequestParam(defaultValue = "desc") String sortDir,
             @Parameter(description = "ID kho")
             @RequestParam(required = false) UUID warehouseId,
             @Parameter(description = "ID vị trí")
             @RequestParam(required = false) UUID locationId,
             @Parameter(description = "ID sản phẩm")
             @RequestParam(required = false) UUID productId) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách tồn kho thành công",
-                stockLevelService.findAll(warehouseId, locationId, productId));
+                stockLevelService.findAll(pageable, warehouseId, locationId, productId));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "Lấy tồn kho theo ID")
     public ApiResponse<StockLevelResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy tồn kho thành công", stockLevelService.findById(id));
+    }
+
+    @PostMapping("/adjust")
+    @Operation(summary = "Điều chỉnh tồn kho", description = "qtyDelta > 0 nhập thêm; < 0 trừ (xuất). Dùng cho luồng putaway / xuất hàng.")
+    public ApiResponse<StockLevelResponse> adjust(@Valid @RequestBody StockAdjustCommand command) {
+        return ApiResponse.success("Điều chỉnh tồn kho thành công", stockLevelService.adjust(command));
     }
 
     @PostMapping

@@ -1,6 +1,7 @@
 package com.product_service.controller;
 
 import com.common.api.ApiResponse;
+import com.common.api.PagedResponse;
 import com.product_service.dto.request.CreateCategoryRequest;
 import com.product_service.dto.request.UpdateCategoryRequest;
 import com.product_service.dto.response.CategoryResponse;
@@ -9,6 +10,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,9 +20,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -30,9 +34,17 @@ public class CategoryController {
     private final CategoryService categoryService;
 
     @GetMapping
-    @Operation(summary = "Lấy danh sách danh mục", description = "Trả về toàn bộ danh mục hiện có")
-    public ApiResponse<List<CategoryResponse>> getAll() {
-        return ApiResponse.success("Lấy danh sách danh mục thành công", categoryService.findAll());
+    @Operation(summary = "Lấy danh sách danh mục", description = "Phân trang; lọc keyword (mã, tên, path) và isActive")
+    public ApiResponse<PagedResponse<CategoryResponse>> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt") String sort,
+            @RequestParam(defaultValue = "desc") String sortDir,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean isActive) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
+        return ApiResponse.success("Lấy danh sách danh mục thành công",
+                categoryService.findAll(pageable, keyword, isActive));
     }
 
     @GetMapping("/{id}")

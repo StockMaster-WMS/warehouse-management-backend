@@ -43,6 +43,10 @@ public class StockLevel {
     @Column(name = "expiry_date")
     private LocalDate expiryDate;
 
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     @Column(name = "qty_on_hand", nullable = false)
     private Integer qtyOnHand;
 

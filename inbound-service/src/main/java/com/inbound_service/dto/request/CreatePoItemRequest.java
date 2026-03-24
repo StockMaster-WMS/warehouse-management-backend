@@ -11,17 +11,17 @@ public record CreatePoItemRequest(
         @NotNull(message = "PO không được để trống")
         UUID purchaseOrderId,
 
-        @NotNull(message = "So dong không được để trống")
+        @NotNull(message = "Số dòng không được để trống")
         Short lineNumber,
 
-        @NotNull(message = "San pham không được để trống")
+        @NotNull(message = "Sản phẩm không được để trống")
         UUID productId,
 
         @NotBlank(message = "SKU không được để trống")
         @Size(max = 50, message = "SKU không được vượt quá 50 ký tự")
         String productSku,
 
-        @NotNull(message = "So luong dat không được để trống")
+        @NotNull(message = "Số lượng đặt không được để trống")
         Integer orderedQty,
 
         Integer receivedQty,

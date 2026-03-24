@@ -20,9 +20,9 @@ public class PickingItem {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    /** Logical reference to sales order item */
-    @Column(name = "so_item_id", nullable = false)
-    private UUID soItemId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "so_item_id", nullable = false)
+    private SalesOrderItem soItem;
 
     /** Cross-service reference to product-service */
     @Column(name = "product_id", nullable = false)
@@ -40,8 +40,9 @@ public class PickingItem {
     private Integer qtyPicked = 0;
 
     @Builder.Default
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 20)
-    private String status = "PENDING";
+    private PickingItemStatus status = PickingItemStatus.PENDING;
 
     @Column(name = "pick_sequence")
     private Integer pickSequence;

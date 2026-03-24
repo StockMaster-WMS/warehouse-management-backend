@@ -46,10 +46,11 @@ public class ProductController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "updatedAt") String sort,
+            @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) String status) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sort));
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         PagedResponse<ProductResponse> pagedResponse = productService.findAll(pageable, keyword, categoryId, status);
         return ApiResponse.success("Lấy danh sách sản phẩm thành công", pagedResponse);
     }
@@ -74,10 +75,7 @@ public class ProductController {
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Import sản phẩm từ Excel (.xlsx)",
-            description = "Cột: name, baseUnit; categoryId (UUID) hoặc categoryCode. "
-                    + "Nên dùng categoryId khi kéo fill — Excel dễ làm sai mã DM-… (B66C→B67C). "
-                    + "SKU tự sinh; createdBy query tùy chọn.")
+    @Operation(summary = "Import sản phẩm từ Excel (.xlsx)")
     public ApiResponse<ProductImportResponse> importXlsx(
             @RequestPart("file") MultipartFile file,
             @Parameter(description = "UUID người tạo; bỏ trống = import hệ thống")

@@ -34,14 +34,14 @@ public record CreateLocationRequest(
         @Size(max = 10, message = "Bin không được vượt quá 10 ký tự")
         String bin,
 
-        @Size(max = 20, message = "Loai vi tri khong duoc vuot qua 20 ky tu")
+        @Size(max = 20, message = "Loại vị trí không được vượt quá 20 ký tự")
         String locationType,
 
         BigDecimal maxWeightKg,
         BigDecimal maxVolumeCm3,
         Integer pickSequence,
 
-        @Size(max = 20, message = "Trang thai khong duoc vuot qua 20 ky tu")
+        @Size(max = 20, message = "Trạng thái không được vượt quá 20 ký tự")
         String status,
         Boolean isActive
 ) {

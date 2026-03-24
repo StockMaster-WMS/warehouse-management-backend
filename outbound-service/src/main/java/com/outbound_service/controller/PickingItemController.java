@@ -1,6 +1,7 @@
 package com.outbound_service.controller;
 
 import com.common.api.ApiResponse;
+import com.common.api.PagedResponse;
 import com.outbound_service.dto.request.CreatePickingItemRequest;
 import com.outbound_service.dto.request.UpdatePickingItemRequest;
 import com.outbound_service.dto.response.PickingItemResponse;
@@ -10,6 +11,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,7 +24,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -32,16 +35,21 @@ public class PickingItemController {
     private final PickingItemService pickingItemService;
 
     @GetMapping
-    @Operation(summary = "Lấy danh sách picking items", description = "Lọc theo soItemId, productId hoặc locationId")
-    public ApiResponse<List<PickingItemResponse>> getAll(
+    @Operation(summary = "Lấy danh sách picking items", description = "Phân trang; lọc soItemId, productId, locationId")
+    public ApiResponse<PagedResponse<PickingItemResponse>> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "id") String sort,
+            @RequestParam(defaultValue = "desc") String sortDir,
             @Parameter(description = "ID so item")
             @RequestParam(required = false) UUID soItemId,
             @Parameter(description = "ID sản phẩm")
             @RequestParam(required = false) UUID productId,
             @Parameter(description = "ID vị trí")
             @RequestParam(required = false) UUID locationId) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách picking item thành công",
-                pickingItemService.findAll(soItemId, productId, locationId));
+                pickingItemService.findAll(pageable, soItemId, productId, locationId));
     }
 
     @GetMapping("/{id}")

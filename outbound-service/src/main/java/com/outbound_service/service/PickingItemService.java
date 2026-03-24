@@ -1,18 +1,24 @@
 package com.outbound_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.outbound_service.dto.request.CreatePickingItemRequest;
 import com.outbound_service.dto.request.UpdatePickingItemRequest;
 import com.outbound_service.dto.response.PickingItemResponse;
 import com.outbound_service.entity.PickingItem;
+import com.outbound_service.entity.SalesOrderItem;
 import com.outbound_service.mapper.PickingItemMapper;
 import com.outbound_service.repository.PickingItemRepository;
+import com.outbound_service.repository.PickingItemSpecification;
+import com.outbound_service.repository.SalesOrderItemRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -21,27 +27,22 @@ import java.util.UUID;
 public class PickingItemService {
 
     private final PickingItemRepository pickingItemRepository;
+    private final SalesOrderItemRepository salesOrderItemRepository;
     private final PickingItemMapper pickingItemMapper;
+    private final SalesOrderService salesOrderService;
 
-    public List<PickingItemResponse> findAll(UUID soItemId, UUID productId, UUID locationId) {
-        List<PickingItem> items;
-
-        if (soItemId != null) {
-            items = pickingItemRepository.findBySoItemId(soItemId);
-        } else if (productId != null) {
-            items = pickingItemRepository.findByProductId(productId);
-        } else if (locationId != null) {
-            items = pickingItemRepository.findByLocationId(locationId);
-        } else {
-            items = pickingItemRepository.findAll();
-        }
-
-        return items.stream()
-                .filter(item -> soItemId == null || item.getSoItemId().equals(soItemId))
-                .filter(item -> productId == null || item.getProductId().equals(productId))
-                .filter(item -> locationId == null || item.getLocationId().equals(locationId))
-                .map(pickingItemMapper::toResponse)
-                .toList();
+    public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId, UUID locationId) {
+        Specification<PickingItem> spec = PickingItemSpecification.hasSoItemId(soItemId)
+                .and(PickingItemSpecification.hasProductId(productId))
+                .and(PickingItemSpecification.hasLocationId(locationId));
+        Page<PickingItem> page = pickingItemRepository.findAll(spec, pageable);
+        Page<PickingItemResponse> mapped = page.map(pickingItemMapper::toResponse);
+        return new PagedResponse<>(
+                mapped.getContent(),
+                mapped.getNumber(),
+                mapped.getSize(),
+                mapped.getTotalElements(),
+                mapped.getTotalPages());
     }
 
     public PickingItemResponse findById(UUID id) {
@@ -51,15 +52,33 @@ public class PickingItemService {
     @Transactional
     public PickingItemResponse create(CreatePickingItemRequest request) {
         validateQuantities(request.qtyToPick(), request.qtyPicked());
+        SalesOrderItem line = salesOrderItemRepository.findByIdWithSalesOrder(request.soItemId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn xuất"));
+        if (!line.getProductId().equals(request.productId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "productId không khớp với dòng đơn xuất");
+        }
+
         PickingItem item = pickingItemMapper.toEntity(request);
-        return pickingItemMapper.toResponse(pickingItemRepository.save(item));
+        item.setSoItem(line);
+        PickingItem saved = pickingItemRepository.save(item);
+
+        salesOrderService.notifyPickingStartedIfPending(line.getSalesOrder().getId());
+
+        return pickingItemMapper.toResponse(saved);
     }
 
     @Transactional
     public PickingItemResponse update(UUID id, UpdatePickingItemRequest request) {
         validateQuantities(request.qtyToPick(), request.qtyPicked());
         PickingItem item = getPickingItem(id);
+        SalesOrderItem line = salesOrderItemRepository.findByIdWithSalesOrder(request.soItemId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn xuất"));
+        if (!line.getProductId().equals(request.productId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "productId không khớp với dòng đơn xuất");
+        }
+
         pickingItemMapper.updateEntity(request, item);
+        item.setSoItem(line);
         return pickingItemMapper.toResponse(pickingItemRepository.save(item));
     }
 

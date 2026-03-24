@@ -42,8 +42,9 @@ public class SalesOrder {
     private Short priority = 5;
 
     @Builder.Default
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 25)
-    private String status = "PENDING";
+    private SalesOrderStatus status = SalesOrderStatus.PENDING;
 
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
