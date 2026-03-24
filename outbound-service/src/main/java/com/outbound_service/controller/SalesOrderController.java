@@ -47,6 +47,24 @@ public class SalesOrderController {
         return ApiResponse.success("Lấy đơn xuất thành công", salesOrderService.findBySoNumber(soNumber));
     }
 
+    @PostMapping("/{id}/start-picking")
+    @Operation(summary = "Bắt đầu picking", description = "PENDING → PICKING (cần có so-items)")
+    public ApiResponse<SalesOrderResponse> startPicking(@PathVariable UUID id) {
+        return ApiResponse.success("Chuyển sang picking thành công", salesOrderService.startPicking(id));
+    }
+
+    @PostMapping("/{id}/mark-packed")
+    @Operation(summary = "Đóng gói", description = "PICKING → PACKED khi mọi picking line đã PICKED và đủ qty")
+    public ApiResponse<SalesOrderResponse> markPacked(@PathVariable UUID id) {
+        return ApiResponse.success("Đóng gói thành công", salesOrderService.markPacked(id));
+    }
+
+    @PostMapping("/{id}/mark-shipped")
+    @Operation(summary = "Giao hàng", description = "PACKED → SHIPPED, trừ tồn kho warehouse theo qty đã pick")
+    public ApiResponse<SalesOrderResponse> markShipped(@PathVariable UUID id) {
+        return ApiResponse.success("Xác nhận giao hàng thành công", salesOrderService.markShipped(id));
+    }
+
     @PostMapping
     @Operation(summary = "Tạo đơn xuất", description = "Tạo mới một sales order")
     public ApiResponse<SalesOrderResponse> create(@Valid @RequestBody CreateSalesOrderRequest request) {

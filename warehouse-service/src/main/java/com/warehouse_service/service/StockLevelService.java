@@ -1,5 +1,6 @@
 package com.warehouse_service.service;
 
+import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.warehouse_service.dto.request.CreateStockLevelRequest;
@@ -103,6 +104,60 @@ public class StockLevelService {
     public void delete(UUID id) {
         StockLevel stockLevel = getStockLevel(id);
         stockLevelRepository.delete(stockLevel);
+    }
+
+    /**
+     * Tăng/giảm tồn theo vị trí + sản phẩm + lô. qtyDelta &gt; 0: nhập; &lt; 0: xuất/trừ.
+     * Nếu chưa có dòng tồn và qtyDelta &gt; 0 thì tạo mới.
+     */
+    @Transactional
+    public StockLevelResponse adjust(StockAdjustCommand cmd) {
+        if (cmd.qtyDelta() == 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "qtyDelta phải khác 0");
+        }
+
+        String lot = normalizeLot(cmd.lotNumber());
+        Warehouse warehouse = getWarehouse(cmd.warehouseId());
+        Location location = getLocation(cmd.locationId());
+        ensureLocationInWarehouse(location, cmd.warehouseId());
+
+        return stockLevelRepository
+                .findByLocationIdAndProductIdAndLotNumber(cmd.locationId(), cmd.productId(), lot)
+                .map(existing -> applyDelta(existing, cmd.qtyDelta()))
+                .orElseGet(() -> createFromPositiveDelta(warehouse, location, cmd.productId(), lot, cmd.qtyDelta()));
+    }
+
+    private StockLevelResponse createFromPositiveDelta(Warehouse warehouse, Location location, UUID productId,
+            String lot, int qtyDelta) {
+        if (qtyDelta < 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không có tồn kho để trừ tại vị trí/sản phẩm/lô đã chọn");
+        }
+        validateQuantities(qtyDelta, 0);
+
+        StockLevel stockLevel = StockLevel.builder()
+                .warehouse(warehouse)
+                .location(location)
+                .productId(productId)
+                .lotNumber(lot)
+                .qtyOnHand(qtyDelta)
+                .qtyReserved(0)
+                .build();
+
+        StockLevel saved = stockLevelRepository.save(stockLevel);
+        return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
+    }
+
+    private StockLevelResponse applyDelta(StockLevel stockLevel, int qtyDelta) {
+        int newOnHand = stockLevel.getQtyOnHand() + qtyDelta;
+        if (newOnHand < 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng trừ vượt quá tồn khả dụng");
+        }
+        int reserved = stockLevel.getQtyReserved() == null ? 0 : stockLevel.getQtyReserved();
+        validateQuantities(newOnHand, reserved);
+
+        stockLevel.setQtyOnHand(newOnHand);
+        StockLevel saved = stockLevelRepository.save(stockLevel);
+        return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
     }
 
     private StockLevel getStockLevel(UUID id) {

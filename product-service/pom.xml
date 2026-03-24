@@ -144,6 +144,12 @@
 							<artifactId>lombok-mapstruct-binding</artifactId>
 							<version>0.2.0</version>
 						</path>
+						<!-- QueryDSL APT chạy trên classpath processor riêng; cần JPA API để load @Entity -->
+						<path>
+							<groupId>jakarta.persistence</groupId>
+							<artifactId>jakarta.persistence-api</artifactId>
+							<version>3.1.0</version>
+						</path>
 						<path>
 							<groupId>com.querydsl</groupId>
 							<artifactId>querydsl-apt</artifactId>

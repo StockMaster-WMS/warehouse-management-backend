@@ -20,6 +20,11 @@ public class PutawayTask {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
+    /** Dòng đơn nhập sinh ra nhiệm vụ putaway (nullable cho bản ghi cũ) */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "po_item_id")
+    private PoItem poItem;
+
     /** Cross-service reference to product-service */
     @Column(name = "product_id", nullable = false)
     private UUID productId;

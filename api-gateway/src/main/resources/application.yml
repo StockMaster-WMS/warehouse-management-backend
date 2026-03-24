@@ -41,8 +41,10 @@ spring:
 
       routes:
         # === AUTH SERVICE DOCS ===
+        # order thấp hơn = ưu tiên cao (tránh /api/*/v3/api-docs bị route ** nuốt mất SetPath)
         - id: auth-service-docs
-          uri: lb://AUTH-SERVICE
+          uri: lb://auth-service
+          order: 0
           predicates:
             - Path=/api/auth/v3/api-docs
           filters:
@@ -50,13 +52,15 @@ spring:
 
         # === AUTH SERVICE ===
         - id: auth-service
-          uri: lb://AUTH-SERVICE
+          uri: lb://auth-service
+          order: 100
           predicates:
             - Path=/api/auth/**
 
         # === PRODUCT SERVICE DOCS ===
         - id: product-service-docs
-          uri: lb://PRODUCT-SERVICE
+          uri: lb://product-service
+          order: 0
           predicates:
             - Path=/api/products/v3/api-docs
           filters:
@@ -64,13 +68,15 @@ spring:
 
         # === PRODUCT SERVICE ===
         - id: product-service
-          uri: lb://PRODUCT-SERVICE
+          uri: lb://product-service
+          order: 100
           predicates:
             - Path=/api/products/**, /api/categories/**, /api/suppliers/**
 
         # === WAREHOUSE SERVICE DOCS ===
         - id: warehouse-service-docs
-          uri: lb://WAREHOUSE-SERVICE
+          uri: lb://warehouse-service
+          order: 0
           predicates:
             - Path=/api/warehouse/v3/api-docs
           filters:
@@ -78,13 +84,15 @@ spring:
 
         # === WAREHOUSE SERVICE ===
         - id: warehouse-service
-          uri: lb://WAREHOUSE-SERVICE
+          uri: lb://warehouse-service
+          order: 100
           predicates:
             - Path=/api/warehouse/**, /api/warehouses/**, /api/locations/**, /api/stocks/**
 
         # === INBOUND SERVICE DOCS ===
         - id: inbound-service-docs
-          uri: lb://INBOUND-SERVICE
+          uri: lb://inbound-service
+          order: 0
           predicates:
             - Path=/api/inbound/v3/api-docs
           filters:
@@ -92,13 +100,15 @@ spring:
 
         # === INBOUND SERVICE ===
         - id: inbound-service
-          uri: lb://INBOUND-SERVICE
+          uri: lb://inbound-service
+          order: 100
           predicates:
-            - Path=/api/inbound/**, /api/inbounds/**, /api/purchase-orders/**, /api/po-items/**
+            - Path=/api/inbound/**, /api/inbounds/**, /api/purchase-orders/**, /api/po-items/**, /api/putaway-tasks/**
 
         # === OUTBOUND SERVICE DOCS ===
         - id: outbound-service-docs
-          uri: lb://OUTBOUND-SERVICE
+          uri: lb://outbound-service
+          order: 0
           predicates:
             - Path=/api/outbound/v3/api-docs
           filters:
@@ -106,9 +116,10 @@ spring:
 
         # === OUTBOUND SERVICE ===
         - id: outbound-service
-          uri: lb://OUTBOUND-SERVICE
+          uri: lb://outbound-service
+          order: 100
           predicates:
-            - Path=/api/outbound/**, /api/outbounds/**, /api/sales-orders/**, /api/picking-items/**
+            - Path=/api/outbound/**, /api/outbounds/**, /api/sales-orders/**, /api/picking-items/**, /api/so-items/**
 
 # === Cau hinh Discovery (Eureka) ===
 eureka:

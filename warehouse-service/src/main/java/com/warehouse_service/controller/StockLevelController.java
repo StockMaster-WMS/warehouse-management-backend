@@ -1,6 +1,7 @@
 package com.warehouse_service.controller;
 
 import com.common.api.ApiResponse;
+import com.common.api.stock.StockAdjustCommand;
 import com.warehouse_service.dto.request.CreateStockLevelRequest;
 import com.warehouse_service.dto.request.UpdateStockLevelRequest;
 import com.warehouse_service.dto.response.StockLevelResponse;
@@ -48,6 +49,12 @@ public class StockLevelController {
     @Operation(summary = "Lấy tồn kho theo ID")
     public ApiResponse<StockLevelResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy tồn kho thành công", stockLevelService.findById(id));
+    }
+
+    @PostMapping("/adjust")
+    @Operation(summary = "Điều chỉnh tồn kho", description = "qtyDelta > 0 nhập thêm; < 0 trừ (xuất). Dùng cho luồng putaway / xuất hàng.")
+    public ApiResponse<StockLevelResponse> adjust(@Valid @RequestBody StockAdjustCommand command) {
+        return ApiResponse.success("Điều chỉnh tồn kho thành công", stockLevelService.adjust(command));
     }
 
     @PostMapping

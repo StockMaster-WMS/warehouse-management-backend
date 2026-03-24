@@ -6,8 +6,10 @@ import com.outbound_service.dto.request.CreatePickingItemRequest;
 import com.outbound_service.dto.request.UpdatePickingItemRequest;
 import com.outbound_service.dto.response.PickingItemResponse;
 import com.outbound_service.entity.PickingItem;
+import com.outbound_service.entity.SalesOrderItem;
 import com.outbound_service.mapper.PickingItemMapper;
 import com.outbound_service.repository.PickingItemRepository;
+import com.outbound_service.repository.SalesOrderItemRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,13 +23,15 @@ import java.util.UUID;
 public class PickingItemService {
 
     private final PickingItemRepository pickingItemRepository;
+    private final SalesOrderItemRepository salesOrderItemRepository;
     private final PickingItemMapper pickingItemMapper;
+    private final SalesOrderService salesOrderService;
 
     public List<PickingItemResponse> findAll(UUID soItemId, UUID productId, UUID locationId) {
         List<PickingItem> items;
 
         if (soItemId != null) {
-            items = pickingItemRepository.findBySoItemId(soItemId);
+            items = pickingItemRepository.findBySoItem_Id(soItemId);
         } else if (productId != null) {
             items = pickingItemRepository.findByProductId(productId);
         } else if (locationId != null) {
@@ -37,7 +41,7 @@ public class PickingItemService {
         }
 
         return items.stream()
-                .filter(item -> soItemId == null || item.getSoItemId().equals(soItemId))
+                .filter(item -> soItemId == null || item.getSoItem().getId().equals(soItemId))
                 .filter(item -> productId == null || item.getProductId().equals(productId))
                 .filter(item -> locationId == null || item.getLocationId().equals(locationId))
                 .map(pickingItemMapper::toResponse)
@@ -51,15 +55,33 @@ public class PickingItemService {
     @Transactional
     public PickingItemResponse create(CreatePickingItemRequest request) {
         validateQuantities(request.qtyToPick(), request.qtyPicked());
+        SalesOrderItem line = salesOrderItemRepository.findByIdWithSalesOrder(request.soItemId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn xuất"));
+        if (!line.getProductId().equals(request.productId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "productId không khớp với dòng đơn xuất");
+        }
+
         PickingItem item = pickingItemMapper.toEntity(request);
-        return pickingItemMapper.toResponse(pickingItemRepository.save(item));
+        item.setSoItem(line);
+        PickingItem saved = pickingItemRepository.save(item);
+
+        salesOrderService.notifyPickingStartedIfPending(line.getSalesOrder().getId());
+
+        return pickingItemMapper.toResponse(saved);
     }
 
     @Transactional
     public PickingItemResponse update(UUID id, UpdatePickingItemRequest request) {
         validateQuantities(request.qtyToPick(), request.qtyPicked());
         PickingItem item = getPickingItem(id);
+        SalesOrderItem line = salesOrderItemRepository.findByIdWithSalesOrder(request.soItemId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn xuất"));
+        if (!line.getProductId().equals(request.productId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "productId không khớp với dòng đơn xuất");
+        }
+
         pickingItemMapper.updateEntity(request, item);
+        item.setSoItem(line);
         return pickingItemMapper.toResponse(pickingItemRepository.save(item));
     }
 

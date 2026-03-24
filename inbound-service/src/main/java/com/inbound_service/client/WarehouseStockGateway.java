@@ -1,0 +1,32 @@
+package com.inbound_service.client;
+
+import com.common.api.ApiResponse;
+import com.common.api.stock.StockAdjustCommand;
+import com.common.exception.AppException;
+import com.common.exception.ErrorCode;
+import feign.FeignException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+
+@Component
+@RequiredArgsConstructor
+public class WarehouseStockGateway {
+
+    private final WarehouseStockClient warehouseStockClient;
+
+    public void adjustOrThrow(StockAdjustCommand command) {
+        try {
+            ApiResponse<WarehouseStockData> res = warehouseStockClient.adjust(command);
+            if (!res.isSuccess()) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        res.getMessage() != null ? res.getMessage() : "Warehouse từ chối điều chỉnh tồn");
+            }
+        } catch (AppException e) {
+            throw e;
+        } catch (FeignException e) {
+            String body = e.contentUTF8();
+            String msg = (body != null && !body.isBlank()) ? body : e.getMessage();
+            throw new AppException(ErrorCode.BAD_REQUEST, "Gọi warehouse thất bại: " + msg);
+        }
+    }
+}

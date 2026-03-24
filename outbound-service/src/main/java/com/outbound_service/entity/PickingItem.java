@@ -20,9 +20,9 @@ public class PickingItem {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    /** Logical reference to sales order item */
-    @Column(name = "so_item_id", nullable = false)
-    private UUID soItemId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "so_item_id", nullable = false)
+    private SalesOrderItem soItem;
 
     /** Cross-service reference to product-service */
     @Column(name = "product_id", nullable = false)

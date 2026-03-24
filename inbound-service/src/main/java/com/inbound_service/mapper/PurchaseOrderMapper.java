@@ -11,7 +11,7 @@ import org.mapstruct.MappingTarget;
 
 import java.math.BigDecimal;
 
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "default")
 public interface PurchaseOrderMapper {
 
     @Mapping(target = "id", ignore = true)
