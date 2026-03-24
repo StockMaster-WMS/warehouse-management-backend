@@ -27,10 +27,16 @@ public class WarehouseStockGateway {
             }
         } catch (AppException e) {
             throw e;
+        } catch (FeignException.BadRequest e) {
+            throw new AppException(ErrorCode.BAD_REQUEST, extractMessage(e));
         } catch (FeignException e) {
-            String body = e.contentUTF8();
-            String msg = (body != null && !body.isBlank()) ? body : e.getMessage();
-            throw new AppException(ErrorCode.BAD_REQUEST, "Gọi warehouse thất bại: " + msg);
+            throw new AppException(ErrorCode.SERVICE_UNAVAILABLE,
+                    "Gọi warehouse thất bại (HTTP " + e.status() + "): " + extractMessage(e));
         }
+    }
+
+    private String extractMessage(FeignException e) {
+        String body = e.contentUTF8();
+        return (body != null && !body.isBlank()) ? body : e.getMessage();
     }
 }

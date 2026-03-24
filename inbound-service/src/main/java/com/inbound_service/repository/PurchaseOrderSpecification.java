@@ -1,6 +1,7 @@
 package com.inbound_service.repository;
 
 import com.inbound_service.entity.PurchaseOrder;
+import com.inbound_service.entity.PurchaseOrderStatus;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
@@ -14,10 +15,7 @@ public class PurchaseOrderSpecification {
                 return null;
             }
             String pattern = "%" + keyword.toLowerCase() + "%";
-            return cb.or(
-                    cb.like(cb.lower(root.get("poNumber")), pattern),
-                    cb.like(cb.lower(root.get("status")), pattern)
-            );
+            return cb.like(cb.lower(root.get("poNumber")), pattern);
         };
     }
 
@@ -26,7 +24,12 @@ public class PurchaseOrderSpecification {
             if (!StringUtils.hasText(status)) {
                 return null;
             }
-            return cb.equal(root.get("status"), status);
+            try {
+                PurchaseOrderStatus enumStatus = PurchaseOrderStatus.valueOf(status.trim().toUpperCase());
+                return cb.equal(root.get("status"), enumStatus);
+            } catch (IllegalArgumentException e) {
+                return cb.disjunction();
+            }
         };
     }
 

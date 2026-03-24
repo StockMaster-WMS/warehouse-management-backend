@@ -10,4 +10,7 @@ public record IntrospectResponse(
         String roles,
         Instant expiresAt
 ) {
+    public static IntrospectResponse invalid() {
+        return new IntrospectResponse(false, null, null, null, null);
+    }
 }

@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/auth")
-@Tag(name = "Auth APIs", description = "Dang ky, dang nhap va xac thuc token")
+@Tag(name = "Auth APIs", description = "Đăng ký, đăng nhập và xác thực token")
 public class AuthController {
 
     private final AuthService authService;

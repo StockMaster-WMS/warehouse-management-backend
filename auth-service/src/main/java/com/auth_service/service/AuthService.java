@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -37,10 +38,10 @@ public class AuthService {
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
         if (userAccountRepository.existsByUsername(request.username())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Ten dang nhap da ton tai");
+            throw new AppException(ErrorCode.BAD_REQUEST, "Tên đăng nhập đã tồn tại");
         }
         if (userAccountRepository.existsByEmail(request.email())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Email da ton tai");
+            throw new AppException(ErrorCode.BAD_REQUEST, "Email đã tồn tại");
         }
 
         UserAccount user = UserAccount.builder()
@@ -61,14 +62,14 @@ public class AuthService {
 
     public LoginResponse login(LoginRequest request) {
         UserAccount user = userAccountRepository.findByUsername(request.username().trim())
-                .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST, "Thong tin dang nhap khong hop le"));
+                .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST, "Thông tin đăng nhập không hợp lệ"));
 
         if (!Boolean.TRUE.equals(user.getIsActive())) {
-            throw new AppException(ErrorCode.FORBIDDEN, "Tai khoan da bi khoa");
+            throw new AppException(ErrorCode.FORBIDDEN, "Tài khoản đã bị khóa");
         }
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Thong tin dang nhap khong hop le");
+            throw new AppException(ErrorCode.BAD_REQUEST, "Thông tin đăng nhập không hợp lệ");
         }
 
         String accessToken = jwtTokenProvider.generateAccessToken(user);
@@ -85,20 +86,20 @@ public class AuthService {
 
     public IntrospectResponse introspect(IntrospectRequest request) {
         try {
-            // Kiểm tra xem token đã bị blacklist hay chưa
-            String jti = jwtTokenProvider.getJti(request.token());
-            if (tokenBlacklistRepository.existsByTokenJti(jti)) {
-                return new IntrospectResponse(false, null, null, null, null);
+            var claims = jwtTokenProvider.parseClaims(request.token());
+
+            if (tokenBlacklistRepository.existsByTokenJti(claims.getId())) {
+                return IntrospectResponse.invalid();
             }
 
             return new IntrospectResponse(
                     true,
-                    jwtTokenProvider.getUserId(request.token()),
-                    jwtTokenProvider.getUsername(request.token()),
-                    jwtTokenProvider.getRoles(request.token()),
-                    jwtTokenProvider.getExpiration(request.token()));
+                    UUID.fromString(claims.getSubject()),
+                    claims.get("username", String.class),
+                    claims.get("roles", String.class),
+                    claims.getExpiration().toInstant());
         } catch (JwtException | IllegalArgumentException ex) {
-            return new IntrospectResponse(false, null, null, null, null);
+            return IntrospectResponse.invalid();
         }
     }
 
@@ -107,30 +108,30 @@ public class AuthService {
         try {
             String refreshToken = request.refreshToken();
             if (refreshToken == null || refreshToken.isBlank()) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Thieu refresh token");
+                throw new AppException(ErrorCode.BAD_REQUEST, "Thiếu refresh token");
             }
 
             // Chi chap nhan dung refresh token
             if (!"REFRESH".equals(jwtTokenProvider.getTokenType(refreshToken))) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Token khong phai refresh token");
+                throw new AppException(ErrorCode.BAD_REQUEST, "Token không phải refresh token");
             }
 
             // Kiểm tra xem token đã bị blacklist hay chưa
             String jti = jwtTokenProvider.getJti(refreshToken);
             if (tokenBlacklistRepository.existsByTokenJti(jti)) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Refresh token khong con hieu luc");
+                throw new AppException(ErrorCode.BAD_REQUEST, "Refresh token không còn hiệu lực");
             }
 
             // Lấy user từ token
             var userId = jwtTokenProvider.getUserId(refreshToken);
             UserAccount user = userAccountRepository.findById(userId)
-                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Nguoi dung khong ton tai"));
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Người dùng không tồn tại"));
 
             if (!Boolean.TRUE.equals(user.getIsActive())) {
-                throw new AppException(ErrorCode.FORBIDDEN, "Tai khoan da bi khoa");
-            }
+            throw new AppException(ErrorCode.FORBIDDEN, "Tài khoản đã bị khóa");
+        }
 
-            // Rotation: vo hieu hoa refresh token cu va phat hanh cap token moi
+            // Rotation: vô hiệu hóa refresh token cũ và phát hành cặp token mới
             blacklistToken(refreshToken);
             String newAccessToken = jwtTokenProvider.generateAccessToken(user);
             String newRefreshToken = jwtTokenProvider.generateRefreshToken(user);
@@ -143,7 +144,7 @@ public class AuthService {
                     user.getUsername(),
                     user.getRoles());
         } catch (JwtException | IllegalArgumentException ex) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Refresh token khong hop le");
+            throw new AppException(ErrorCode.BAD_REQUEST, "Refresh token không hợp lệ");
         }
     }
 
@@ -151,17 +152,17 @@ public class AuthService {
     public void logout(String token) {
         try {
             if (token == null || token.isBlank()) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Thieu token dang xuat");
+                throw new AppException(ErrorCode.BAD_REQUEST, "Thiếu token đăng xuất");
             }
 
             String tokenType = jwtTokenProvider.getTokenType(token);
             if (!"ACCESS".equals(tokenType) && !"REFRESH".equals(tokenType)) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Loai token khong hop le");
+                throw new AppException(ErrorCode.BAD_REQUEST, "Loại token không hợp lệ");
             }
 
             blacklistToken(token);
         } catch (JwtException | IllegalArgumentException ex) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Token khong hop le");
+            throw new AppException(ErrorCode.BAD_REQUEST, "Token không hợp lệ");
         }
     }
 
@@ -179,7 +180,7 @@ public class AuthService {
         try {
             tokenBlacklistRepository.save(blacklistedToken);
         } catch (DataIntegrityViolationException ex) {
-            // Idempotent logout/revoke: token da ton tai trong blacklist thi bo qua.
+            // Idempotent: token đã tồn tại trong blacklist thì bỏ qua
         }
     }
 }

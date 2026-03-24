@@ -59,29 +59,34 @@ public class CategoryService {
 
     @Transactional
     public CategoryResponse create(CreateCategoryRequest request) {
+        Category parent = resolveParent(request.parentId());
+        short level = computeLevel(parent);
 
         for (int i = 0; i < 10; i++) {
+            String code = CodeGenerator.generate(PREFIX);
+            String path = computePath(parent, code);
+
+            Category entity = mapper.toEntity(request);
+            entity.setCode(code);
+            entity.setLevel(level);
+            entity.setPath(path);
+            entity.setParent(parent);
+
             try {
-                String code = CodeGenerator.generate(PREFIX);
-
-                Category parent = resolveParent(request.parentId());
-                short level = computeLevel(parent);
-                String path = computePath(parent, code);
-
-                Category entity = mapper.toEntity(request);
-                entity.setCode(code);
-                entity.setLevel(level);
-                entity.setPath(path);
-                entity.setParent(parent);
-
                 return mapper.toResponse(repository.save(entity));
-
             } catch (DataIntegrityViolationException e) {
-                // retry nếu trùng code
+                if (!isDuplicateCode(e)) {
+                    throw e;
+                }
             }
         }
 
-        throw new AppException(ErrorCode.BAD_REQUEST, "Không thể tạo mã duy nhất");
+        throw new AppException(ErrorCode.BAD_REQUEST, "Không thể tạo mã duy nhất sau 10 lần thử");
+    }
+
+    private boolean isDuplicateCode(DataIntegrityViolationException e) {
+        String message = e.getMostSpecificCause().getMessage();
+        return message != null && message.contains("code");
     }
 
     // ================= UPDATE =================
@@ -90,7 +95,6 @@ public class CategoryService {
     public CategoryResponse update(UUID id, UpdateCategoryRequest request) {
         Category entity = get(id);
 
-        // 🔥 giữ nguyên code
         String code = entity.getCode();
 
         Category parent = resolveParent(request.parentId());

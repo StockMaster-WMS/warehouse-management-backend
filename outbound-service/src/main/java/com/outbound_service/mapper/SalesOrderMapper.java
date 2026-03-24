@@ -4,6 +4,7 @@ import com.outbound_service.dto.request.CreateSalesOrderRequest;
 import com.outbound_service.dto.request.UpdateSalesOrderRequest;
 import com.outbound_service.dto.response.SalesOrderResponse;
 import com.outbound_service.entity.SalesOrder;
+import com.outbound_service.entity.SalesOrderStatus;
 import org.mapstruct.AfterMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -14,10 +15,12 @@ public interface SalesOrderMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "status", ignore = true)
     SalesOrder toEntity(CreateSalesOrderRequest request);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "status", ignore = true)
     void updateEntity(UpdateSalesOrderRequest request, @MappingTarget SalesOrder salesOrder);
 
     SalesOrderResponse toResponse(SalesOrder salesOrder);
@@ -38,8 +41,8 @@ public interface SalesOrderMapper {
         if (salesOrder.getPriority() == null) {
             salesOrder.setPriority((short) 5);
         }
-        if (salesOrder.getStatus() == null || salesOrder.getStatus().isBlank()) {
-            salesOrder.setStatus("PENDING");
+        if (salesOrder.getStatus() == null) {
+            salesOrder.setStatus(SalesOrderStatus.PENDING);
         }
     }
 }

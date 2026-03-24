@@ -1,5 +1,6 @@
 package com.inbound_service.repository;
 
+import com.inbound_service.entity.PutawayStatus;
 import com.inbound_service.entity.PutawayTask;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
@@ -17,7 +18,12 @@ public class PutawayTaskSpecification {
             if (!StringUtils.hasText(status)) {
                 return null;
             }
-            return cb.equal(cb.lower(root.get("status")), status.toLowerCase());
+            try {
+                PutawayStatus enumStatus = PutawayStatus.valueOf(status.trim().toUpperCase());
+                return cb.equal(root.get("status"), enumStatus);
+            } catch (IllegalArgumentException e) {
+                return cb.disjunction();
+            }
         };
     }
 }

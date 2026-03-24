@@ -40,12 +40,13 @@ public class LocationController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt") String sort,
+            @RequestParam(defaultValue = "desc") String sortDir,
             @Parameter(description = "ID kho")
             @RequestParam(required = false) UUID warehouseId,
             @Parameter(description = "Zone")
             @RequestParam(required = false) String zone,
             @RequestParam(required = false) String keyword) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sort));
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách vị trí thành công",
                 locationService.findAll(pageable, warehouseId, zone, keyword));
     }

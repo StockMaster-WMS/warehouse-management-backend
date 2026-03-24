@@ -10,18 +10,18 @@ public record UpdateStockLevelRequest(
         @NotNull(message = "Kho không được để trống")
         UUID warehouseId,
 
-        @NotNull(message = "Vi tri không được để trống")
+        @NotNull(message = "Vị trí không được để trống")
         UUID locationId,
 
-        @NotNull(message = "San pham không được để trống")
+        @NotNull(message = "Sản phẩm không được để trống")
         UUID productId,
 
-        @Size(max = 60, message = "So lo khong duoc vuot qua 60 ky tu")
+        @Size(max = 60, message = "Số lô không được vượt quá 60 ký tự")
         String lotNumber,
 
         LocalDate expiryDate,
 
-        @NotNull(message = "So luong ton khong duoc de trong")
+        @NotNull(message = "Số lượng tồn không được để trống")
         Integer qtyOnHand,
 
         Integer qtyReserved

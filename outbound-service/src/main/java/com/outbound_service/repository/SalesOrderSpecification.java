@@ -1,6 +1,7 @@
 package com.outbound_service.repository;
 
 import com.outbound_service.entity.SalesOrder;
+import com.outbound_service.entity.SalesOrderStatus;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
@@ -16,8 +17,7 @@ public class SalesOrderSpecification {
             String pattern = "%" + keyword.toLowerCase() + "%";
             return cb.or(
                     cb.like(cb.lower(root.get("soNumber")), pattern),
-                    cb.like(cb.lower(root.get("customerName")), pattern),
-                    cb.like(cb.lower(root.get("status")), pattern)
+                    cb.like(cb.lower(root.get("customerName")), pattern)
             );
         };
     }
@@ -27,7 +27,12 @@ public class SalesOrderSpecification {
             if (!StringUtils.hasText(status)) {
                 return null;
             }
-            return cb.equal(root.get("status"), status);
+            try {
+                SalesOrderStatus enumStatus = SalesOrderStatus.valueOf(status.trim().toUpperCase());
+                return cb.equal(root.get("status"), enumStatus);
+            } catch (IllegalArgumentException e) {
+                return cb.disjunction();
+            }
         };
     }
 

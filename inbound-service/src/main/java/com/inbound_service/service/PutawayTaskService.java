@@ -9,6 +9,7 @@ import com.inbound_service.dto.request.CompletePutawayRequest;
 import com.inbound_service.dto.request.UpdatePutawayTaskRequest;
 import com.inbound_service.dto.response.PutawayTaskResponse;
 import com.inbound_service.entity.PoItem;
+import com.inbound_service.entity.PutawayStatus;
 import com.inbound_service.entity.PutawayTask;
 import com.inbound_service.mapper.PutawayTaskMapper;
 import com.inbound_service.repository.PutawayTaskRepository;
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
-import java.util.List;
+import java.util.EnumSet;
 import java.util.UUID;
 
 @Service
@@ -50,10 +51,16 @@ public class PutawayTaskService {
         return putawayTaskMapper.toResponse(getTask(id));
     }
 
+    private static final EnumSet<PutawayStatus> TERMINAL_STATUSES =
+            EnumSet.of(PutawayStatus.COMPLETED, PutawayStatus.CANCELLED);
+
+    private static final EnumSet<PutawayStatus> UPDATABLE_STATUSES =
+            EnumSet.of(PutawayStatus.PENDING, PutawayStatus.IN_PROGRESS, PutawayStatus.CANCELLED);
+
     @Transactional
     public PutawayTaskResponse update(UUID id, UpdatePutawayTaskRequest request) {
         PutawayTask task = getTask(id);
-        if ("COMPLETED".equalsIgnoreCase(task.getStatus()) || "CANCELLED".equalsIgnoreCase(task.getStatus())) {
+        if (TERMINAL_STATUSES.contains(task.getStatus())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không cập nhật putaway đã kết thúc");
         }
         if (request.suggestedLocationId() != null) {
@@ -63,13 +70,21 @@ public class PutawayTaskService {
             task.setAssignedTo(request.assignedTo());
         }
         if (request.status() != null && !request.status().isBlank()) {
-            String s = request.status().trim().toUpperCase();
-            if (!List.of("PENDING", "IN_PROGRESS", "CANCELLED").contains(s)) {
+            PutawayStatus newStatus = parsePutawayStatus(request.status());
+            if (!UPDATABLE_STATUSES.contains(newStatus)) {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Trạng thái putaway không hợp lệ");
             }
-            task.setStatus(s);
+            task.setStatus(newStatus);
         }
         return putawayTaskMapper.toResponse(putawayTaskRepository.save(task));
+    }
+
+    private PutawayStatus parsePutawayStatus(String raw) {
+        try {
+            return PutawayStatus.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Trạng thái putaway không hợp lệ: " + raw);
+        }
     }
 
     /**
@@ -85,7 +100,7 @@ public class PutawayTaskService {
             throw new AppException(ErrorCode.BAD_REQUEST, "Putaway không gắn dòng PO, không thể cập nhật tồn");
         }
 
-        if (!List.of("PENDING", "IN_PROGRESS").contains(task.getStatus())) {
+        if (!EnumSet.of(PutawayStatus.PENDING, PutawayStatus.IN_PROGRESS).contains(task.getStatus())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ hoàn tất putaway ở trạng thái PENDING hoặc IN_PROGRESS");
         }
 
@@ -100,7 +115,7 @@ public class PutawayTaskService {
         warehouseStockGateway.adjustOrThrow(cmd);
 
         task.setActualLocationId(request.actualLocationId());
-        task.setStatus("COMPLETED");
+        task.setStatus(PutawayStatus.COMPLETED);
         task.setCompletedAt(OffsetDateTime.now());
         return putawayTaskMapper.toResponse(putawayTaskRepository.save(task));
     }

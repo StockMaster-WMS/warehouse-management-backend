@@ -13,6 +13,7 @@ import org.mapstruct.MappingTarget;
 public interface StockLevelMapper {
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "version", ignore = true)
     @Mapping(target = "warehouse", ignore = true)
     @Mapping(target = "location", ignore = true)
     @Mapping(target = "qtyAvailable", ignore = true)
@@ -20,6 +21,7 @@ public interface StockLevelMapper {
     StockLevel toEntity(CreateStockLevelRequest request);
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "version", ignore = true)
     @Mapping(target = "warehouse", ignore = true)
     @Mapping(target = "location", ignore = true)
     @Mapping(target = "qtyAvailable", ignore = true)

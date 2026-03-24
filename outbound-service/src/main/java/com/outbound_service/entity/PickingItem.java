@@ -40,8 +40,9 @@ public class PickingItem {
     private Integer qtyPicked = 0;
 
     @Builder.Default
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 20)
-    private String status = "PENDING";
+    private PickingItemStatus status = PickingItemStatus.PENDING;
 
     @Column(name = "pick_sequence")
     private Integer pickSequence;

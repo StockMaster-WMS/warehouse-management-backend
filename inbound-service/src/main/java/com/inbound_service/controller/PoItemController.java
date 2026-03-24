@@ -44,10 +44,11 @@ public class PoItemController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "lineNumber") String sort,
+            @RequestParam(defaultValue = "asc") String sortDir,
             @Parameter(description = "ID đơn nhập")
             @RequestParam(required = false) UUID purchaseOrderId,
             @RequestParam(required = false) String keyword) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sort));
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách dòng đơn nhập thành công",
                 poItemService.findAll(pageable, purchaseOrderId, keyword));
     }

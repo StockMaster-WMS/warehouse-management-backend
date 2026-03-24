@@ -41,8 +41,9 @@ public class PutawayTask {
     private UUID actualLocationId;
 
     @Builder.Default
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 20)
-    private String status = "PENDING";
+    private PutawayStatus status = PutawayStatus.PENDING;
 
     @Column(name = "assigned_to")
     private UUID assignedTo;

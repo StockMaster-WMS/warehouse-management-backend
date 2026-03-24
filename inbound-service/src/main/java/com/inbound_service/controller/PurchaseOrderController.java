@@ -39,11 +39,12 @@ public class PurchaseOrderController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt") String sort,
+            @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) UUID supplierId,
             @RequestParam(required = false) UUID warehouseId) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sort));
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách đơn nhập thành công",
                 purchaseOrderService.findAll(pageable, keyword, status, supplierId, warehouseId));
     }

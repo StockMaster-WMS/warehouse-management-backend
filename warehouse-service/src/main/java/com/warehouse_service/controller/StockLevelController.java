@@ -41,13 +41,14 @@ public class StockLevelController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "updatedAt") String sort,
+            @RequestParam(defaultValue = "desc") String sortDir,
             @Parameter(description = "ID kho")
             @RequestParam(required = false) UUID warehouseId,
             @Parameter(description = "ID vị trí")
             @RequestParam(required = false) UUID locationId,
             @Parameter(description = "ID sản phẩm")
             @RequestParam(required = false) UUID productId) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sort));
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách tồn kho thành công",
                 stockLevelService.findAll(pageable, warehouseId, locationId, productId));
     }

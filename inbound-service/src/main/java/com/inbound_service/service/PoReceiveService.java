@@ -6,6 +6,8 @@ import com.inbound_service.dto.request.ReceivePoItemRequest;
 import com.inbound_service.dto.response.ReceivePoItemResponse;
 import com.inbound_service.entity.PoItem;
 import com.inbound_service.entity.PurchaseOrder;
+import com.inbound_service.entity.PurchaseOrderStatus;
+import com.inbound_service.entity.PutawayStatus;
 import com.inbound_service.entity.PutawayTask;
 import com.inbound_service.mapper.PoItemMapper;
 import com.inbound_service.mapper.PutawayTaskMapper;
@@ -24,7 +26,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PoReceiveService {
 
-    private static final String PO_CANCELLED = "CANCELLED";
+    private static final PurchaseOrderStatus PO_CANCELLED = PurchaseOrderStatus.CANCELLED;
 
     private final PoItemRepository poItemRepository;
     private final PutawayTaskRepository putawayTaskRepository;
@@ -42,7 +44,7 @@ public class PoReceiveService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn nhập"));
 
         PurchaseOrder po = line.getPurchaseOrder();
-        if (PO_CANCELLED.equalsIgnoreCase(po.getStatus())) {
+        if (PO_CANCELLED == po.getStatus()) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Đơn nhập đã hủy, không nhận hàng");
         }
 
@@ -61,7 +63,7 @@ public class PoReceiveService {
                 .productId(line.getProductId())
                 .qtyToPutaway(request.qty())
                 .suggestedLocationId(request.suggestedLocationId())
-                .status("PENDING")
+                .status(PutawayStatus.PENDING)
                 .build();
         putawayTaskRepository.save(task);
 
@@ -79,9 +81,9 @@ public class PoReceiveService {
         boolean allReceived = lines.stream()
                 .allMatch(l -> Objects.equals(l.getOrderedQty(), l.getReceivedQty()));
         if (allReceived) {
-            po.setStatus("RECEIVED");
-        } else if ("DRAFT".equalsIgnoreCase(po.getStatus())) {
-            po.setStatus("RECEIVING");
+            po.setStatus(PurchaseOrderStatus.RECEIVED);
+        } else if (po.getStatus() == PurchaseOrderStatus.DRAFT) {
+            po.setStatus(PurchaseOrderStatus.RECEIVING);
         }
         purchaseOrderRepository.save(po);
     }

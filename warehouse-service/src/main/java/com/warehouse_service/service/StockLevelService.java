@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -105,9 +106,11 @@ public class StockLevelService {
         stockLevelRepository.delete(stockLevel);
     }
 
+    private static final int MAX_RETRY = 3;
+
     /**
-     * Tăng/giảm tồn theo vị trí + sản phẩm + lô. qtyDelta &gt; 0: nhập; &lt; 0: xuất/trừ.
-     * Nếu chưa có dòng tồn và qtyDelta &gt; 0 thì tạo mới.
+     * Tăng/giảm tồn theo vị trí + sản phẩm + lô. qtyDelta > 0: nhập; < 0: xuất/trừ.
+     * Sử dụng optimistic locking (@Version) để đảm bảo tính nhất quán khi có concurrent requests.
      */
     @Transactional
     public StockLevelResponse adjust(StockAdjustCommand cmd) {
@@ -120,10 +123,20 @@ public class StockLevelService {
         Location location = getLocation(cmd.locationId());
         ensureLocationInWarehouse(location, cmd.warehouseId());
 
-        return stockLevelRepository
-                .findByLocationIdAndProductIdAndLotNumber(cmd.locationId(), cmd.productId(), lot)
-                .map(existing -> applyDelta(existing, cmd.qtyDelta()))
-                .orElseGet(() -> createFromPositiveDelta(warehouse, location, cmd.productId(), lot, cmd.qtyDelta()));
+        for (int attempt = 0; attempt < MAX_RETRY; attempt++) {
+            try {
+                return stockLevelRepository
+                        .findByLocationIdAndProductIdAndLotNumber(cmd.locationId(), cmd.productId(), lot)
+                        .map(existing -> applyDelta(existing, cmd.qtyDelta()))
+                        .orElseGet(() -> createFromPositiveDelta(warehouse, location, cmd.productId(), lot, cmd.qtyDelta()));
+            } catch (ObjectOptimisticLockingFailureException e) {
+                if (attempt == MAX_RETRY - 1) {
+                    throw new AppException(ErrorCode.BAD_REQUEST,
+                            "Tồn kho đang được cập nhật đồng thời, vui lòng thử lại");
+                }
+            }
+        }
+        throw new AppException(ErrorCode.BAD_REQUEST, "Tồn kho đang được cập nhật đồng thời, vui lòng thử lại");
     }
 
     private StockLevelResponse createFromPositiveDelta(Warehouse warehouse, Location location, UUID productId,
@@ -176,7 +189,7 @@ public class StockLevelService {
 
     private void ensureLocationInWarehouse(Location location, UUID warehouseId) {
         if (!location.getWarehouse().getId().equals(warehouseId)) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Vi tri không thuộc kho đã chọn");
+            throw new AppException(ErrorCode.BAD_REQUEST, "Vị trí không thuộc kho đã chọn");
         }
     }
 

@@ -7,7 +7,8 @@ public enum ErrorCode {
     BAD_REQUEST(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Invalid request"),
     VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "Validation failed"),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "RESOURCE_NOT_FOUND", "Resource not found"),
-    FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "Access denied");
+    FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "Access denied"),
+    SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE", "Downstream service unavailable");
 
     private final HttpStatus status;
     private final String code;

@@ -33,8 +33,9 @@ public class PurchaseOrder {
     private UUID warehouseId;
 
     @Builder.Default
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 20)
-    private String status = "DRAFT";
+    private PurchaseOrderStatus status = PurchaseOrderStatus.DRAFT;
 
     @Column(name = "order_date", nullable = false)
     private LocalDate orderDate;

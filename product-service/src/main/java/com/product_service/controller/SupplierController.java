@@ -40,9 +40,10 @@ public class SupplierController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "updatedAt") String sort,
+            @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sort));
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         PagedResponse<SupplierResponse> paged = supplierService.findAll(pageable, keyword, status);
         return ApiResponse.success("Lấy danh sách nhà cung cấp thành công", paged);
     }

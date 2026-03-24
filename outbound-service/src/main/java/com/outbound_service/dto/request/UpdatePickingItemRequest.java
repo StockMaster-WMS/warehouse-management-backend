@@ -10,19 +10,19 @@ public record UpdatePickingItemRequest(
         @NotNull(message = "SO item không được để trống")
         UUID soItemId,
 
-        @NotNull(message = "San pham không được để trống")
+        @NotNull(message = "Sản phẩm không được để trống")
         UUID productId,
 
-        @NotNull(message = "Vi tri không được để trống")
+        @NotNull(message = "Vị trí không được để trống")
         UUID locationId,
 
-        @NotNull(message = "So luong can pick không được để trống")
+        @NotNull(message = "Số lượng cần pick không được để trống")
         Integer qtyToPick,
 
         Integer qtyPicked,
 
-        @Size(max = 20, message = "Trang thai không được vượt quá 20 ký tự")
-        @NotBlank(message = "Trang thai không được để trống")
+        @Size(max = 20, message = "Trạng thái không được vượt quá 20 ký tự")
+        @NotBlank(message = "Trạng thái không được để trống")
         String status,
         Integer pickSequence
 ) {
