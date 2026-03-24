@@ -2,6 +2,7 @@ package com.inbound_service.repository;
 
 import com.inbound_service.entity.PutawayTask;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -9,7 +10,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface PutawayTaskRepository extends JpaRepository<PutawayTask, UUID> {
+public interface PutawayTaskRepository extends JpaRepository<PutawayTask, UUID>, JpaSpecificationExecutor<PutawayTask> {
 
     List<PutawayTask> findByPoItemId(UUID poItemId);
 

@@ -1,6 +1,7 @@
 package com.warehouse_service.controller;
 
 import com.common.api.ApiResponse;
+import com.common.api.PagedResponse;
 import com.warehouse_service.dto.request.CreateLocationRequest;
 import com.warehouse_service.dto.request.UpdateLocationRequest;
 import com.warehouse_service.dto.response.LocationResponse;
@@ -10,6 +11,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,7 +24,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -32,13 +35,19 @@ public class LocationController {
     private final LocationService locationService;
 
     @GetMapping
-    @Operation(summary = "Lấy danh sách vị trí", description = "Có thể lọc theo kho và zone")
-    public ApiResponse<List<LocationResponse>> getAll(
+    @Operation(summary = "Lấy danh sách vị trí", description = "Phân trang; lọc kho, zone, keyword (mã/zone/aisle)")
+    public ApiResponse<PagedResponse<LocationResponse>> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt") String sort,
             @Parameter(description = "ID kho")
             @RequestParam(required = false) UUID warehouseId,
             @Parameter(description = "Zone")
-            @RequestParam(required = false) String zone) {
-        return ApiResponse.success("Lấy danh sách vị trí thành công", locationService.findAll(warehouseId, zone));
+            @RequestParam(required = false) String zone,
+            @RequestParam(required = false) String keyword) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(sort));
+        return ApiResponse.success("Lấy danh sách vị trí thành công",
+                locationService.findAll(pageable, warehouseId, zone, keyword));
     }
 
     @GetMapping("/{id}")

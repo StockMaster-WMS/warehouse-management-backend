@@ -1,5 +1,6 @@
 package com.inbound_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
@@ -11,7 +12,11 @@ import com.inbound_service.entity.PoItem;
 import com.inbound_service.entity.PutawayTask;
 import com.inbound_service.mapper.PutawayTaskMapper;
 import com.inbound_service.repository.PutawayTaskRepository;
+import com.inbound_service.repository.PutawayTaskSpecification;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,20 +33,17 @@ public class PutawayTaskService {
     private final PutawayTaskMapper putawayTaskMapper;
     private final WarehouseStockGateway warehouseStockGateway;
 
-    public List<PutawayTaskResponse> findAll(UUID poItemId, String status) {
-        List<PutawayTask> tasks;
-        if (poItemId != null && status != null) {
-            tasks = putawayTaskRepository.findByPoItemId(poItemId).stream()
-                    .filter(t -> status.equalsIgnoreCase(t.getStatus()))
-                    .toList();
-        } else if (poItemId != null) {
-            tasks = putawayTaskRepository.findByPoItemId(poItemId);
-        } else if (status != null) {
-            tasks = putawayTaskRepository.findByStatus(status);
-        } else {
-            tasks = putawayTaskRepository.findAll();
-        }
-        return tasks.stream().map(putawayTaskMapper::toResponse).toList();
+    public PagedResponse<PutawayTaskResponse> findAll(Pageable pageable, UUID poItemId, String status) {
+        Specification<PutawayTask> spec = PutawayTaskSpecification.hasPoItemId(poItemId)
+                .and(PutawayTaskSpecification.hasStatus(status));
+        Page<PutawayTask> page = putawayTaskRepository.findAll(spec, pageable);
+        Page<PutawayTaskResponse> mapped = page.map(putawayTaskMapper::toResponse);
+        return new PagedResponse<>(
+                mapped.getContent(),
+                mapped.getNumber(),
+                mapped.getSize(),
+                mapped.getTotalElements(),
+                mapped.getTotalPages());
     }
 
     public PutawayTaskResponse findById(UUID id) {

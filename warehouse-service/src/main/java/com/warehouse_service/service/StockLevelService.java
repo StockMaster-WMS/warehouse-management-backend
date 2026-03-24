@@ -1,5 +1,6 @@
 package com.warehouse_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
@@ -12,11 +13,16 @@ import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.mapper.StockLevelMapper;
 import com.warehouse_service.repository.LocationRepository;
 import com.warehouse_service.repository.StockLevelRepository;
+import com.warehouse_service.repository.StockLevelSpecification;
 import com.warehouse_service.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,28 +36,21 @@ public class StockLevelService {
     private final LocationRepository locationRepository;
     private final StockLevelMapper stockLevelMapper;
 
-    public List<StockLevelResponse> findAll(UUID warehouseId, UUID locationId, UUID productId) {
-        List<StockLevel> stocks;
-
-        if (locationId != null) {
-            stocks = stockLevelRepository.findByLocationId(locationId);
-        } else if (warehouseId != null && productId != null) {
-            stocks = stockLevelRepository.findByWarehouseIdAndProductId(warehouseId, productId);
-        } else if (warehouseId != null) {
-            stocks = stockLevelRepository.findByWarehouseId(warehouseId);
-        } else if (productId != null) {
-            stocks = stockLevelRepository.findByProductId(productId);
-        } else {
-            stocks = stockLevelRepository.findAll();
+    public PagedResponse<StockLevelResponse> findAll(Pageable pageable, UUID warehouseId, UUID locationId, UUID productId) {
+        Specification<StockLevel> spec = StockLevelSpecification.hasWarehouseId(warehouseId)
+                .and(StockLevelSpecification.hasLocationId(locationId))
+                .and(StockLevelSpecification.hasProductId(productId));
+        Page<StockLevel> page = stockLevelRepository.findAll(spec, pageable);
+        List<StockLevelResponse> content = new ArrayList<>(page.getContent().size());
+        for (StockLevel stock : page.getContent()) {
+            content.add(fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock)));
         }
-
-        return stocks.stream()
-                .filter(stock -> warehouseId == null || stock.getWarehouse().getId().equals(warehouseId))
-                .filter(stock -> locationId == null || stock.getLocation().getId().equals(locationId))
-                .filter(stock -> productId == null || stock.getProductId().equals(productId))
-                .map(stockLevelMapper::toResponse)
-                .map(this::fillQtyAvailableWhenMissing)
-                .toList();
+        return new PagedResponse<>(
+                content,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages());
     }
 
     public StockLevelResponse findById(UUID id) {

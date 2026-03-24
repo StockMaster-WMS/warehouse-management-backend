@@ -1,5 +1,6 @@
 package com.inbound_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.inbound_service.dto.request.CreatePoItemRequest;
@@ -9,12 +10,15 @@ import com.inbound_service.entity.PoItem;
 import com.inbound_service.entity.PurchaseOrder;
 import com.inbound_service.mapper.PoItemMapper;
 import com.inbound_service.repository.PoItemRepository;
+import com.inbound_service.repository.PoItemSpecification;
 import com.inbound_service.repository.PurchaseOrderRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -26,12 +30,17 @@ public class PoItemService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PoItemMapper poItemMapper;
 
-    public List<PoItemResponse> findAll(UUID purchaseOrderId) {
-        List<PoItem> items = purchaseOrderId == null
-                ? poItemRepository.findAll()
-                : poItemRepository.findByPurchaseOrderId(purchaseOrderId);
-
-        return items.stream().map(poItemMapper::toResponse).toList();
+    public PagedResponse<PoItemResponse> findAll(Pageable pageable, UUID purchaseOrderId, String keyword) {
+        Specification<PoItem> spec = PoItemSpecification.hasPurchaseOrderId(purchaseOrderId)
+                .and(PoItemSpecification.hasKeyword(keyword));
+        Page<PoItem> page = poItemRepository.findAll(spec, pageable);
+        Page<PoItemResponse> mapped = page.map(poItemMapper::toResponse);
+        return new PagedResponse<>(
+                mapped.getContent(),
+                mapped.getNumber(),
+                mapped.getSize(),
+                mapped.getTotalElements(),
+                mapped.getTotalPages());
     }
 
     public PoItemResponse findById(UUID id) {

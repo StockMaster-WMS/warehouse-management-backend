@@ -1,5 +1,6 @@
 package com.warehouse_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.warehouse_service.dto.request.CreateLocationRequest;
@@ -9,12 +10,15 @@ import com.warehouse_service.entity.Location;
 import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.mapper.LocationMapper;
 import com.warehouse_service.repository.LocationRepository;
+import com.warehouse_service.repository.LocationSpecification;
 import com.warehouse_service.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -26,15 +30,18 @@ public class LocationService {
     private final WarehouseRepository warehouseRepository;
     private final LocationMapper locationMapper;
 
-    public List<LocationResponse> findAll(UUID warehouseId, String zone) {
-        List<Location> locations = warehouseId == null
-                ? locationRepository.findAll()
-                : locationRepository.findByWarehouseId(warehouseId);
-
-        return locations.stream()
-                .filter(location -> zone == null || zone.isBlank() || zone.equalsIgnoreCase(location.getZone()))
-                .map(locationMapper::toResponse)
-                .toList();
+    public PagedResponse<LocationResponse> findAll(Pageable pageable, UUID warehouseId, String zone, String keyword) {
+        Specification<Location> spec = LocationSpecification.hasWarehouseId(warehouseId)
+                .and(LocationSpecification.hasZone(zone))
+                .and(LocationSpecification.hasKeyword(keyword));
+        Page<Location> page = locationRepository.findAll(spec, pageable);
+        Page<LocationResponse> mapped = page.map(locationMapper::toResponse);
+        return new PagedResponse<>(
+                mapped.getContent(),
+                mapped.getNumber(),
+                mapped.getSize(),
+                mapped.getTotalElements(),
+                mapped.getTotalPages());
     }
 
     public LocationResponse findById(UUID id) {

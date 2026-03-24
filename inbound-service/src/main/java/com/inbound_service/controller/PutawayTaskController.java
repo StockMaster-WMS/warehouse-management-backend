@@ -1,6 +1,7 @@
 package com.inbound_service.controller;
 
 import com.common.api.ApiResponse;
+import com.common.api.PagedResponse;
 import com.inbound_service.dto.request.CompletePutawayRequest;
 import com.inbound_service.dto.request.UpdatePutawayTaskRequest;
 import com.inbound_service.dto.response.PutawayTaskResponse;
@@ -10,6 +11,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,7 +23,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -31,14 +34,18 @@ public class PutawayTaskController {
     private final PutawayTaskService putawayTaskService;
 
     @GetMapping
-    @Operation(summary = "Danh sách putaway", description = "Lọc theo poItemId và/hoặc status")
-    public ApiResponse<List<PutawayTaskResponse>> getAll(
+    @Operation(summary = "Danh sách putaway", description = "Phân trang; lọc poItemId và/hoặc status")
+    public ApiResponse<PagedResponse<PutawayTaskResponse>> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "id") String sort,
             @Parameter(description = "ID dòng PO")
             @RequestParam(required = false) UUID poItemId,
             @Parameter(description = "PENDING | IN_PROGRESS | COMPLETED | CANCELLED")
             @RequestParam(required = false) String status) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(sort));
         return ApiResponse.success("Lấy danh sách putaway thành công",
-                putawayTaskService.findAll(poItemId, status));
+                putawayTaskService.findAll(pageable, poItemId, status));
     }
 
     @GetMapping("/{id}")

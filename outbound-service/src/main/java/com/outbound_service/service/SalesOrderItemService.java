@@ -1,5 +1,6 @@
 package com.outbound_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.outbound_service.dto.request.CreateSalesOrderItemRequest;
@@ -9,12 +10,15 @@ import com.outbound_service.entity.SalesOrder;
 import com.outbound_service.entity.SalesOrderItem;
 import com.outbound_service.mapper.SalesOrderItemMapper;
 import com.outbound_service.repository.SalesOrderItemRepository;
+import com.outbound_service.repository.SalesOrderItemSpecification;
 import com.outbound_service.repository.SalesOrderRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -26,11 +30,17 @@ public class SalesOrderItemService {
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderItemMapper salesOrderItemMapper;
 
-    public List<SalesOrderItemResponse> findAll(UUID salesOrderId) {
-        List<SalesOrderItem> list = salesOrderId == null
-                ? salesOrderItemRepository.findAll()
-                : salesOrderItemRepository.findBySalesOrder_Id(salesOrderId);
-        return list.stream().map(salesOrderItemMapper::toResponse).toList();
+    public PagedResponse<SalesOrderItemResponse> findAll(Pageable pageable, UUID salesOrderId, String keyword) {
+        Specification<SalesOrderItem> spec = SalesOrderItemSpecification.hasSalesOrderId(salesOrderId)
+                .and(SalesOrderItemSpecification.hasKeyword(keyword));
+        Page<SalesOrderItem> page = salesOrderItemRepository.findAll(spec, pageable);
+        Page<SalesOrderItemResponse> mapped = page.map(salesOrderItemMapper::toResponse);
+        return new PagedResponse<>(
+                mapped.getContent(),
+                mapped.getNumber(),
+                mapped.getSize(),
+                mapped.getTotalElements(),
+                mapped.getTotalPages());
     }
 
     public SalesOrderItemResponse findById(UUID id) {

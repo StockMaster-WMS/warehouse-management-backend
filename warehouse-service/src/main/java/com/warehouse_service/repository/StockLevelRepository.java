@@ -2,13 +2,14 @@ package com.warehouse_service.repository;
 
 import com.warehouse_service.entity.StockLevel;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface StockLevelRepository extends JpaRepository<StockLevel, UUID> {
+public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, JpaSpecificationExecutor<StockLevel> {
 
 	List<StockLevel> findByWarehouseId(UUID warehouseId);
 

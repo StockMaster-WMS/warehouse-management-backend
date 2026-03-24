@@ -1,0 +1,33 @@
+# Warehouse Management Backend — Cursor rules
+
+## Dự án
+- **Stack:** Java 17, Spring Boot 3.5.x, Spring Cloud 2025.x, Maven (multi-module).
+- **Modules:** `common-lib` (shared), `eureka-server`, `api-gateway`, `auth-service`, `product-service`, `warehouse-service`, `inbound-service`, `outbound-service`.
+- **Mục tiêu:** Giữ nhất quán kiến trúc microservice hiện có; chỉ sửa module liên quan tới yêu cầu, tránh lan thay đổi không cần thiết.
+
+## Kiến trúc từng service
+- Luồng: **Controller** → **Service** → **Repository** (+ **Mapper** MapStruct khi cần).
+- **DTO:** `dto/request/*`, `dto/response/*`; không expose entity JPA trực tiếp ra API.
+- **Phản hồi API:** dùng `com.common.api.ApiResponse` và `com.common.api.PagedResponse` như các controller hiện có.
+- **Lỗi nghiệp vụ:** `com.common.exception.AppException` + `com.common.exception.ErrorCode`; thông báo cho người dùng có thể tiếng Việt (theo convention hiện tại).
+- **Phân trang & lọc:** `JpaSpecification` + class `*Specification` cạnh repository; service gọi `repository.findAll(spec, pageable)` và map sang `PagedResponse`.
+
+## Quy ước code
+- Package theo module: `com.<tên_service>_service` (ví dụ `com.product_service`).
+- Controller: `@RestController`, `@RequiredArgsConstructor`, `@RequestMapping("/api/...")`, OpenAPI (`@Tag`, `@Operation`) khi thêm/sửa endpoint.
+- Service: `@Service`, `@RequiredArgsConstructor`; đọc dùng `@Transactional(readOnly = true)` ở class, ghi dùng `@Transactional` trên method.
+- Entity: JPA + UUID id nếu đồng bộ với codebase hiện tại.
+- MapStruct: interface trong `mapper/`; sau khi đổi mapper/DTO, build module để sinh lại implementation.
+
+## common-lib & gateway
+- Exception, wrapper API, Feign client dùng chung nằm ở `common-lib` — chỉ thêm/sửa khi thật sự cross-cutting.
+- Route/filter gateway nằm ở `api-gateway`; đồng bộ path với service tương ứng.
+
+## Việc không làm
+- Không commit thư mục `target/` hay file `.class`.
+- Không refactor rộng hoặc đổi convention chỉ vì “sạch hơn” nếu không được yêu cầu.
+- Không tự thêm tài liệu markdown/README trừ khi user yêu cầu.
+
+## Build & kiểm tra
+- Build module: `mvn -pl <module> -am compile` hoặc `mvn verify` từ root khi cần.
+- Ưu tiên chạy lệnh thực tế trong môi trường thật khi debug lỗi build/test.

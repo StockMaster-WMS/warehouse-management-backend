@@ -1,6 +1,7 @@
 package com.inbound_service.controller;
 
 import com.common.api.ApiResponse;
+import com.common.api.PagedResponse;
 import com.inbound_service.dto.request.CreatePoItemRequest;
 import com.inbound_service.dto.request.ReceivePoItemRequest;
 import com.inbound_service.dto.request.UpdatePoItemRequest;
@@ -13,6 +14,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,7 +27,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -36,11 +39,17 @@ public class PoItemController {
     private final PoReceiveService poReceiveService;
 
     @GetMapping
-    @Operation(summary = "Lấy danh sách dòng đơn nhập", description = "Có thể lọc theo purchaseOrderId")
-    public ApiResponse<List<PoItemResponse>> getAll(
+    @Operation(summary = "Lấy danh sách dòng đơn nhập", description = "Phân trang; lọc purchaseOrderId, keyword (SKU)")
+    public ApiResponse<PagedResponse<PoItemResponse>> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "lineNumber") String sort,
             @Parameter(description = "ID đơn nhập")
-            @RequestParam(required = false) UUID purchaseOrderId) {
-        return ApiResponse.success("Lấy danh sách dòng đơn nhập thành công", poItemService.findAll(purchaseOrderId));
+            @RequestParam(required = false) UUID purchaseOrderId,
+            @RequestParam(required = false) String keyword) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(sort));
+        return ApiResponse.success("Lấy danh sách dòng đơn nhập thành công",
+                poItemService.findAll(pageable, purchaseOrderId, keyword));
     }
 
     @GetMapping("/{id}")

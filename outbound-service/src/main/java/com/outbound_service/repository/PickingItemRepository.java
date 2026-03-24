@@ -2,13 +2,14 @@ package com.outbound_service.repository;
 
 import com.outbound_service.entity.PickingItem;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.UUID;
 
-public interface PickingItemRepository extends JpaRepository<PickingItem, UUID> {
+public interface PickingItemRepository extends JpaRepository<PickingItem, UUID>, JpaSpecificationExecutor<PickingItem> {
 
 	List<PickingItem> findBySoItem_Id(UUID soItemId);
 

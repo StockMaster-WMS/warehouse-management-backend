@@ -1,5 +1,6 @@
 package com.outbound_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
@@ -14,7 +15,11 @@ import com.outbound_service.mapper.SalesOrderMapper;
 import com.outbound_service.repository.PickingItemRepository;
 import com.outbound_service.repository.SalesOrderItemRepository;
 import com.outbound_service.repository.SalesOrderRepository;
+import com.outbound_service.repository.SalesOrderSpecification;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,11 +37,18 @@ public class SalesOrderService {
     private final WarehouseStockGateway warehouseStockGateway;
     private final SalesOrderMapper salesOrderMapper;
 
-    public List<SalesOrderResponse> findAll() {
-        return salesOrderRepository.findAll()
-                .stream()
-                .map(salesOrderMapper::toResponse)
-                .toList();
+    public PagedResponse<SalesOrderResponse> findAll(Pageable pageable, String keyword, String status, UUID warehouseId) {
+        Specification<SalesOrder> spec = SalesOrderSpecification.hasKeyword(keyword)
+                .and(SalesOrderSpecification.hasStatus(status))
+                .and(SalesOrderSpecification.hasWarehouseId(warehouseId));
+        Page<SalesOrder> page = salesOrderRepository.findAll(spec, pageable);
+        Page<SalesOrderResponse> mapped = page.map(salesOrderMapper::toResponse);
+        return new PagedResponse<>(
+                mapped.getContent(),
+                mapped.getNumber(),
+                mapped.getSize(),
+                mapped.getTotalElements(),
+                mapped.getTotalPages());
     }
 
     public SalesOrderResponse findById(UUID id) {

@@ -1,5 +1,6 @@
 package com.product_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.product_service.dto.request.CreateSupplierRequest;
@@ -8,11 +9,14 @@ import com.product_service.dto.response.SupplierResponse;
 import com.product_service.entity.Supplier;
 import com.product_service.mapper.SupplierMapper;
 import com.product_service.repository.SupplierRepository;
+import com.product_service.repository.SupplierSpecification;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -23,11 +27,17 @@ public class SupplierService {
     private final SupplierRepository supplierRepository;
     private final SupplierMapper supplierMapper;
 
-    public List<SupplierResponse> findAll() {
-        return supplierRepository.findAll()
-                .stream()
-                .map(supplierMapper::toResponse)
-                .toList();
+    public PagedResponse<SupplierResponse> findAll(Pageable pageable, String keyword, String status) {
+        Specification<Supplier> spec = SupplierSpecification.hasKeyword(keyword)
+                .and(SupplierSpecification.hasStatus(status));
+        Page<Supplier> page = supplierRepository.findAll(spec, pageable);
+        Page<SupplierResponse> mapped = page.map(supplierMapper::toResponse);
+        return new PagedResponse<>(
+                mapped.getContent(),
+                mapped.getNumber(),
+                mapped.getSize(),
+                mapped.getTotalElements(),
+                mapped.getTotalPages());
     }
 
     public SupplierResponse findById(UUID id) {

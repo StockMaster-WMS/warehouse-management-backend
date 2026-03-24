@@ -1,5 +1,6 @@
 package com.product_service.service;
 
+import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.common.util.CodeGenerator;
@@ -9,12 +10,15 @@ import com.product_service.dto.response.CategoryResponse;
 import com.product_service.entity.Category;
 import com.product_service.mapper.CategoryMapper;
 import com.product_service.repository.CategoryRepository;
+import com.product_service.repository.CategorySpecification;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -29,11 +33,17 @@ public class CategoryService {
 
     // ================= READ =================
 
-    public List<CategoryResponse> findAll() {
-        return repository.findAll()
-                .stream()
-                .map(mapper::toResponse)
-                .toList();
+    public PagedResponse<CategoryResponse> findAll(Pageable pageable, String keyword, Boolean isActive) {
+        Specification<Category> spec = CategorySpecification.hasKeyword(keyword)
+                .and(CategorySpecification.hasActive(isActive));
+        Page<Category> page = repository.findAll(spec, pageable);
+        Page<CategoryResponse> mapped = page.map(mapper::toResponse);
+        return new PagedResponse<>(
+                mapped.getContent(),
+                mapped.getNumber(),
+                mapped.getSize(),
+                mapped.getTotalElements(),
+                mapped.getTotalPages());
     }
 
     public CategoryResponse findById(UUID id) {

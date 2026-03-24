@@ -74,10 +74,7 @@ public class ProductController {
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Import sản phẩm từ Excel (.xlsx)",
-            description = "Cột: name, baseUnit; categoryId (UUID) hoặc categoryCode. "
-                    + "Nên dùng categoryId khi kéo fill — Excel dễ làm sai mã DM-… (B66C→B67C). "
-                    + "SKU tự sinh; createdBy query tùy chọn.")
+    @Operation(summary = "Import sản phẩm từ Excel (.xlsx)")
     public ApiResponse<ProductImportResponse> importXlsx(
             @RequestPart("file") MultipartFile file,
             @Parameter(description = "UUID người tạo; bỏ trống = import hệ thống")
