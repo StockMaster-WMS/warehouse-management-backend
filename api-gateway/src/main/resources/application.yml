@@ -159,5 +159,5 @@ logging:
 app:
   gateway:
     security:
-      enabled: false
+      enabled: ${GATEWAY_SECURITY_ENABLED:true}
       jwt-secret: ${GATEWAY_JWT_SECRET:dev-auth-jwt-secret-change-this-before-staging-or-production-2026}
