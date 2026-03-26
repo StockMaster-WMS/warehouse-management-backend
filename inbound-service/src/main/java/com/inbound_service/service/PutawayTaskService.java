@@ -4,7 +4,7 @@ import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
-import com.common.client.warehouse.WarehouseStockGateway;
+import com.inbound_service.client.WarehouseStockGateway;
 import com.inbound_service.dto.request.CompletePutawayRequest;
 import com.inbound_service.dto.request.UpdatePutawayTaskRequest;
 import com.inbound_service.dto.response.PutawayTaskResponse;

@@ -2,6 +2,7 @@ package com.warehouse_service.service;
 
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
+import com.common.api.stock.StockReserveCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.warehouse_service.dto.request.CreateStockLevelRequest;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -129,6 +131,63 @@ public class StockLevelService {
                         .findByLocationIdAndProductIdAndLotNumber(cmd.locationId(), cmd.productId(), lot)
                         .map(existing -> applyDelta(existing, cmd.qtyDelta()))
                         .orElseGet(() -> createFromPositiveDelta(warehouse, location, cmd.productId(), lot, cmd.qtyDelta()));
+            } catch (ObjectOptimisticLockingFailureException e) {
+                if (attempt == MAX_RETRY - 1) {
+                    throw new AppException(ErrorCode.BAD_REQUEST,
+                            "Tồn kho đang được cập nhật đồng thời, vui lòng thử lại");
+                }
+            }
+        }
+        throw new AppException(ErrorCode.BAD_REQUEST, "Tồn kho đang được cập nhật đồng thời, vui lòng thử lại");
+    }
+
+    /**
+     * Điều chỉnh lượng giữ chỗ. delta &gt; 0: cần đủ tồn khả dụng (on_hand − reserved); delta &lt; 0: nhả chỗ.
+     */
+    @Transactional
+    public StockLevelResponse adjustReserved(StockReserveCommand cmd) {
+        if (cmd.reservedDelta() == 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "reservedDelta phải khác 0");
+        }
+
+        String lot = normalizeLot(cmd.lotNumber());
+        getWarehouse(cmd.warehouseId());
+        Location location = getLocation(cmd.locationId());
+        ensureLocationInWarehouse(location, cmd.warehouseId());
+
+        for (int attempt = 0; attempt < MAX_RETRY; attempt++) {
+            try {
+                Optional<StockLevel> opt = stockLevelRepository
+                        .findByLocationIdAndProductIdAndLotNumber(cmd.locationId(), cmd.productId(), lot);
+                if (opt.isEmpty()) {
+                    if (cmd.reservedDelta() > 0) {
+                        throw new AppException(ErrorCode.BAD_REQUEST,
+                                "Không có bản ghi tồn kho tại vị trí/sản phẩm/lô để giữ chỗ");
+                    }
+                    throw new AppException(ErrorCode.BAD_REQUEST,
+                            "Không có tồn kho để nhả chỗ tại vị trí/sản phẩm/lô đã chọn");
+                }
+                StockLevel stock = opt.get();
+                int onHand = stock.getQtyOnHand();
+                int reserved = stock.getQtyReserved() == null ? 0 : stock.getQtyReserved();
+                int newReserved = reserved + cmd.reservedDelta();
+                if (newReserved < 0) {
+                    throw new AppException(ErrorCode.BAD_REQUEST, "Không đủ lượng đang giữ chỗ để nhả");
+                }
+                if (newReserved > onHand) {
+                    throw new AppException(ErrorCode.BAD_REQUEST, "Giữ chỗ không được vượt quá tồn tay");
+                }
+                if (cmd.reservedDelta() > 0) {
+                    int available = onHand - reserved;
+                    if (cmd.reservedDelta() > available) {
+                        throw new AppException(ErrorCode.BAD_REQUEST,
+                                "Không đủ tồn khả dụng để giữ chỗ (khả dụng: " + available + ")");
+                    }
+                }
+                validateQuantities(onHand, newReserved);
+                stock.setQtyReserved(newReserved);
+                StockLevel saved = stockLevelRepository.save(stock);
+                return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
             } catch (ObjectOptimisticLockingFailureException e) {
                 if (attempt == MAX_RETRY - 1) {
                     throw new AppException(ErrorCode.BAD_REQUEST,

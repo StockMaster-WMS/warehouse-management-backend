@@ -2,9 +2,10 @@ package com.outbound_service.service;
 
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
+import com.common.api.stock.StockReserveCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
-import com.common.client.warehouse.WarehouseStockGateway;
+import com.outbound_service.client.WarehouseStockGateway;
 import com.outbound_service.dto.request.CreateSalesOrderRequest;
 import com.outbound_service.dto.request.UpdateSalesOrderRequest;
 import com.outbound_service.dto.response.SalesOrderResponse;
@@ -78,6 +79,7 @@ public class SalesOrderService {
     @Transactional
     public SalesOrderResponse update(UUID id, UpdateSalesOrderRequest request) {
         SalesOrder salesOrder = getSalesOrder(id);
+        requireStatus(salesOrder, SalesOrderStatus.PENDING, "Chỉ cập nhật đơn xuất khi đang PENDING");
 
         salesOrderRepository.findBySoNumber(request.soNumber())
                 .filter(existing -> !existing.getId().equals(id))
@@ -93,6 +95,10 @@ public class SalesOrderService {
     @Transactional
     public void delete(UUID id) {
         SalesOrder salesOrder = getSalesOrder(id);
+        requireStatus(salesOrder, SalesOrderStatus.PENDING, "Chỉ xóa đơn xuất khi đang PENDING");
+        if (pickingItemRepository.existsBySoItem_SalesOrder_Id(id)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không xóa đơn đã có picking; xóa picking trước");
+        }
         salesOrderRepository.delete(salesOrder);
     }
 
@@ -133,6 +139,21 @@ public class SalesOrderService {
                         "Chưa pick đủ: kiểm tra trạng thái PICKED và qtyPicked cho từng dòng picking");
             }
         }
+
+        Map<UUID, Integer> pickedBySoItem = picks.stream()
+                .collect(Collectors.groupingBy(
+                        p -> p.getSoItem().getId(),
+                        Collectors.summingInt(p -> p.getQtyPicked() == null ? 0 : p.getQtyPicked())));
+        List<SalesOrderItem> lines = salesOrderItemRepository.findBySalesOrder_Id(id);
+        for (SalesOrderItem line : lines) {
+            int sum = pickedBySoItem.getOrDefault(line.getId(), 0);
+            if (sum < line.getOrderedQty()) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Chưa pick đủ theo dòng đơn: line " + line.getLineNumber()
+                                + " (đặt " + line.getOrderedQty() + ", đã pick " + sum + ")");
+            }
+        }
+
         so.setStatus(SalesOrderStatus.PACKED);
         return salesOrderMapper.toResponse(salesOrderRepository.save(so));
     }
@@ -168,6 +189,12 @@ public class SalesOrderService {
             if (picked <= 0) {
                 continue;
             }
+            warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
+                    so.getWarehouseId(),
+                    p.getLocationId(),
+                    p.getProductId(),
+                    null,
+                    -picked));
             StockAdjustCommand cmd = new StockAdjustCommand(
                     so.getWarehouseId(),
                     p.getLocationId(),

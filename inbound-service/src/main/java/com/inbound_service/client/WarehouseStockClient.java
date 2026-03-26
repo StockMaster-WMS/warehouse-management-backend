@@ -1,4 +1,4 @@
-package com.common.client.warehouse;
+package com.inbound_service.client;
 
 import com.common.api.ApiResponse;
 import com.common.api.stock.StockAdjustCommand;

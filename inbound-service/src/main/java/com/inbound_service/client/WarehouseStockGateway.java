@@ -1,22 +1,21 @@
-package com.common.client.warehouse;
+package com.inbound_service.client;
 
 import com.common.api.ApiResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import feign.FeignException;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.stereotype.Component;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
 
-@Component
-@ConditionalOnBean(WarehouseStockClient.class)
+/**
+ * Bọc {@link WarehouseStockClient}: map lỗi Feign → {@link AppException} (domain service chỉ gọi gateway).
+ */
+@Service
+@RequiredArgsConstructor
 public class WarehouseStockGateway {
 
     private final WarehouseStockClient warehouseStockClient;
-
-    public WarehouseStockGateway(WarehouseStockClient warehouseStockClient) {
-        this.warehouseStockClient = warehouseStockClient;
-    }
 
     public void adjustOrThrow(StockAdjustCommand command) {
         try {
@@ -35,7 +34,7 @@ public class WarehouseStockGateway {
         }
     }
 
-    private String extractMessage(FeignException e) {
+    private static String extractMessage(FeignException e) {
         String body = e.contentUTF8();
         return (body != null && !body.isBlank()) ? body : e.getMessage();
     }

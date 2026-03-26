@@ -8,6 +8,7 @@ import com.outbound_service.dto.request.UpdateSalesOrderItemRequest;
 import com.outbound_service.dto.response.SalesOrderItemResponse;
 import com.outbound_service.entity.SalesOrder;
 import com.outbound_service.entity.SalesOrderItem;
+import com.outbound_service.entity.SalesOrderStatus;
 import com.outbound_service.mapper.SalesOrderItemMapper;
 import com.outbound_service.repository.SalesOrderItemRepository;
 import com.outbound_service.repository.SalesOrderItemSpecification;
@@ -50,6 +51,7 @@ public class SalesOrderItemService {
     @Transactional
     public SalesOrderItemResponse create(CreateSalesOrderItemRequest request) {
         SalesOrder order = getOrder(request.salesOrderId());
+        requireOrderPending(order);
         ensureLineUnique(request.salesOrderId(), request.lineNumber(), null);
 
         SalesOrderItem item = salesOrderItemMapper.toEntity(request);
@@ -61,6 +63,7 @@ public class SalesOrderItemService {
     public SalesOrderItemResponse update(UUID id, UpdateSalesOrderItemRequest request) {
         SalesOrderItem item = getLine(id);
         SalesOrder order = getOrder(request.salesOrderId());
+        requireOrderPending(order);
         ensureLineUnique(request.salesOrderId(), request.lineNumber(), id);
 
         int shipped = request.shippedQty() == null ? item.getShippedQty() : request.shippedQty();
@@ -78,6 +81,7 @@ public class SalesOrderItemService {
     @Transactional
     public void delete(UUID id) {
         SalesOrderItem item = getLine(id);
+        requireOrderPending(item.getSalesOrder());
         salesOrderItemRepository.delete(item);
     }
 
@@ -89,6 +93,13 @@ public class SalesOrderItemService {
     private SalesOrder getOrder(UUID id) {
         return salesOrderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất"));
+    }
+
+    private static void requireOrderPending(SalesOrder order) {
+        if (order.getStatus() != SalesOrderStatus.PENDING) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Chỉ thêm/sửa/xóa dòng đơn khi đơn xuất đang PENDING");
+        }
     }
 
     private void ensureLineUnique(UUID salesOrderId, Short lineNumber, UUID currentId) {

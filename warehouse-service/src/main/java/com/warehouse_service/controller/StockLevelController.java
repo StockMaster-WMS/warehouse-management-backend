@@ -3,6 +3,7 @@ package com.warehouse_service.controller;
 import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
+import com.common.api.stock.StockReserveCommand;
 import com.warehouse_service.dto.request.CreateStockLevelRequest;
 import com.warehouse_service.dto.request.UpdateStockLevelRequest;
 import com.warehouse_service.dto.response.StockLevelResponse;
@@ -63,6 +64,12 @@ public class StockLevelController {
     @Operation(summary = "Điều chỉnh tồn kho", description = "qtyDelta > 0 nhập thêm; < 0 trừ (xuất). Dùng cho luồng putaway / xuất hàng.")
     public ApiResponse<StockLevelResponse> adjust(@Valid @RequestBody StockAdjustCommand command) {
         return ApiResponse.success("Điều chỉnh tồn kho thành công", stockLevelService.adjust(command));
+    }
+
+    @PostMapping("/adjust-reserved")
+    @Operation(summary = "Điều chỉnh giữ chỗ", description = "reservedDelta > 0 giữ thêm; < 0 nhả chỗ (đơn xuất / hủy pick).")
+    public ApiResponse<StockLevelResponse> adjustReserved(@Valid @RequestBody StockReserveCommand command) {
+        return ApiResponse.success("Điều chỉnh giữ chỗ thành công", stockLevelService.adjustReserved(command));
     }
 
     @PostMapping

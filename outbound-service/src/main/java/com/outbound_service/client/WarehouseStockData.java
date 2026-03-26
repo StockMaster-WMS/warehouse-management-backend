@@ -1,4 +1,4 @@
-package com.common.client.warehouse;
+package com.outbound_service.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
