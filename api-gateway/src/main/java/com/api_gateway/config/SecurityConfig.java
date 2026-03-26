@@ -22,7 +22,7 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
-    @Value("${app.gateway.security.enabled:true}")
+    @Value("${app.gateway.security.enabled:false}")
     private boolean gatewaySecurityEnabled;
 
     @Value("${app.gateway.security.jwt-secret}")

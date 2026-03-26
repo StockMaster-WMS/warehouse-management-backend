@@ -5,6 +5,7 @@ import com.common.api.stock.StockAdjustCommand;
 import com.common.api.stock.StockReserveCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.common.util.CodeGenerator;
 import com.outbound_service.client.WarehouseStockGateway;
 import com.outbound_service.dto.request.CreateSalesOrderRequest;
 import com.outbound_service.dto.request.UpdateSalesOrderRequest;
@@ -35,6 +36,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class SalesOrderService {
+
+    private static final String SO_NUMBER_PREFIX = "SO";
 
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderItemRepository salesOrderItemRepository;
@@ -67,11 +70,8 @@ public class SalesOrderService {
 
     @Transactional
     public SalesOrderResponse create(CreateSalesOrderRequest request) {
-        if (salesOrderRepository.existsBySoNumber(request.soNumber())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Mã đơn xuất đã tồn tại");
-        }
-
         SalesOrder salesOrder = salesOrderMapper.toEntity(request);
+        salesOrder.setSoNumber(CodeGenerator.generate(SO_NUMBER_PREFIX));
 
         return salesOrderMapper.toResponse(salesOrderRepository.save(salesOrder));
     }

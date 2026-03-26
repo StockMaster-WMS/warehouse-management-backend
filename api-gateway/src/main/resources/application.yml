@@ -135,6 +135,10 @@ springdoc:
     enabled: true
   swagger-ui:
     path: /swagger-ui.html
+    # Gọi API cùng origin với trang Swagger (giảm lỗi CORS / Failed to fetch)
+    use-root-path: true
+    # Tắt validator online (đôi khi gây Failed to fetch trong browser)
+    validator-url: ""
     urls:
       - name: "Xác thực"
         url: /api/auth/v3/api-docs
@@ -159,5 +163,6 @@ logging:
 app:
   gateway:
     security:
-      enabled: ${GATEWAY_SECURITY_ENABLED:true}
+      # Mặc định tắt: toàn bộ route public (dev/DATN). Production: GATEWAY_SECURITY_ENABLED=true
+      enabled: ${GATEWAY_SECURITY_ENABLED:false}
       jwt-secret: ${GATEWAY_JWT_SECRET:dev-auth-jwt-secret-change-this-before-staging-or-production-2026}

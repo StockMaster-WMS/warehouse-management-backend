@@ -19,6 +19,9 @@ public class OpenApiConfig {
 
     @Bean
     public OpenAPI openAPI() {
+        String base = gatewayUrl == null || gatewayUrl.isBlank()
+                ? "http://localhost:9000"
+                : gatewayUrl.replaceAll("/+$", "");
         return new OpenAPI()
             .info(new Info()
                 .title("Product Service API")
@@ -31,8 +34,7 @@ public class OpenApiConfig {
                     .scheme("bearer")
                     .bearerFormat("JWT")))
             .servers(List.of(
-                new Server()
-                    .url(gatewayUrl)
-                    .description("API Gateway")));
+                new Server().url("/").description("Gateway — cùng host với Swagger UI"),
+                new Server().url(base).description("API Gateway (URL tuyệt đối)")));
     }
 }
