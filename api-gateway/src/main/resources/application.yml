@@ -46,9 +46,9 @@ spring:
           uri: lb://auth-service
           order: 0
           predicates:
-            - Path=/api/auth/v3/api-docs
+            - Path=/api/auth/v3/api-docs/**
           filters:
-            - SetPath=/v3/api-docs
+            - RewritePath=/api/auth/v3/api-docs(?<segment>/?.*), /v3/api-docs$\{segment}
 
         # === AUTH SERVICE ===
         - id: auth-service
@@ -62,9 +62,9 @@ spring:
           uri: lb://product-service
           order: 0
           predicates:
-            - Path=/api/products/v3/api-docs
+            - Path=/api/products/v3/api-docs/**
           filters:
-            - SetPath=/v3/api-docs
+            - RewritePath=/api/products/v3/api-docs(?<segment>/?.*), /v3/api-docs$\{segment}
 
         # === PRODUCT SERVICE ===
         - id: product-service
@@ -78,9 +78,9 @@ spring:
           uri: lb://warehouse-service
           order: 0
           predicates:
-            - Path=/api/warehouse/v3/api-docs
+            - Path=/api/warehouse/v3/api-docs/**
           filters:
-            - SetPath=/v3/api-docs
+            - RewritePath=/api/warehouse/v3/api-docs(?<segment>/?.*), /v3/api-docs$\{segment}
 
         # === WAREHOUSE SERVICE ===
         - id: warehouse-service
@@ -94,9 +94,9 @@ spring:
           uri: lb://inbound-service
           order: 0
           predicates:
-            - Path=/api/inbound/v3/api-docs
+            - Path=/api/inbound/v3/api-docs/**
           filters:
-            - SetPath=/v3/api-docs
+            - RewritePath=/api/inbound/v3/api-docs(?<segment>/?.*), /v3/api-docs$\{segment}
 
         # === INBOUND SERVICE ===
         - id: inbound-service
@@ -110,9 +110,9 @@ spring:
           uri: lb://outbound-service
           order: 0
           predicates:
-            - Path=/api/outbound/v3/api-docs
+            - Path=/api/outbound/v3/api-docs/**
           filters:
-            - SetPath=/v3/api-docs
+            - RewritePath=/api/outbound/v3/api-docs(?<segment>/?.*), /v3/api-docs$\{segment}
 
         # === OUTBOUND SERVICE ===
         - id: outbound-service
