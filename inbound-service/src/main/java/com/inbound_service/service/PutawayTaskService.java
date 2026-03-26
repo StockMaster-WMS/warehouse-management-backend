@@ -92,7 +92,7 @@ public class PutawayTaskService {
      */
     @Transactional
     public PutawayTaskResponse complete(UUID id, CompletePutawayRequest request) {
-        PutawayTask task = putawayTaskRepository.findByIdWithPoAndOrder(id)
+        PutawayTask task = putawayTaskRepository.findByIdWithPoAndOrderForUpdate(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy putaway"));
 
         PoItem line = task.getPoItem();

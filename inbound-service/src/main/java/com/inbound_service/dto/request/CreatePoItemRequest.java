@@ -24,7 +24,6 @@ public record CreatePoItemRequest(
         @NotNull(message = "Số lượng đặt không được để trống")
         Integer orderedQty,
 
-        Integer receivedQty,
         BigDecimal unitPrice
 ) {
 }
