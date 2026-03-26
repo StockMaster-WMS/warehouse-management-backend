@@ -4,6 +4,7 @@ import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.inbound_service.dto.request.CreatePurchaseOrderRequest;
 import com.inbound_service.dto.request.UpdatePurchaseOrderRequest;
+import com.inbound_service.dto.response.PurchaseOrderDetailResponse;
 import com.inbound_service.dto.response.PurchaseOrderResponse;
 import com.inbound_service.service.PurchaseOrderService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -55,6 +56,12 @@ public class PurchaseOrderController {
         return ApiResponse.success("Lấy đơn nhập thành công", purchaseOrderService.findById(id));
     }
 
+    @GetMapping("/{id}/detail")
+    @Operation(summary = "Lấy chi tiết PO cho màn hình nhập hàng", description = "Trả về PO + danh sách dòng hàng + putaway tasks + tiến độ nhận")
+    public ApiResponse<PurchaseOrderDetailResponse> getDetail(@PathVariable UUID id) {
+        return ApiResponse.success("Lấy chi tiết đơn nhập thành công", purchaseOrderService.findDetail(id));
+    }
+
     @GetMapping("/number/{poNumber}")
     @Operation(summary = "Lấy đơn nhập theo mã", description = "Tìm purchase order bằng poNumber")
     public ApiResponse<PurchaseOrderResponse> getByPoNumber(@PathVariable String poNumber) {
@@ -65,6 +72,18 @@ public class PurchaseOrderController {
     @Operation(summary = "Tạo đơn nhập", description = "Tạo mới một purchase order")
     public ApiResponse<PurchaseOrderResponse> create(@Valid @RequestBody CreatePurchaseOrderRequest request) {
         return ApiResponse.success("Tạo đơn nhập thành công", purchaseOrderService.create(request));
+    }
+
+    @PostMapping("/{id}/confirm")
+    @Operation(summary = "Xác nhận đơn nhập", description = "DRAFT -> RECEIVING (cần có ít nhất 1 dòng hàng)")
+    public ApiResponse<PurchaseOrderResponse> confirm(@PathVariable UUID id) {
+        return ApiResponse.success("Xác nhận đơn nhập thành công", purchaseOrderService.confirm(id));
+    }
+
+    @PostMapping("/{id}/cancel")
+    @Operation(summary = "Hủy đơn nhập", description = "Cho phép hủy khi đang DRAFT hoặc RECEIVING")
+    public ApiResponse<PurchaseOrderResponse> cancel(@PathVariable UUID id) {
+        return ApiResponse.success("Hủy đơn nhập thành công", purchaseOrderService.cancel(id));
     }
 
     @PutMapping("/{id}")

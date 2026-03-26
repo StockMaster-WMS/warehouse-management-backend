@@ -27,6 +27,7 @@ import java.util.UUID;
 public class PoReceiveService {
 
     private static final PurchaseOrderStatus PO_CANCELLED = PurchaseOrderStatus.CANCELLED;
+    private static final PurchaseOrderStatus PO_RECEIVED = PurchaseOrderStatus.RECEIVED;
 
     private final PoItemRepository poItemRepository;
     private final PutawayTaskRepository putawayTaskRepository;
@@ -40,12 +41,19 @@ public class PoReceiveService {
      */
     @Transactional
     public ReceivePoItemResponse receive(UUID poItemId, ReceivePoItemRequest request) {
-        PoItem line = poItemRepository.findByIdWithPurchaseOrder(poItemId)
+        PoItem line = poItemRepository.findByIdWithPurchaseOrderForUpdate(poItemId)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn nhập"));
 
         PurchaseOrder po = line.getPurchaseOrder();
         if (PO_CANCELLED == po.getStatus()) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Đơn nhập đã hủy, không nhận hàng");
+        }
+        if (PO_RECEIVED == po.getStatus()) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Đơn nhập đã hoàn tất, không thể nhận thêm");
+        }
+        if (po.getStatus() != PurchaseOrderStatus.RECEIVING) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Đơn nhập chưa được xác nhận, vui lòng confirm trước khi nhận hàng");
         }
 
         int current = line.getReceivedQty() == null ? 0 : line.getReceivedQty();
@@ -82,7 +90,7 @@ public class PoReceiveService {
                 .allMatch(l -> Objects.equals(l.getOrderedQty(), l.getReceivedQty()));
         if (allReceived) {
             po.setStatus(PurchaseOrderStatus.RECEIVED);
-        } else if (po.getStatus() == PurchaseOrderStatus.DRAFT) {
+        } else if (po.getStatus() == PurchaseOrderStatus.RECEIVING) {
             po.setStatus(PurchaseOrderStatus.RECEIVING);
         }
         purchaseOrderRepository.save(po);
