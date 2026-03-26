@@ -15,7 +15,7 @@
     <artifactId>common-lib</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>common-lib</name>
-    <description>Shared API, Feign client tồn kho, exception, utilities, Excel (.xlsx)</description>
+    <description>Shared API DTO, exception, utilities, Excel (.xlsx)</description>
 
     <dependencies>
 
@@ -31,10 +31,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

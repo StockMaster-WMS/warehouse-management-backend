@@ -6,14 +6,14 @@ Parent Maven (multi-module) cho hệ thống warehouse-management.
 
 | Module | Mô tả |
 |--------|--------|
-| `common-lib` | DTO/API chung, exception, Excel, OpenFeign client gọi warehouse (`com.common.client.warehouse`) |
+| `common-lib` | DTO/API chung, exception, Excel (không chứa client gọi microservice khác) |
 | `eureka-server` | Service discovery |
 | `api-gateway` | Spring Cloud Gateway, route tới các service |
 | `auth-service` | Đăng ký / đăng nhập / JWT |
 | `product-service` | Sản phẩm, danh mục, nhà cung cấp |
 | `warehouse-service` | Kho, vị trí, tồn kho |
-| `inbound-service` | Đơn nhập, putaway; gọi warehouse qua Feign |
-| `outbound-service` | Đơn xuất; gọi warehouse qua Feign |
+| `inbound-service` | Đơn nhập, putaway; OpenFeign (`com.inbound_service.client` → warehouse-service) |
+| `outbound-service` | Đơn xuất; OpenFeign (`com.outbound_service.client` → warehouse-service) |
 
 ## Build
 

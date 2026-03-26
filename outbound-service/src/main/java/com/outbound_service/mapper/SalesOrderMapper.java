@@ -14,6 +14,7 @@ import org.mapstruct.MappingTarget;
 public interface SalesOrderMapper {
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "soNumber", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "status", ignore = true)
     SalesOrder toEntity(CreateSalesOrderRequest request);

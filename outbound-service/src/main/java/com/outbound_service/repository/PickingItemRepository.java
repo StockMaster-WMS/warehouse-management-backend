@@ -1,4 +1,4 @@
-                                                                      package com.outbound_service.repository;
+package com.outbound_service.repository;
 
 import com.outbound_service.entity.PickingItem;
 import org.springframework.data.domain.Page;
@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface PickingItemRepository extends JpaRepository<PickingItem, UUID>, JpaSpecificationExecutor<PickingItem> {
@@ -27,4 +28,9 @@ public interface PickingItemRepository extends JpaRepository<PickingItem, UUID>,
 	List<PickingItem> findByProductId(UUID productId);
 
 	List<PickingItem> findByLocationId(UUID locationId);
+
+	boolean existsBySoItem_SalesOrder_Id(UUID salesOrderId);
+
+	@Query("SELECT p FROM PickingItem p JOIN FETCH p.soItem s JOIN FETCH s.salesOrder WHERE p.id = :id")
+	Optional<PickingItem> findByIdWithSoAndOrder(@Param("id") UUID id);
 }

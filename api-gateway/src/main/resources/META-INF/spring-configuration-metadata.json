@@ -4,7 +4,7 @@
       "name": "app.gateway.security.enabled",
       "type": "java.lang.Boolean",
       "description": "Whether gateway security is enabled.",
-      "defaultValue": true
+      "defaultValue": false
     },
     {
       "name": "app.gateway.security.jwt-secret",

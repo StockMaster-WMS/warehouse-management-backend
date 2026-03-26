@@ -14,10 +14,12 @@ public interface PickingItemMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "soItem", ignore = true)
+    @Mapping(target = "status", ignore = true)
     PickingItem toEntity(CreatePickingItemRequest request);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "soItem", ignore = true)
+    @Mapping(target = "status", ignore = true)
     void updateEntity(UpdatePickingItemRequest request, @MappingTarget PickingItem pickingItem);
 
     @Mapping(target = "soItemId", source = "soItem.id")

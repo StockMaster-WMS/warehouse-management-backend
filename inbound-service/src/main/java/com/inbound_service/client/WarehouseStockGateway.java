@@ -1,20 +1,21 @@
-package com.common.client.warehouse;
+package com.inbound_service.client;
 
 import com.common.api.ApiResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import feign.FeignException;
-import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnBean(WarehouseStockClient.class)
 public class WarehouseStockGateway {
 
     private final WarehouseStockClient warehouseStockClient;
 
-    public WarehouseStockGateway(ObjectProvider<WarehouseStockClient> warehouseStockClientProvider) {
-        this.warehouseStockClient = warehouseStockClientProvider.getIfAvailable();
+    public WarehouseStockGateway(WarehouseStockClient warehouseStockClient) {
+        this.warehouseStockClient = warehouseStockClient;
     }
 
     public void adjustOrThrow(StockAdjustCommand command) {
@@ -38,7 +39,7 @@ public class WarehouseStockGateway {
         }
     }
 
-    private String extractMessage(FeignException e) {
+    private static String extractMessage(FeignException e) {
         String body = e.contentUTF8();
         return (body != null && !body.isBlank()) ? body : e.getMessage();
     }

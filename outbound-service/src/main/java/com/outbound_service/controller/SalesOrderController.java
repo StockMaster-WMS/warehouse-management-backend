@@ -79,7 +79,7 @@ public class SalesOrderController {
     }
 
     @PostMapping
-    @Operation(summary = "Tạo đơn xuất", description = "Tạo mới một sales order")
+    @Operation(summary = "Tạo đơn xuất", description = "Tạo mới sales order; mã đơn (soNumber) tự sinh bởi hệ thống")
     public ApiResponse<SalesOrderResponse> create(@Valid @RequestBody CreateSalesOrderRequest request) {
         return ApiResponse.success("Tạo đơn xuất thành công", salesOrderService.create(request));
     }
