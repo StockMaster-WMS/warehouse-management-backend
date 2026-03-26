@@ -3,6 +3,7 @@ package com.inbound_service.service;
 import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.common.util.CodeGenerator;
 import com.inbound_service.dto.request.CreatePurchaseOrderRequest;
 import com.inbound_service.dto.request.UpdatePurchaseOrderRequest;
 import com.inbound_service.dto.response.PoItemResponse;
@@ -99,11 +100,8 @@ public class PurchaseOrderService {
 
     @Transactional
     public PurchaseOrderResponse create(CreatePurchaseOrderRequest request) {
-        if (purchaseOrderRepository.existsByPoNumber(request.poNumber())) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Mã đơn nhập đã tồn tại");
-        }
-
         PurchaseOrder purchaseOrder = purchaseOrderMapper.toEntity(request);
+        purchaseOrder.setPoNumber(generateUniquePoNumber());
 
         return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
     }
@@ -175,6 +173,17 @@ public class PurchaseOrderService {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Đơn nhập đã kết thúc, không thể chỉnh sửa");
         }
+    }
+
+    private String generateUniquePoNumber() {
+        for (int i = 0; i < 10; i++) {
+            String candidate = CodeGenerator.generate("PO");
+            if (!purchaseOrderRepository.existsByPoNumber(candidate)) {
+                return candidate;
+            }
+        }
+        throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR,
+                "Không thể sinh mã đơn nhập duy nhất, vui lòng thử lại");
     }
 
 }
