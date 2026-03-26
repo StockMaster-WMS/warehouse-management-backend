@@ -8,6 +8,7 @@ import com.inbound_service.dto.request.UpdatePoItemRequest;
 import com.inbound_service.dto.response.PoItemResponse;
 import com.inbound_service.entity.PoItem;
 import com.inbound_service.entity.PurchaseOrder;
+import com.inbound_service.entity.PurchaseOrderStatus;
 import com.inbound_service.mapper.PoItemMapper;
 import com.inbound_service.repository.PoItemRepository;
 import com.inbound_service.repository.PoItemSpecification;
@@ -50,11 +51,13 @@ public class PoItemService {
     @Transactional
     public PoItemResponse create(CreatePoItemRequest request) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(request.purchaseOrderId());
-        validateQuantities(request.orderedQty(), request.receivedQty());
+        requirePoEditable(purchaseOrder);
+        validateOrderedQty(request.orderedQty());
         ensureLineNumberUnique(request.purchaseOrderId(), request.lineNumber(), null);
 
         PoItem item = poItemMapper.toEntity(request);
         item.setPurchaseOrder(purchaseOrder);
+        item.setReceivedQty(0);
 
         return poItemMapper.toResponse(poItemRepository.save(item));
     }
@@ -63,7 +66,17 @@ public class PoItemService {
     public PoItemResponse update(UUID id, UpdatePoItemRequest request) {
         PoItem item = getPoItem(id);
         PurchaseOrder purchaseOrder = getPurchaseOrder(request.purchaseOrderId());
-        validateQuantities(request.orderedQty(), request.receivedQty());
+        requirePoEditable(item.getPurchaseOrder());
+        requirePoEditable(purchaseOrder);
+        if (!item.getPurchaseOrder().getId().equals(request.purchaseOrderId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không được chuyển dòng đơn nhập sang PO khác");
+        }
+        validateOrderedQty(request.orderedQty());
+        int currentReceived = item.getReceivedQty() == null ? 0 : item.getReceivedQty();
+        if (request.orderedQty() < currentReceived) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Số lượng đặt không được nhỏ hơn số lượng đã nhận");
+        }
         ensureLineNumberUnique(request.purchaseOrderId(), request.lineNumber(), id);
 
         poItemMapper.updateEntity(request, item);
@@ -75,6 +88,11 @@ public class PoItemService {
     @Transactional
     public void delete(UUID id) {
         PoItem item = getPoItem(id);
+        requirePoEditable(item.getPurchaseOrder());
+        if ((item.getReceivedQty() != null ? item.getReceivedQty() : 0) > 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Không thể xóa dòng đơn nhập đã có số lượng nhận");
+        }
         poItemRepository.delete(item);
     }
 
@@ -96,10 +114,17 @@ public class PoItemService {
                 });
     }
 
-    private void validateQuantities(Integer orderedQty, Integer receivedQty) {
-        int received = receivedQty == null ? 0 : receivedQty;
-        if (orderedQty <= 0 || received < 0 || received > orderedQty) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng đặt/nhận không hợp lệ");
+    private void requirePoEditable(PurchaseOrder purchaseOrder) {
+        if (purchaseOrder.getStatus() == PurchaseOrderStatus.RECEIVED
+                || purchaseOrder.getStatus() == PurchaseOrderStatus.CANCELLED) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Đơn nhập đã kết thúc, không thể chỉnh sửa dòng");
+        }
+    }
+
+    private void validateOrderedQty(Integer orderedQty) {
+        if (orderedQty <= 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng đặt phải lớn hơn 0");
         }
     }
 }
