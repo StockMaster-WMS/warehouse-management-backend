@@ -6,6 +6,7 @@ import com.product_service.dto.request.CreateProductRequest;
 import com.product_service.dto.request.UpdateProductRequest;
 import com.product_service.dto.response.ProductImportResponse;
 import com.product_service.dto.response.ProductResponse;
+import com.product_service.dto.response.ProductSummaryResponse;
 import com.product_service.service.ProductExcelExportService;
 import com.product_service.service.ProductExcelImportService;
 import com.product_service.service.ProductService;
@@ -35,6 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -98,6 +100,13 @@ public class ProductController {
             description = "Tạo mới sản phẩm; mã SKU do hệ thống tự sinh (tiền tố SP)")
     public ApiResponse<ProductResponse> create(@Valid @RequestBody CreateProductRequest request) {
         return ApiResponse.success("Tạo sản phẩm thành công", productService.create(request));
+    }
+
+    @PostMapping("/batch")
+    @Operation(summary = "Lấy danh sách sản phẩm theo ID (batch)",
+            description = "Dùng cho các service khác (vd tồn kho) lấy thông tin gọn theo nhiều productId trong 1 call.")
+    public ApiResponse<List<ProductSummaryResponse>> getByIds(@RequestBody List<UUID> ids) {
+        return ApiResponse.success("Lấy danh sách sản phẩm thành công", productService.findSummariesByIds(ids));
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

@@ -6,6 +6,7 @@ import com.common.api.stock.StockAdjustCommand;
 import com.common.api.stock.StockReserveCommand;
 import com.warehouse_service.dto.request.CreateStockLevelRequest;
 import com.warehouse_service.dto.request.UpdateStockLevelRequest;
+import com.warehouse_service.dto.response.StockLevelExpandedResponse;
 import com.warehouse_service.dto.response.StockLevelResponse;
 import com.warehouse_service.service.StockLevelService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -38,11 +39,13 @@ public class StockLevelController {
 
     @GetMapping
     @Operation(summary = "Lấy danh sách tồn kho", description = "Phân trang; lọc theo kho, vị trí hoặc sản phẩm")
-    public ApiResponse<PagedResponse<StockLevelResponse>> getAll(
+    public ApiResponse<PagedResponse<?>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "updatedAt") String sort,
             @RequestParam(defaultValue = "desc") String sortDir,
+            @Parameter(description = "Mở rộng dữ liệu product,location,warehouse.")
+            @RequestParam(required = false) String expand,
             @Parameter(description = "ID kho")
             @RequestParam(required = false) UUID warehouseId,
             @Parameter(description = "ID vị trí")
@@ -50,8 +53,21 @@ public class StockLevelController {
             @Parameter(description = "ID sản phẩm")
             @RequestParam(required = false) UUID productId) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
-        return ApiResponse.success("Lấy danh sách tồn kho thành công",
-                stockLevelService.findAll(pageable, warehouseId, locationId, productId));
+        String e = expand == null ? "" : expand.trim().toLowerCase();
+
+        // Backward-compatible "light" mode when explicitly requested
+        if (e.equals("ids") || e.equals("none")) {
+            PagedResponse<StockLevelResponse> data = stockLevelService.findAll(pageable, warehouseId, locationId, productId);
+            return ApiResponse.success("Lấy danh sách tồn kho thành công", data);
+        }
+
+        // Default: expand all
+        boolean expandWarehouse = e.isBlank() || e.contains("warehouse");
+        boolean expandLocation = e.isBlank() || e.contains("location");
+        boolean expandProduct = e.isBlank() || e.contains("product");
+        PagedResponse<StockLevelExpandedResponse> data = stockLevelService.findAllExpanded(
+                pageable, warehouseId, locationId, productId, expandWarehouse, expandLocation, expandProduct);
+        return ApiResponse.success("Lấy danh sách tồn kho thành công", data);
     }
 
     @GetMapping("/{id}")

@@ -5,9 +5,14 @@ import com.common.api.stock.StockAdjustCommand;
 import com.common.api.stock.StockReserveCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.warehouse_service.client.ProductBatchClient;
 import com.warehouse_service.dto.request.CreateStockLevelRequest;
 import com.warehouse_service.dto.request.UpdateStockLevelRequest;
+import com.warehouse_service.dto.response.LocationSummary;
+import com.warehouse_service.dto.response.ProductSummary;
+import com.warehouse_service.dto.response.StockLevelExpandedResponse;
 import com.warehouse_service.dto.response.StockLevelResponse;
+import com.warehouse_service.dto.response.WarehouseSummary;
 import com.warehouse_service.entity.Location;
 import com.warehouse_service.entity.StockLevel;
 import com.warehouse_service.entity.Warehouse;
@@ -25,8 +30,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -38,6 +48,7 @@ public class StockLevelService {
     private final WarehouseRepository warehouseRepository;
     private final LocationRepository locationRepository;
     private final StockLevelMapper stockLevelMapper;
+    private final ProductBatchClient productBatchClient;
 
     public PagedResponse<StockLevelResponse> findAll(Pageable pageable, UUID warehouseId, UUID locationId, UUID productId) {
         Specification<StockLevel> spec = StockLevelSpecification.hasWarehouseId(warehouseId)
@@ -48,6 +59,57 @@ public class StockLevelService {
         for (StockLevel stock : page.getContent()) {
             content.add(fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock)));
         }
+        return new PagedResponse<>(
+                content,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages());
+    }
+
+    public PagedResponse<StockLevelExpandedResponse> findAllExpanded(Pageable pageable,
+            UUID warehouseId, UUID locationId, UUID productId,
+            boolean expandWarehouse, boolean expandLocation, boolean expandProduct) {
+        Specification<StockLevel> spec = StockLevelSpecification.hasWarehouseId(warehouseId)
+                .and(StockLevelSpecification.hasLocationId(locationId))
+                .and(StockLevelSpecification.hasProductId(productId));
+
+        Page<StockLevel> page = stockLevelRepository.findAll(spec, pageable);
+        List<StockLevel> stocks = page.getContent();
+
+        Map<UUID, WarehouseSummary> warehouseMap = expandWarehouse
+                ? loadWarehousesSummary(extractWarehouseIds(stocks))
+                : Map.of();
+        Map<UUID, LocationSummary> locationMap = expandLocation
+                ? loadLocationsSummary(extractLocationIds(stocks))
+                : Map.of();
+        Map<UUID, ProductSummary> productMap = expandProduct
+                ? loadProductsSummary(extractProductIds(stocks))
+                : Map.of();
+
+        List<StockLevelExpandedResponse> content = new ArrayList<>(stocks.size());
+        for (StockLevel stock : stocks) {
+            StockLevelResponse base = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock));
+            UUID wid = base.warehouseId();
+            UUID lid = base.locationId();
+            UUID pid = base.productId();
+            content.add(new StockLevelExpandedResponse(
+                    base.id(),
+                    wid,
+                    lid,
+                    pid,
+                    base.lotNumber(),
+                    base.expiryDate(),
+                    base.qtyOnHand(),
+                    base.qtyReserved(),
+                    base.qtyAvailable(),
+                    base.updatedAt(),
+                    expandWarehouse ? warehouseMap.get(wid) : null,
+                    expandLocation ? locationMap.get(lid) : null,
+                    expandProduct ? productMap.get(pid) : null
+            ));
+        }
+
         return new PagedResponse<>(
                 content,
                 page.getNumber(),
@@ -289,5 +351,76 @@ public class StockLevelService {
                 response.qtyOnHand() - qtyReserved,
                 response.updatedAt()
         );
+    }
+
+    private Set<UUID> extractWarehouseIds(Collection<StockLevel> stocks) {
+        Set<UUID> ids = new HashSet<>();
+        for (StockLevel s : stocks) {
+            if (s.getWarehouse() != null && s.getWarehouse().getId() != null) {
+                ids.add(s.getWarehouse().getId());
+            }
+        }
+        return ids;
+    }
+
+    private Set<UUID> extractLocationIds(Collection<StockLevel> stocks) {
+        Set<UUID> ids = new HashSet<>();
+        for (StockLevel s : stocks) {
+            if (s.getLocation() != null && s.getLocation().getId() != null) {
+                ids.add(s.getLocation().getId());
+            }
+        }
+        return ids;
+    }
+
+    private Set<UUID> extractProductIds(Collection<StockLevel> stocks) {
+        Set<UUID> ids = new HashSet<>();
+        for (StockLevel s : stocks) {
+            if (s.getProductId() != null) {
+                ids.add(s.getProductId());
+            }
+        }
+        return ids;
+    }
+
+    private Map<UUID, WarehouseSummary> loadWarehousesSummary(Set<UUID> ids) {
+        if (ids.isEmpty()) return Map.of();
+        List<Warehouse> warehouses = warehouseRepository.findAllById(ids);
+        Map<UUID, WarehouseSummary> map = new HashMap<>(warehouses.size());
+        for (Warehouse w : warehouses) {
+            map.put(w.getId(), new WarehouseSummary(w.getId(), w.getCode(), w.getName()));
+        }
+        return map;
+    }
+
+    private Map<UUID, LocationSummary> loadLocationsSummary(Set<UUID> ids) {
+        if (ids.isEmpty()) return Map.of();
+        List<Location> locations = locationRepository.findAllById(ids);
+        Map<UUID, LocationSummary> map = new HashMap<>(locations.size());
+        for (Location l : locations) {
+            // Location entity hiện không có field "name" -> dùng code làm name (UI-friendly)
+            map.put(l.getId(), new LocationSummary(l.getId(), l.getCode(), l.getCode()));
+        }
+        return map;
+    }
+
+    private Map<UUID, ProductSummary> loadProductsSummary(Set<UUID> ids) {
+        if (ids.isEmpty()) return Map.of();
+        try {
+            List<UUID> list = new ArrayList<>(ids);
+            var resp = productBatchClient.getByIds(list);
+            List<ProductSummary> products = resp == null ? null : resp.getData();
+            if (products == null || products.isEmpty()) return Map.of();
+            Map<UUID, ProductSummary> map = new HashMap<>(products.size());
+            for (ProductSummary p : products) {
+                if (p != null && p.id() != null) {
+                    map.put(p.id(), p);
+                }
+            }
+            return map;
+        } catch (Exception e) {
+            // Degrade gracefully: vẫn trả stock, chỉ không expand product
+            return Map.of();
+        }
     }
 }
