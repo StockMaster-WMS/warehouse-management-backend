@@ -7,6 +7,7 @@ public record PickingItemResponse(
         UUID soItemId,
         UUID productId,
         UUID locationId,
+        String lotNumber,
         Integer qtyToPick,
         Integer qtyPicked,
         String status,

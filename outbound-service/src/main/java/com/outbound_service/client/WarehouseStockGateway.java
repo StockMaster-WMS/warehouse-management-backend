@@ -10,6 +10,7 @@ import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -43,6 +44,40 @@ public class WarehouseStockGateway {
                 throw new AppException(ErrorCode.BAD_REQUEST,
                         res.getMessage() != null ? res.getMessage() : "Warehouse từ chối điều chỉnh giữ chỗ");
             }
+        } catch (AppException e) {
+            throw e;
+        } catch (FeignException.BadRequest e) {
+            throw new AppException(ErrorCode.BAD_REQUEST, extractMessage(e));
+        } catch (FeignException e) {
+            throw new AppException(ErrorCode.SERVICE_UNAVAILABLE,
+                    "Gọi warehouse thất bại (HTTP " + e.status() + "): " + extractMessage(e));
+        }
+    }
+
+    /**
+     * Lấy toàn bộ bản ghi tồn (phân trang nội bộ) để phân bổ picking theo vị trí/lô.
+     */
+    public List<WarehouseStockData> listAllStocksForProduct(UUID warehouseId, UUID productId) {
+        List<WarehouseStockData> all = new ArrayList<>();
+        int page = 0;
+        final int size = 100;
+        try {
+            while (true) {
+                ApiResponse<PagedResponse<WarehouseStockData>> res = warehouseStockClient.listStocks(
+                        warehouseId, null, productId, page, size);
+                if (!res.isSuccess() || res.getData() == null) {
+                    throw new AppException(ErrorCode.BAD_REQUEST,
+                            res.getMessage() != null ? res.getMessage() : "Không đọc được tồn kho từ warehouse");
+                }
+                PagedResponse<WarehouseStockData> pr = res.getData();
+                List<WarehouseStockData> content = pr.content() != null ? pr.content() : List.of();
+                all.addAll(content);
+                if (content.isEmpty() || pr.totalPages() == 0 || page >= pr.totalPages() - 1) {
+                    break;
+                }
+                page++;
+            }
+            return all;
         } catch (AppException e) {
             throw e;
         } catch (FeignException.BadRequest e) {

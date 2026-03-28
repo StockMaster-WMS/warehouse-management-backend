@@ -4,6 +4,7 @@ import com.common.api.PagedResponse;
 import com.common.api.stock.StockReserveCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.outbound_service.client.WarehouseStockData;
 import com.outbound_service.client.WarehouseStockGateway;
 import com.outbound_service.dto.request.CreatePickingItemRequest;
 import com.outbound_service.dto.request.UpdatePickingItemRequest;
@@ -24,6 +25,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -31,10 +34,13 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class PickingItemService {
 
+    private static final Comparator<WarehouseStockData> FEFO_THEN_LOCATION =
+            Comparator.comparing(WarehouseStockData::expiryDate, Comparator.nullsLast(Comparator.naturalOrder()))
+                    .thenComparing(WarehouseStockData::locationId);
+
     private final PickingItemRepository pickingItemRepository;
     private final SalesOrderItemRepository salesOrderItemRepository;
     private final PickingItemMapper pickingItemMapper;
-    private final SalesOrderService salesOrderService;
     private final WarehouseStockGateway warehouseStockGateway;
 
     public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId, UUID locationId) {
@@ -74,15 +80,15 @@ public class PickingItemService {
         item.setStatus(status);
 
         PickingItem saved = pickingItemRepository.save(item);
-        salesOrderService.notifyPickingStartedIfPending(so.getId());
 
         warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
-                so.getWarehouseId(), request.locationId(), request.productId(), null, request.qtyToPick()));
+                so.getWarehouseId(), request.locationId(), request.productId(), normalizeLot(request.lotNumber()),
+                request.qtyToPick()));
 
         if (saved.getStatus() == PickingItemStatus.PICKED) {
             int picked = saved.getQtyPicked() == null ? 0 : saved.getQtyPicked();
             warehouseStockGateway.requireOnHandAtLeast(
-                    so.getWarehouseId(), saved.getLocationId(), saved.getProductId(), null, picked);
+                    so.getWarehouseId(), saved.getLocationId(), saved.getProductId(), saved.getLotNumber(), picked);
         }
 
         return pickingItemMapper.toResponse(saved);
@@ -99,6 +105,7 @@ public class PickingItemService {
         UUID oldLoc = existing.getLocationId();
         UUID oldProd = existing.getProductId();
         int oldQtyToPick = existing.getQtyToPick();
+        String oldLot = normalizeLot(existing.getLotNumber());
 
         SalesOrderItem line = salesOrderItemRepository.findByIdWithSalesOrder(request.soItemId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn xuất"));
@@ -113,21 +120,24 @@ public class PickingItemService {
 
         validateQuantities(existing.getQtyToPick(), existing.getQtyPicked(), newStatus);
 
+        String newLot = normalizeLot(existing.getLotNumber());
         boolean allocChanged = !oldLoc.equals(existing.getLocationId())
                 || !oldProd.equals(existing.getProductId())
-                || oldQtyToPick != existing.getQtyToPick();
+                || oldQtyToPick != existing.getQtyToPick()
+                || !oldLot.equals(newLot);
 
         if (allocChanged) {
             warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
-                    so.getWarehouseId(), oldLoc, oldProd, null, -oldQtyToPick));
+                    so.getWarehouseId(), oldLoc, oldProd, oldLot, -oldQtyToPick));
             warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
-                    so.getWarehouseId(), existing.getLocationId(), existing.getProductId(), null, existing.getQtyToPick()));
+                    so.getWarehouseId(), existing.getLocationId(), existing.getProductId(), newLot,
+                    existing.getQtyToPick()));
         }
 
         if (existing.getStatus() == PickingItemStatus.PICKED) {
             int picked = existing.getQtyPicked() == null ? 0 : existing.getQtyPicked();
             warehouseStockGateway.requireOnHandAtLeast(
-                    so.getWarehouseId(), existing.getLocationId(), existing.getProductId(), null, picked);
+                    so.getWarehouseId(), existing.getLocationId(), existing.getProductId(), newLot, picked);
         }
 
         return pickingItemMapper.toResponse(pickingItemRepository.save(existing));
@@ -142,7 +152,8 @@ public class PickingItemService {
         assertSalesOrderAllowsPickingMutation(so);
 
         warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
-                so.getWarehouseId(), item.getLocationId(), item.getProductId(), null, -item.getQtyToPick()));
+                so.getWarehouseId(), item.getLocationId(), item.getProductId(), normalizeLot(item.getLotNumber()),
+                -item.getQtyToPick()));
 
         pickingItemRepository.delete(item);
     }
@@ -178,5 +189,71 @@ public class PickingItemService {
         if (status == PickingItemStatus.PICKED && picked != qtyToPick) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Trạng thái PICKED yêu cầu qtyPicked bằng qtyToPick");
         }
+    }
+
+    /**
+     * Tự tạo các dòng picking theo tồn khả dụng (FEFO theo hạn dùng, rồi theo vị trí), chia nhiều vị trí/lô nếu cần.
+     */
+    @Transactional
+    public void allocatePickingLinesForNewSoItem(SalesOrderItem line) {
+        SalesOrder so = line.getSalesOrder();
+        if (so.getStatus() != SalesOrderStatus.PENDING) {
+            return;
+        }
+        int need = line.getOrderedQty();
+        if (need <= 0) {
+            return;
+        }
+        UUID warehouseId = so.getWarehouseId();
+        UUID productId = line.getProductId();
+
+        List<WarehouseStockData> rows = warehouseStockGateway.listAllStocksForProduct(warehouseId, productId).stream()
+                .filter(r -> availableQty(r) > 0)
+                .sorted(FEFO_THEN_LOCATION)
+                .toList();
+
+        long totalAvail = rows.stream().mapToLong(PickingItemService::availableQty).sum();
+        if (totalAvail < need) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Không đủ tồn khả dụng để tự tạo picking (cần " + need + ", khả dụng " + totalAvail + ")");
+        }
+
+        int remaining = need;
+        int seq = 1;
+        for (WarehouseStockData r : rows) {
+            if (remaining <= 0) {
+                break;
+            }
+            int av = availableQty(r);
+            if (av <= 0) {
+                continue;
+            }
+            int take = Math.min(remaining, av);
+            CreatePickingItemRequest req = new CreatePickingItemRequest(
+                    line.getId(),
+                    line.getProductId(),
+                    r.locationId(),
+                    take,
+                    0,
+                    PickingItemStatus.PENDING.name(),
+                    seq,
+                    normalizeLot(r.lotNumber()));
+            create(req);
+            seq++;
+            remaining -= take;
+        }
+    }
+
+    private static int availableQty(WarehouseStockData r) {
+        if (r.qtyAvailable() != null) {
+            return r.qtyAvailable();
+        }
+        int on = r.qtyOnHand() == null ? 0 : r.qtyOnHand();
+        int res = r.qtyReserved() == null ? 0 : r.qtyReserved();
+        return Math.max(0, on - res);
+    }
+
+    private static String normalizeLot(String lotNumber) {
+        return lotNumber == null ? "" : lotNumber.trim();
     }
 }

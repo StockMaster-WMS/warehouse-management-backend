@@ -24,6 +24,8 @@ public record CreatePickingItemRequest(
         @Size(max = 20, message = "Trạng thái không được vượt quá 20 ký tự")
         @NotBlank(message = "Trạng thái không được để trống")
         String status,
-        Integer pickSequence
+        Integer pickSequence,
+        /** Lô tại warehouse; null hoặc rỗng = không lô */
+        String lotNumber
 ) {
 }

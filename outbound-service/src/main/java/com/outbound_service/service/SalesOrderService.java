@@ -88,6 +88,7 @@ public class SalesOrderService {
                 });
 
         salesOrderMapper.updateEntity(request, salesOrder);
+        salesOrder.setSoNumber(request.soNumber().trim());
 
         return salesOrderMapper.toResponse(salesOrderRepository.save(salesOrder));
     }
@@ -100,15 +101,6 @@ public class SalesOrderService {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không xóa đơn đã có picking; xóa picking trước");
         }
         salesOrderRepository.delete(salesOrder);
-    }
-
-    @Transactional
-    public void notifyPickingStartedIfPending(UUID salesOrderId) {
-        SalesOrder so = getSalesOrder(salesOrderId);
-        if (so.getStatus() == SalesOrderStatus.PENDING) {
-            so.setStatus(SalesOrderStatus.PICKING);
-            salesOrderRepository.save(so);
-        }
     }
 
     @Transactional
