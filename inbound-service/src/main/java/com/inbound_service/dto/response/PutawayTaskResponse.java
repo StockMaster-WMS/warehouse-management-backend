@@ -6,6 +6,7 @@ import java.util.UUID;
 public record PutawayTaskResponse(
         UUID id,
         UUID poItemId,
+        UUID inboundReceiptId,
         UUID productId,
         Integer qtyToPutaway,
         UUID suggestedLocationId,

@@ -9,5 +9,6 @@ import org.mapstruct.Mapping;
 public interface PutawayTaskMapper {
 
     @Mapping(target = "poItemId", source = "poItem.id")
+    @Mapping(target = "inboundReceiptId", source = "inboundReceipt.id")
     PutawayTaskResponse toResponse(PutawayTask task);
 }

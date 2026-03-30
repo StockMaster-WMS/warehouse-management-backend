@@ -63,7 +63,7 @@ public class PutawayTaskController {
     }
 
     @PostMapping("/{id}/complete")
-    @Operation(summary = "Hoàn tất putaway", description = "Ghi nhận vị trí thực tế và cộng tồn kho (warehouse-service)")
+    @Operation(summary = "Hoàn tất putaway", description = "Ghi nhận vị trí thực tế trong kho (tồn kho đã cập nhật khi tạo phiếu nhập)")
     public ApiResponse<PutawayTaskResponse> complete(@PathVariable UUID id,
             @Valid @RequestBody CompletePutawayRequest request) {
         return ApiResponse.success("Hoàn tất putaway thành công", putawayTaskService.complete(id, request));

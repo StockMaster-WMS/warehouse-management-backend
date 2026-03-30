@@ -13,8 +13,6 @@ public record CreatePurchaseOrderRequest(
         @NotNull(message = "Mã kho không được để trống")
         UUID warehouseId,
 
-        String status,
-
         @NotNull(message = "Ngày đặt hàng không được để trống")
         LocalDate orderDate,
 

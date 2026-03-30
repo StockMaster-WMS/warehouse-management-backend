@@ -1,5 +1,6 @@
 package com.inbound_service.config;
 
+import com.inbound_service.mapper.InboundReceiptMapper;
 import com.inbound_service.mapper.PoItemMapper;
 import com.inbound_service.mapper.PurchaseOrderMapper;
 import com.inbound_service.mapper.PutawayTaskMapper;
@@ -23,5 +24,10 @@ public class MapStructMapperConfig {
     @Bean
     public PutawayTaskMapper putawayTaskMapper() {
         return Mappers.getMapper(PutawayTaskMapper.class);
+    }
+
+    @Bean
+    public InboundReceiptMapper inboundReceiptMapper() {
+        return Mappers.getMapper(InboundReceiptMapper.class);
     }
 }
