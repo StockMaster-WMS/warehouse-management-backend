@@ -24,6 +24,10 @@ public record CreatePoItemRequest(
         @NotNull(message = "Số lượng đặt không được để trống")
         Integer orderedQty,
 
+        @NotNull(message = "Số lượng nhận không được để trống")
+        Integer receivedQty,
+
+        @NotNull(message = "Đơn giá không được để trống")
         BigDecimal unitPrice
 ) {
 }

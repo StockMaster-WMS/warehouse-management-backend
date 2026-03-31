@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 public interface PurchaseOrderMapper {
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "poNumber", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "status", ignore = true)
     PurchaseOrder toEntity(CreatePurchaseOrderRequest request);
@@ -29,13 +30,13 @@ public interface PurchaseOrderMapper {
 
     @AfterMapping
     default void setDefaultsOnCreate(CreatePurchaseOrderRequest request,
-                                     @MappingTarget PurchaseOrder purchaseOrder) {
+            @MappingTarget PurchaseOrder purchaseOrder) {
         applyDefaults(purchaseOrder);
     }
 
     @AfterMapping
     default void setDefaultsOnUpdate(UpdatePurchaseOrderRequest request,
-                                     @MappingTarget PurchaseOrder purchaseOrder) {
+            @MappingTarget PurchaseOrder purchaseOrder) {
         applyDefaults(purchaseOrder);
     }
 
