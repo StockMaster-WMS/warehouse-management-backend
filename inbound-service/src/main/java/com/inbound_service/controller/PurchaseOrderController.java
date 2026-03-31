@@ -74,14 +74,14 @@ public class PurchaseOrderController {
         return ApiResponse.success("Tạo đơn nhập thành công", purchaseOrderService.create(request));
     }
 
-    @PostMapping("/{id}/confirm")
-    @Operation(summary = "Xác nhận đơn nhập", description = "DRAFT -> RECEIVING (cần có ít nhất 1 dòng hàng)")
-    public ApiResponse<PurchaseOrderResponse> confirm(@PathVariable UUID id) {
-        return ApiResponse.success("Xác nhận đơn nhập thành công", purchaseOrderService.confirm(id));
+    @PostMapping("/{id}/approve")
+    @Operation(summary = "Duyệt đơn nhập", description = "DRAFT -> APPROVED (cần có ít nhất 1 dòng hàng)")
+    public ApiResponse<PurchaseOrderResponse> approve(@PathVariable UUID id) {
+        return ApiResponse.success("Duyệt đơn nhập thành công", purchaseOrderService.approve(id));
     }
 
     @PostMapping("/{id}/cancel")
-    @Operation(summary = "Hủy đơn nhập", description = "Cho phép hủy khi đang DRAFT hoặc RECEIVING")
+    @Operation(summary = "Hủy đơn nhập", description = "Cho phép hủy khi đang DRAFT, APPROVED hoặc PARTIAL")
     public ApiResponse<PurchaseOrderResponse> cancel(@PathVariable UUID id) {
         return ApiResponse.success("Hủy đơn nhập thành công", purchaseOrderService.cancel(id));
     }

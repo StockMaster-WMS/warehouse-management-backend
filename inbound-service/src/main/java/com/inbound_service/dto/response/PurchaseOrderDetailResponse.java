@@ -6,6 +6,7 @@ public record PurchaseOrderDetailResponse(
         PurchaseOrderResponse purchaseOrder,
         List<PoItemResponse> items,
         List<PutawayTaskResponse> putawayTasks,
+        List<InboundReceiptResponse> receipts,
         Integer totalOrderedQty,
         Integer totalReceivedQty,
         boolean fullyReceived

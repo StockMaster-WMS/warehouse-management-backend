@@ -22,17 +22,12 @@ public interface PutawayTaskRepository extends JpaRepository<PutawayTask, UUID>,
     @EntityGraph(attributePaths = {"poItem"})
     Page<PutawayTask> findAll(Specification<PutawayTask> spec, Pageable pageable);
 
-    List<PutawayTask> findByPoItemId(UUID poItemId);
-
     @Query("SELECT t FROM PutawayTask t JOIN FETCH t.poItem p WHERE p.purchaseOrder.id = :purchaseOrderId")
     List<PutawayTask> findByPurchaseOrderIdWithPoItem(@Param("purchaseOrderId") UUID purchaseOrderId);
 
-    List<PutawayTask> findByStatus(String status);
-
-    @Query("SELECT t FROM PutawayTask t LEFT JOIN FETCH t.poItem p LEFT JOIN FETCH p.purchaseOrder WHERE t.id = :id")
-    Optional<PutawayTask> findByIdWithPoAndOrder(@Param("id") UUID id);
-
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT t FROM PutawayTask t LEFT JOIN FETCH t.poItem p LEFT JOIN FETCH p.purchaseOrder WHERE t.id = :id")
+    @Query("SELECT t FROM PutawayTask t LEFT JOIN FETCH t.poItem p LEFT JOIN FETCH p.purchaseOrder LEFT JOIN FETCH t.inboundReceipt WHERE t.id = :id")
     Optional<PutawayTask> findByIdWithPoAndOrderForUpdate(@Param("id") UUID id);
+
+    List<PutawayTask> findByInboundReceiptId(UUID inboundReceiptId);
 }

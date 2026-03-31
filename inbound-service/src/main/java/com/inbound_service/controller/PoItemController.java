@@ -3,12 +3,9 @@ package com.inbound_service.controller;
 import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.inbound_service.dto.request.CreatePoItemRequest;
-import com.inbound_service.dto.request.ReceivePoItemRequest;
 import com.inbound_service.dto.request.UpdatePoItemRequest;
 import com.inbound_service.dto.response.PoItemResponse;
-import com.inbound_service.dto.response.ReceivePoItemResponse;
 import com.inbound_service.service.PoItemService;
-import com.inbound_service.service.PoReceiveService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,7 +33,6 @@ import java.util.UUID;
 public class PoItemController {
 
     private final PoItemService poItemService;
-    private final PoReceiveService poReceiveService;
 
     @GetMapping
     @Operation(summary = "Lấy danh sách dòng đơn nhập", description = "Phân trang; lọc purchaseOrderId, keyword (SKU)")
@@ -57,13 +53,6 @@ public class PoItemController {
     @Operation(summary = "Lấy dòng đơn nhập theo ID")
     public ApiResponse<PoItemResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy dòng đơn nhập thành công", poItemService.findById(id));
-    }
-
-    @PostMapping("/{id}/receive")
-    @Operation(summary = "Nhận hàng theo dòng PO", description = "Tăng received_qty và tạo putaway; cộng tồn khi POST /putaway-tasks/{id}/complete")
-    public ApiResponse<ReceivePoItemResponse> receive(@PathVariable UUID id,
-            @Valid @RequestBody ReceivePoItemRequest request) {
-        return ApiResponse.success("Nhận hàng thành công", poReceiveService.receive(id, request));
     }
 
     @PostMapping

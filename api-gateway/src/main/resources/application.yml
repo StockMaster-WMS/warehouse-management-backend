@@ -22,10 +22,10 @@ spring:
   cloud:
     gateway:
       globalcors:
-        add-to-simple-url-handler-mapping: true   # FIX: Cho phép OPTIONS đi qua handler
+        add-to-simple-url-handler-mapping: true # FIX: Cho phép OPTIONS đi qua handler
         corsConfigurations:
-          '[/**]':
-            allowedOriginPatterns: "*"             # FIX: Dùng Pattern thay vì Origins
+          "[/**]":
+            allowedOriginPatterns: "*" # FIX: Dùng Pattern thay vì Origins
             allowedMethods:
               - GET
               - POST
@@ -103,7 +103,7 @@ spring:
           uri: lb://inbound-service
           order: 100
           predicates:
-            - Path=/api/inbound/**, /api/inbounds/**, /api/purchase-orders/**, /api/po-items/**, /api/putaway-tasks/**
+            - Path=/api/inbound/**, /api/inbounds/**, /api/purchase-orders/**, /api/po-items/**, /api/putaway-tasks/**, /api/inbound-receipts/**
 
         # === OUTBOUND SERVICE DOCS ===
         - id: outbound-service-docs

@@ -25,6 +25,11 @@ public class PutawayTask {
     @JoinColumn(name = "po_item_id")
     private PoItem poItem;
 
+    /** Phiếu nhập kho sinh ra nhiệm vụ putaway */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "inbound_receipt_id")
+    private InboundReceipt inboundReceipt;
+
     /** Cross-service reference to product-service */
     @Column(name = "product_id", nullable = false)
     private UUID productId;

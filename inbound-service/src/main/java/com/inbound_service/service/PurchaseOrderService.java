@@ -8,15 +8,19 @@ import com.inbound_service.dto.request.CreatePurchaseOrderRequest;
 import com.inbound_service.dto.request.UpdatePurchaseOrderRequest;
 import com.inbound_service.dto.response.PoItemResponse;
 import com.inbound_service.dto.response.PurchaseOrderDetailResponse;
+import com.inbound_service.dto.response.InboundReceiptResponse;
 import com.inbound_service.dto.response.PurchaseOrderResponse;
 import com.inbound_service.dto.response.PutawayTaskResponse;
+import com.inbound_service.entity.InboundReceipt;
 import com.inbound_service.entity.PoItem;
 import com.inbound_service.entity.PurchaseOrder;
 import com.inbound_service.entity.PurchaseOrderStatus;
 import com.inbound_service.entity.PutawayTask;
+import com.inbound_service.mapper.InboundReceiptMapper;
 import com.inbound_service.mapper.PoItemMapper;
 import com.inbound_service.mapper.PurchaseOrderMapper;
 import com.inbound_service.mapper.PutawayTaskMapper;
+import com.inbound_service.repository.InboundReceiptRepository;
 import com.inbound_service.repository.PoItemRepository;
 import com.inbound_service.repository.PurchaseOrderRepository;
 import com.inbound_service.repository.PurchaseOrderSpecification;
@@ -39,9 +43,11 @@ public class PurchaseOrderService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PoItemRepository poItemRepository;
     private final PutawayTaskRepository putawayTaskRepository;
+    private final InboundReceiptRepository receiptRepository;
     private final PurchaseOrderMapper purchaseOrderMapper;
     private final PoItemMapper poItemMapper;
     private final PutawayTaskMapper putawayTaskMapper;
+    private final InboundReceiptMapper receiptMapper;
 
     public PagedResponse<PurchaseOrderResponse> findAll(Pageable pageable, String keyword, String status,
             UUID supplierId, UUID warehouseId) {
@@ -68,10 +74,11 @@ public class PurchaseOrderService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập")));
     }
 
-        public PurchaseOrderDetailResponse findDetail(UUID id) {
+    public PurchaseOrderDetailResponse findDetail(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
         List<PoItem> items = poItemRepository.findByPurchaseOrderId(id);
         List<PutawayTask> putawayTasks = putawayTaskRepository.findByPurchaseOrderIdWithPoItem(id);
+        List<InboundReceipt> receipts = receiptRepository.findByPurchaseOrderId(id);
 
         List<PoItemResponse> itemResponses = items.stream()
             .map(poItemMapper::toResponse)
@@ -79,6 +86,10 @@ public class PurchaseOrderService {
 
         List<PutawayTaskResponse> putawayResponses = putawayTasks.stream()
             .map(putawayTaskMapper::toResponse)
+            .toList();
+
+        List<InboundReceiptResponse> receiptResponses = receipts.stream()
+            .map(receiptMapper::toResponse)
             .toList();
 
         int totalOrderedQty = items.stream()
@@ -93,10 +104,11 @@ public class PurchaseOrderService {
             purchaseOrderMapper.toResponse(purchaseOrder),
             itemResponses,
             putawayResponses,
+            receiptResponses,
             totalOrderedQty,
             totalReceivedQty,
             fullyReceived);
-        }
+    }
 
     @Transactional
     public PurchaseOrderResponse create(CreatePurchaseOrderRequest request) {
@@ -133,24 +145,24 @@ public class PurchaseOrderService {
     }
 
     @Transactional
-    public PurchaseOrderResponse confirm(UUID id) {
+    public PurchaseOrderResponse approve(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
         if (purchaseOrder.getStatus() != PurchaseOrderStatus.DRAFT) {
             throw new AppException(ErrorCode.BAD_REQUEST,
-                    "Chỉ xác nhận đơn nhập ở trạng thái DRAFT");
+                    "Chỉ duyệt đơn nhập ở trạng thái DRAFT");
         }
         if (poItemRepository.findByPurchaseOrderId(id).isEmpty()) {
             throw new AppException(ErrorCode.BAD_REQUEST,
-                    "Cần ít nhất một dòng hàng trước khi xác nhận đơn nhập");
+                    "Cần ít nhất một dòng hàng trước khi duyệt đơn nhập");
         }
-        purchaseOrder.setStatus(PurchaseOrderStatus.RECEIVING);
+        purchaseOrder.setStatus(PurchaseOrderStatus.APPROVED);
         return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
     }
 
     @Transactional
     public PurchaseOrderResponse cancel(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
-        if (purchaseOrder.getStatus() == PurchaseOrderStatus.RECEIVED) {
+        if (purchaseOrder.getStatus() == PurchaseOrderStatus.COMPLETED) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Không thể hủy đơn nhập đã hoàn tất");
         }
@@ -168,7 +180,7 @@ public class PurchaseOrderService {
     }
 
     private void requirePoNotFinished(PurchaseOrder purchaseOrder) {
-        if (purchaseOrder.getStatus() == PurchaseOrderStatus.RECEIVED
+        if (purchaseOrder.getStatus() == PurchaseOrderStatus.COMPLETED
                 || purchaseOrder.getStatus() == PurchaseOrderStatus.CANCELLED) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Đơn nhập đã kết thúc, không thể chỉnh sửa");

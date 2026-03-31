@@ -115,10 +115,9 @@ public class PoItemService {
     }
 
     private void requirePoEditable(PurchaseOrder purchaseOrder) {
-        if (purchaseOrder.getStatus() == PurchaseOrderStatus.RECEIVED
-                || purchaseOrder.getStatus() == PurchaseOrderStatus.CANCELLED) {
+        if (purchaseOrder.getStatus() != PurchaseOrderStatus.DRAFT) {
             throw new AppException(ErrorCode.BAD_REQUEST,
-                    "Đơn nhập đã kết thúc, không thể chỉnh sửa dòng");
+                    "Chỉ chỉnh sửa dòng đơn nhập khi PO ở trạng thái DRAFT");
         }
     }
 
