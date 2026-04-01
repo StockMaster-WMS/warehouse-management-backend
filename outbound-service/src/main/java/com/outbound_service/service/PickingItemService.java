@@ -1,13 +1,17 @@
 package com.outbound_service.service;
 
+import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockReserveCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.outbound_service.client.LocationClient;
+import com.outbound_service.client.ProductClient;
 import com.outbound_service.client.WarehouseStockData;
 import com.outbound_service.client.WarehouseStockGateway;
 import com.outbound_service.dto.request.CreatePickingItemRequest;
 import com.outbound_service.dto.request.UpdatePickingItemRequest;
+import com.outbound_service.dto.response.PickingItemDetailResponse;
 import com.outbound_service.dto.response.PickingItemResponse;
 import com.outbound_service.entity.PickingItem;
 import com.outbound_service.entity.PickingItemStatus;
@@ -27,6 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.UUID;
 
 @Service
@@ -42,19 +48,77 @@ public class PickingItemService {
     private final SalesOrderItemRepository salesOrderItemRepository;
     private final PickingItemMapper pickingItemMapper;
     private final WarehouseStockGateway warehouseStockGateway;
+    private final ProductClient productClient;
+    private final LocationClient locationClient;
 
     public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId, UUID locationId) {
         Specification<PickingItem> spec = PickingItemSpecification.hasSoItemId(soItemId)
                 .and(PickingItemSpecification.hasProductId(productId))
                 .and(PickingItemSpecification.hasLocationId(locationId));
         Page<PickingItem> page = pickingItemRepository.findAll(spec, pageable);
-        Page<PickingItemResponse> mapped = page.map(pickingItemMapper::toResponse);
+        Map<UUID, ProductClient.ProductDetailData> productCache = new HashMap<>();
+        Map<UUID, LocationClient.LocationDetailData> locationCache = new HashMap<>();
+        List<PickingItemResponse> rows = page.getContent().stream()
+            .map(pickingItemMapper::toResponse)
+            .map(row -> enrichListRow(row, productCache, locationCache))
+            .toList();
         return new PagedResponse<>(
-                mapped.getContent(),
-                mapped.getNumber(),
-                mapped.getSize(),
-                mapped.getTotalElements(),
-                mapped.getTotalPages());
+            rows,
+            page.getNumber(),
+            page.getSize(),
+            page.getTotalElements(),
+            page.getTotalPages());
+    }
+
+        private PickingItemResponse enrichListRow(PickingItemResponse row,
+                              Map<UUID, ProductClient.ProductDetailData> productCache,
+                              Map<UUID, LocationClient.LocationDetailData> locationCache) {
+        ProductClient.ProductDetailData product = productCache.computeIfAbsent(
+            row.productId(), this::loadProductSafe);
+        LocationClient.LocationDetailData location = locationCache.computeIfAbsent(
+            row.locationId(), this::loadLocationSafe);
+
+        String productSku = row.productSku();
+        if ((productSku == null || productSku.isBlank()) && product != null) {
+            productSku = product.sku();
+        }
+
+        return new PickingItemResponse(
+                row.id(),
+                row.soItemId(),
+                row.productId(),
+                row.locationId(),
+                row.lotNumber(),
+                row.qtyToPick(),
+                row.qtyPicked(),
+                row.status(),
+                row.pickSequence(),
+                row.salesOrderNumber(),
+                productSku,
+                product == null ? null : product.name(),
+                product == null ? null : product.barcodeEan13(),
+                location == null ? null : location.code(),
+                location == null ? null : location.name());
+    }
+
+    private ProductClient.ProductDetailData loadProductSafe(UUID productId) {
+        try {
+            ApiResponse<ProductClient.ProductDetailData> productResp = productClient.getProductById(productId);
+            return productResp == null ? null : productResp.getData();
+        } catch (Exception ignored) {
+            // Keep list resilient when product-service is temporarily unavailable.
+            return null;
+        }
+    }
+
+    private LocationClient.LocationDetailData loadLocationSafe(UUID locationId) {
+        try {
+            ApiResponse<LocationClient.LocationDetailData> locationResp = locationClient.getLocationById(locationId);
+            return locationResp == null ? null : locationResp.getData();
+        } catch (Exception ignored) {
+            // Keep list resilient when warehouse location lookup fails.
+            return null;
+        }
     }
 
     public PickingItemResponse findById(UUID id) {
@@ -255,5 +319,87 @@ public class PickingItemService {
 
     private static String normalizeLot(String lotNumber) {
         return lotNumber == null ? "" : lotNumber.trim();
+    }
+
+    /**
+     * Lấy chi tiết picking item dầy đủ thông tin cho giao diện picker:
+     * - Thông tin sản phẩm (SKU, tên, barcode)
+     * - Thông tin vị trí (code, zone, aisle, shelf, position)
+     * - Thông tin tồn khả dụng tại vị trí
+     */
+    public PickingItemDetailResponse findDetailForPicker(UUID id) {
+        PickingItem item = pickingItemRepository.findByIdWithSoAndOrder(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy picking item"));
+
+        SalesOrderItem soItem = item.getSoItem();
+        SalesOrder so = soItem.getSalesOrder();
+
+        // Fetch product details
+        ApiResponse<ProductClient.ProductDetailData> productResp;
+        try {
+            productResp = productClient.getProductById(item.getProductId());
+        } catch (Exception e) {
+            throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Lỗi gọi product-service: " + e.getMessage());
+        }
+        ProductClient.ProductDetailData productData = productResp.getData();
+        if (productData == null) {
+            throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm");
+        }
+
+        // Fetch location details
+        ApiResponse<LocationClient.LocationDetailData> locationResp;
+        try {
+            locationResp = locationClient.getLocationById(item.getLocationId());
+        } catch (Exception e) {
+            throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Lỗi gọi warehouse-service (location): " + e.getMessage());
+        }
+        LocationClient.LocationDetailData locationData = locationResp.getData();
+        if (locationData == null) {
+            throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy vị trí kho");
+        }
+
+        // Get current available qty at this location for this product+lot
+        // Tối ưu: sử dụng getSingleStockRowIfExists thay vì listAllStocksForProduct để giảm API calls
+        int qtyAvailable = item.getQtyToPick();
+        try {
+            WarehouseStockData stock = warehouseStockGateway.getSingleStockRowIfExists(
+                    so.getWarehouseId(), item.getLocationId(), item.getProductId(), item.getLotNumber());
+            if (stock != null) {
+                qtyAvailable = availableQty(stock);
+            }
+        } catch (Exception e) {
+            // Log nhưng không throw lỗi, vì giao diện vẫn cần hiển thị picking item
+            qtyAvailable = item.getQtyToPick();
+        }
+
+        return new PickingItemDetailResponse(
+                item.getId(),
+                item.getSoItem().getId(),
+                so.getSoNumber(),
+                
+                productData.id(),
+                productData.sku(),
+                productData.name(),
+                soItem.getProductSku(),
+                productData.barcodeEan13(),
+                productData.categoryName(),
+                productData.baseUnit(),
+                
+                locationData.id(),
+                locationData.code(),
+                locationData.name(),
+                locationData.zone(),
+                locationData.aisle(),
+                locationData.shelf(),
+                locationData.position(),
+                
+                item.getLotNumber(),
+                item.getQtyToPick(),
+                item.getQtyPicked(),
+                qtyAvailable,
+                
+                item.getStatus().name(),
+                item.getPickSequence()
+        );
     }
 }

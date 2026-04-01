@@ -26,17 +26,23 @@ public interface PickingItemMapper {
     void updateEntity(UpdatePickingItemRequest request, @MappingTarget PickingItem pickingItem);
 
     @Mapping(target = "soItemId", source = "soItem.id")
+    @Mapping(target = "salesOrderNumber", source = "soItem.salesOrder.soNumber")
+    @Mapping(target = "productSku", source = "soItem.productSku")
+    @Mapping(target = "productName", ignore = true)
+    @Mapping(target = "barcodeEan13", ignore = true)
+    @Mapping(target = "locationCode", ignore = true)
+    @Mapping(target = "locationName", ignore = true)
     PickingItemResponse toResponse(PickingItem pickingItem);
 
     @AfterMapping
     default void setDefaultsOnCreate(CreatePickingItemRequest request,
-                                     @MappingTarget PickingItem pickingItem) {
+            @MappingTarget PickingItem pickingItem) {
         applyDefaults(pickingItem);
     }
 
     @AfterMapping
     default void setDefaultsOnUpdate(UpdatePickingItemRequest request,
-                                     @MappingTarget PickingItem pickingItem) {
+            @MappingTarget PickingItem pickingItem) {
         applyDefaults(pickingItem);
     }
 

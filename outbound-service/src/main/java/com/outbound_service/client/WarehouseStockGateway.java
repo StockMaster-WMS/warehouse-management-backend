@@ -92,7 +92,7 @@ public class WarehouseStockGateway {
         if (minOnHand <= 0) {
             return;
         }
-        WarehouseStockData row = fetchSingleStockRow(warehouseId, locationId, productId, lotNumber);
+        WarehouseStockData row = getSingleStockRow(warehouseId, locationId, productId, lotNumber);
         int onHand = row.qtyOnHand() == null ? 0 : row.qtyOnHand();
         if (onHand < minOnHand) {
             throw new AppException(ErrorCode.BAD_REQUEST,
@@ -100,7 +100,7 @@ public class WarehouseStockGateway {
         }
     }
 
-    private WarehouseStockData fetchSingleStockRow(UUID warehouseId, UUID locationId, UUID productId, String lotNumber) {
+    public WarehouseStockData getSingleStockRow(UUID warehouseId, UUID locationId, UUID productId, String lotNumber) {
         String lot = normalizeLot(lotNumber);
         try {
             ApiResponse<PagedResponse<WarehouseStockData>> res = warehouseStockClient.listStocks(
@@ -128,6 +128,35 @@ public class WarehouseStockGateway {
         } catch (FeignException e) {
             throw new AppException(ErrorCode.SERVICE_UNAVAILABLE,
                     "Gọi warehouse thất bại (HTTP " + e.status() + "): " + extractMessage(e));
+        }
+    }
+
+    /**
+     * Lấy bản ghi single stock; nếu không tìm thấy, trả về null thay vì throw exception.
+     * Dùng khi chỉ cần check qtyAvailable mà không cần fail hard.
+     */
+    public WarehouseStockData getSingleStockRowIfExists(UUID warehouseId, UUID locationId, UUID productId, String lotNumber) {
+        String lot = normalizeLot(lotNumber);
+        try {
+            ApiResponse<PagedResponse<WarehouseStockData>> res = warehouseStockClient.listStocks(
+                    warehouseId, locationId, productId, 0, 20);
+            if (!res.isSuccess() || res.getData() == null) {
+                return null;
+            }
+            List<WarehouseStockData> rows = res.getData().content();
+            if (rows == null || rows.isEmpty()) {
+                return null;
+            }
+            return rows.stream()
+                    .filter(r -> warehouseId.equals(r.warehouseId())
+                            && locationId.equals(r.locationId())
+                            && productId.equals(r.productId())
+                            && lot.equals(normalizeLot(r.lotNumber())))
+                    .findFirst()
+                    .orElse(null);
+        } catch (Exception e) {
+            // Silently return null on any error
+            return null;
         }
     }
 

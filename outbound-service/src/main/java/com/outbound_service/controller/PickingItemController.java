@@ -41,21 +41,32 @@ public class PickingItemController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "id") String sort,
             @RequestParam(defaultValue = "desc") String sortDir,
-            @Parameter(description = "ID so item")
-            @RequestParam(required = false) UUID soItemId,
-            @Parameter(description = "ID sản phẩm")
-            @RequestParam(required = false) UUID productId,
-            @Parameter(description = "ID vị trí")
-            @RequestParam(required = false) UUID locationId) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
+            @Parameter(description = "ID so item") @RequestParam(required = false) UUID soItemId,
+            @Parameter(description = "ID sản phẩm") @RequestParam(required = false) UUID productId,
+            @Parameter(description = "ID vị trí") @RequestParam(required = false) UUID locationId) {
+        String resolvedSort = resolveSortField(sort);
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), resolvedSort));
         return ApiResponse.success("Lấy danh sách picking item thành công",
                 pickingItemService.findAll(pageable, soItemId, productId, locationId));
     }
 
+    private String resolveSortField(String sort) {
+        if ("salesOrderNumber".equalsIgnoreCase(sort)) {
+            return "soItem.salesOrder.soNumber";
+        }
+        return sort;
+    }
+
     @GetMapping("/{id}")
-    @Operation(summary = "Lấy picking item theo ID")
-    public ApiResponse<PickingItemResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Lấy picking item thành công", pickingItemService.findById(id));
+    @Operation(summary = "Lấy picking item theo ID", description = "Thêm details=true để lấy đầy đủ thông tin sản phẩm, vị trí, tồn khả dụng")
+    public ApiResponse<?> getById(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "false") boolean details) {
+        if (details) {
+            return ApiResponse.success("Lấy chi tiết picking item thành công", pickingItemService.findDetailForPicker(id));
+        } else {
+            return ApiResponse.success("Lấy picking item thành công", pickingItemService.findById(id));
+        }
     }
 
     @PostMapping
@@ -67,7 +78,7 @@ public class PickingItemController {
     @PutMapping("/{id}")
     @Operation(summary = "Cập nhật picking item")
     public ApiResponse<PickingItemResponse> update(@PathVariable UUID id,
-                                                   @Valid @RequestBody UpdatePickingItemRequest request) {
+            @Valid @RequestBody UpdatePickingItemRequest request) {
         return ApiResponse.success("Cập nhật picking item thành công", pickingItemService.update(id, request));
     }
 
