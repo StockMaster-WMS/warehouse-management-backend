@@ -1,0 +1,2 @@
+ALTER TABLE picking_items
+    ADD COLUMN IF NOT EXISTS lot_number VARCHAR(60) NOT NULL DEFAULT '';

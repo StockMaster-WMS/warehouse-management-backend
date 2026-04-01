@@ -6,6 +6,8 @@ import com.product_service.dto.request.CreateProductRequest;
 import com.product_service.dto.request.UpdateProductRequest;
 import com.product_service.dto.response.ProductImportResponse;
 import com.product_service.dto.response.ProductResponse;
+import com.product_service.dto.response.ProductSummaryResponse;
+import com.product_service.service.ProductExcelExportService;
 import com.product_service.service.ProductExcelImportService;
 import com.product_service.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -16,7 +18,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,6 +34,9 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -39,6 +47,7 @@ public class ProductController {
 
     private final ProductService productService;
     private final ProductExcelImportService productExcelImportService;
+    private final ProductExcelExportService productExcelExportService;
 
     @GetMapping
     @Operation(summary = "Lấy danh sách sản phẩm", description = "Trả về danh sách sản phẩm hỗ trợ phân trang và tìm kiếm")
@@ -53,6 +62,25 @@ public class ProductController {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         PagedResponse<ProductResponse> pagedResponse = productService.findAll(pageable, keyword, categoryId, status);
         return ApiResponse.success("Lấy danh sách sản phẩm thành công", pagedResponse);
+    }
+
+    @GetMapping(value = "/export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @Operation(summary = "Xuất danh sách sản phẩm ra Excel (.xlsx)",
+            description = "Cùng bộ lọc với danh sách; tối đa 10.000 dòng. Cột tương thích import (bỏ qua sku, id khi nhập mới).")
+    public ResponseEntity<byte[]> exportXlsx(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) String status) {
+        byte[] bytes = productExcelExportService.exportToXlsx(keyword, categoryId, status);
+        String filename = "products-export-" + LocalDate.now() + ".xlsx";
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(bytes);
     }
 
     @GetMapping("/{id}")
@@ -72,6 +100,13 @@ public class ProductController {
             description = "Tạo mới sản phẩm; mã SKU do hệ thống tự sinh (tiền tố SP)")
     public ApiResponse<ProductResponse> create(@Valid @RequestBody CreateProductRequest request) {
         return ApiResponse.success("Tạo sản phẩm thành công", productService.create(request));
+    }
+
+    @PostMapping("/batch")
+    @Operation(summary = "Lấy danh sách sản phẩm theo ID (batch)",
+            description = "Dùng cho các service khác (vd tồn kho) lấy thông tin gọn theo nhiều productId trong 1 call.")
+    public ApiResponse<List<ProductSummaryResponse>> getByIds(@RequestBody List<UUID> ids) {
+        return ApiResponse.success("Lấy danh sách sản phẩm thành công", productService.findSummariesByIds(ids));
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

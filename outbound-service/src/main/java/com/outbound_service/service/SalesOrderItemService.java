@@ -30,6 +30,7 @@ public class SalesOrderItemService {
     private final SalesOrderItemRepository salesOrderItemRepository;
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderItemMapper salesOrderItemMapper;
+    private final PickingItemService pickingItemService;
 
     public PagedResponse<SalesOrderItemResponse> findAll(Pageable pageable, UUID salesOrderId, String keyword) {
         Specification<SalesOrderItem> spec = SalesOrderItemSpecification.hasSalesOrderId(salesOrderId)
@@ -56,7 +57,12 @@ public class SalesOrderItemService {
 
         SalesOrderItem item = salesOrderItemMapper.toEntity(request);
         item.setSalesOrder(order);
-        return salesOrderItemMapper.toResponse(salesOrderItemRepository.save(item));
+        SalesOrderItem saved = salesOrderItemRepository.save(item);
+        boolean autoAllocate = request.autoAllocatePicking() == null || Boolean.TRUE.equals(request.autoAllocatePicking());
+        if (autoAllocate) {
+            pickingItemService.allocatePickingLinesForNewSoItem(saved);
+        }
+        return salesOrderItemMapper.toResponse(saved);
     }
 
     @Transactional

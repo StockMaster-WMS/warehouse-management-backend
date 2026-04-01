@@ -5,7 +5,6 @@ import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import feign.FeignException;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -18,10 +17,6 @@ public class WarehouseStockGateway {
     }
 
     public void adjustOrThrow(StockAdjustCommand command) {
-        if (warehouseStockClient == null) {
-            throw new AppException(ErrorCode.SERVICE_UNAVAILABLE,
-                    "WarehouseStockClient chua duoc cau hinh cho service hien tai");
-        }
         try {
             ApiResponse<WarehouseStockData> res = warehouseStockClient.adjust(command);
             if (!res.isSuccess()) {

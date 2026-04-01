@@ -7,6 +7,7 @@ import com.common.util.CodeGenerator;
 import com.product_service.dto.request.CreateProductRequest;
 import com.product_service.dto.request.UpdateProductRequest;
 import com.product_service.dto.response.ProductResponse;
+import com.product_service.dto.response.ProductSummaryResponse;
 import com.product_service.entity.Category;
 import com.product_service.entity.Product;
 import com.product_service.entity.Supplier;
@@ -22,6 +23,10 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -59,6 +64,27 @@ public class ProductService {
     public ProductResponse findBySku(String sku) {
         return productMapper.toResponse(productRepository.findBySku(sku)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm")));
+    }
+
+    public List<ProductSummaryResponse> findSummariesByIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+
+        // Deduplicate to avoid large IN lists & repeated mapping
+        Set<UUID> unique = new HashSet<>(ids);
+        List<Product> products = productRepository.findAllById(unique);
+
+        List<ProductSummaryResponse> result = new ArrayList<>(products.size());
+        for (Product p : products) {
+            result.add(new ProductSummaryResponse(
+                    p.getId(),
+                    p.getSku(),
+                    p.getName(),
+                    p.getMinStockQty()
+            ));
+        }
+        return result;
     }
 
     @Transactional

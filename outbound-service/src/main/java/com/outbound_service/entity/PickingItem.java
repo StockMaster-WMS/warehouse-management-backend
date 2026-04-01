@@ -32,6 +32,11 @@ public class PickingItem {
     @Column(name = "location_id", nullable = false)
     private UUID locationId;
 
+    /** Must match warehouse stock_levels.lot_number for reserve/adjust */
+    @Builder.Default
+    @Column(name = "lot_number", length = 60, nullable = false)
+    private String lotNumber = "";
+
     @Column(name = "qty_to_pick", nullable = false)
     private Integer qtyToPick;
 

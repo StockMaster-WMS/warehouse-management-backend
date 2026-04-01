@@ -7,9 +7,16 @@ public record PickingItemResponse(
         UUID soItemId,
         UUID productId,
         UUID locationId,
+        String lotNumber,
         Integer qtyToPick,
         Integer qtyPicked,
         String status,
-        Integer pickSequence
+        Integer pickSequence,
+        String salesOrderNumber,
+        String productSku,
+        String productName,
+        String barcodeEan13,
+        String locationCode,
+        String locationName
 ) {
 }
