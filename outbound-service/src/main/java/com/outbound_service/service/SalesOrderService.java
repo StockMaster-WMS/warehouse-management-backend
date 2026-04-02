@@ -45,7 +45,8 @@ public class SalesOrderService {
     private final WarehouseStockGateway warehouseStockGateway;
     private final SalesOrderMapper salesOrderMapper;
 
-    public PagedResponse<SalesOrderResponse> findAll(Pageable pageable, String keyword, String status, UUID warehouseId) {
+    public PagedResponse<SalesOrderResponse> findAll(Pageable pageable, String keyword, String status,
+            UUID warehouseId) {
         Specification<SalesOrder> spec = SalesOrderSpecification.hasKeyword(keyword)
                 .and(SalesOrderSpecification.hasStatus(status))
                 .and(SalesOrderSpecification.hasWarehouseId(warehouseId));
