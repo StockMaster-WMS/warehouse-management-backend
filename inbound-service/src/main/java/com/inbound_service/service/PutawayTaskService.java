@@ -116,6 +116,9 @@ public class PutawayTaskService {
 
     private void refreshReceiptStatus(UUID receiptId) {
         List<PutawayTask> tasks = putawayTaskRepository.findByInboundReceiptId(receiptId);
+        if (tasks.isEmpty()) {
+            return;
+        }
         boolean allCompleted = tasks.stream()
                 .allMatch(t -> t.getStatus() == PutawayStatus.COMPLETED);
         boolean anyInProgress = tasks.stream()

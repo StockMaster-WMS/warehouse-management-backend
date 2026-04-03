@@ -22,6 +22,7 @@ import com.warehouse_service.repository.StockLevelRepository;
 import com.warehouse_service.repository.StockLevelSpecification;
 import com.warehouse_service.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -41,6 +42,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class StockLevelService {
 
@@ -420,6 +422,7 @@ public class StockLevelService {
             return map;
         } catch (Exception e) {
             // Degrade gracefully: vẫn trả stock, chỉ không expand product
+            log.warn("Failed to load product summaries for {} product IDs: {}", ids.size(), e.getMessage());
             return Map.of();
         }
     }

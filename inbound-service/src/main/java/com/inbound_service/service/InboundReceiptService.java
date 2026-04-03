@@ -45,6 +45,10 @@ public class InboundReceiptService {
      */
     @Transactional
     public InboundReceiptResponse createReceipt(CreateInboundReceiptRequest request) {
+        if (request.items() == null || request.items().isEmpty()) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Phiếu nhập phải có ít nhất một dòng nhận hàng");
+        }
+
         // 1. Lấy PO và kiểm tra trạng thái
         PurchaseOrder po = purchaseOrderRepository.findById(request.purchaseOrderId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
@@ -64,6 +68,10 @@ public class InboundReceiptService {
         // 3. Kiểm tra số lượng từng dòng
         List<InboundReceiptItem> receiptItems = new ArrayList<>();
         for (ReceiveLineRequest line : request.items()) {
+            if (line.receivedQty() == null || line.receivedQty() <= 0) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng nhận phải lớn hơn 0");
+            }
+
             PoItem poItem = poItemMap.get(line.poItemId());
             if (poItem == null) {
                 throw new AppException(ErrorCode.BAD_REQUEST,

@@ -23,6 +23,7 @@ import com.outbound_service.repository.PickingItemRepository;
 import com.outbound_service.repository.PickingItemSpecification;
 import com.outbound_service.repository.SalesOrderItemRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -37,12 +38,13 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 @Transactional(readOnly = true)
 public class PickingItemService {
 
-    private static final Comparator<WarehouseStockData> FEFO_THEN_LOCATION =
-            Comparator.comparing(WarehouseStockData::expiryDate, Comparator.nullsLast(Comparator.naturalOrder()))
-                    .thenComparing(WarehouseStockData::locationId);
+    private static final Comparator<WarehouseStockData> FEFO_THEN_LOCATION = Comparator
+            .comparing(WarehouseStockData::expiryDate, Comparator.nullsLast(Comparator.naturalOrder()))
+            .thenComparing(WarehouseStockData::locationId);
 
     private final PickingItemRepository pickingItemRepository;
     private final SalesOrderItemRepository salesOrderItemRepository;
@@ -51,7 +53,8 @@ public class PickingItemService {
     private final ProductClient productClient;
     private final LocationClient locationClient;
 
-    public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId, UUID locationId) {
+    public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId,
+            UUID locationId) {
         Specification<PickingItem> spec = PickingItemSpecification.hasSoItemId(soItemId)
                 .and(PickingItemSpecification.hasProductId(productId))
                 .and(PickingItemSpecification.hasLocationId(locationId));
@@ -59,24 +62,24 @@ public class PickingItemService {
         Map<UUID, ProductClient.ProductDetailData> productCache = new HashMap<>();
         Map<UUID, LocationClient.LocationDetailData> locationCache = new HashMap<>();
         List<PickingItemResponse> rows = page.getContent().stream()
-            .map(pickingItemMapper::toResponse)
-            .map(row -> enrichListRow(row, productCache, locationCache))
-            .toList();
+                .map(pickingItemMapper::toResponse)
+                .map(row -> enrichListRow(row, productCache, locationCache))
+                .toList();
         return new PagedResponse<>(
-            rows,
-            page.getNumber(),
-            page.getSize(),
-            page.getTotalElements(),
-            page.getTotalPages());
+                rows,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages());
     }
 
-        private PickingItemResponse enrichListRow(PickingItemResponse row,
-                              Map<UUID, ProductClient.ProductDetailData> productCache,
-                              Map<UUID, LocationClient.LocationDetailData> locationCache) {
+    private PickingItemResponse enrichListRow(PickingItemResponse row,
+            Map<UUID, ProductClient.ProductDetailData> productCache,
+            Map<UUID, LocationClient.LocationDetailData> locationCache) {
         ProductClient.ProductDetailData product = productCache.computeIfAbsent(
-            row.productId(), this::loadProductSafe);
+                row.productId(), this::loadProductSafe);
         LocationClient.LocationDetailData location = locationCache.computeIfAbsent(
-            row.locationId(), this::loadLocationSafe);
+                row.locationId(), this::loadLocationSafe);
 
         String productSku = row.productSku();
         if ((productSku == null || productSku.isBlank()) && product != null) {
@@ -105,8 +108,9 @@ public class PickingItemService {
         try {
             ApiResponse<ProductClient.ProductDetailData> productResp = productClient.getProductById(productId);
             return productResp == null ? null : productResp.getData();
-        } catch (Exception ignored) {
+        } catch (Exception e) {
             // Keep list resilient when product-service is temporarily unavailable.
+            log.warn("Failed to load product details for productId={}: {}", productId, e.getMessage());
             return null;
         }
     }
@@ -115,8 +119,9 @@ public class PickingItemService {
         try {
             ApiResponse<LocationClient.LocationDetailData> locationResp = locationClient.getLocationById(locationId);
             return locationResp == null ? null : locationResp.getData();
-        } catch (Exception ignored) {
+        } catch (Exception e) {
             // Keep list resilient when warehouse location lookup fails.
+            log.warn("Failed to load location details for locationId={}: {}", locationId, e.getMessage());
             return null;
         }
     }
@@ -249,6 +254,9 @@ public class PickingItemService {
     }
 
     private static void validateQuantities(Integer qtyToPick, Integer qtyPicked, PickingItemStatus status) {
+        if (qtyToPick == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "qtyToPick là bắt buộc");
+        }
         int picked = qtyPicked == null ? 0 : qtyPicked;
         if (qtyToPick <= 0 || picked < 0 || picked > qtyToPick) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng pick không hợp lệ");
@@ -259,7 +267,8 @@ public class PickingItemService {
     }
 
     /**
-     * Tự tạo các dòng picking theo tồn khả dụng (FEFO theo hạn dùng, rồi theo vị trí), chia nhiều vị trí/lô nếu cần.
+     * Tự tạo các dòng picking theo tồn khả dụng (FEFO theo hạn dùng, rồi theo vị
+     * trí), chia nhiều vị trí/lô nếu cần.
      */
     @Transactional
     public void allocatePickingLinesForNewSoItem(SalesOrderItem line) {
@@ -342,7 +351,8 @@ public class PickingItemService {
         try {
             productResp = productClient.getProductById(item.getProductId());
         } catch (Exception e) {
-            throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Lỗi gọi product-service: " + e.getMessage());
+            log.warn("Failed to call product-service for productId={}", item.getProductId(), e);
+            throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Không thể lấy thông tin sản phẩm");
         }
         ProductClient.ProductDetailData productData = productResp.getData();
         if (productData == null) {
@@ -354,7 +364,8 @@ public class PickingItemService {
         try {
             locationResp = locationClient.getLocationById(item.getLocationId());
         } catch (Exception e) {
-            throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Lỗi gọi warehouse-service (location): " + e.getMessage());
+            log.warn("Failed to call warehouse-service location API for locationId={}", item.getLocationId(), e);
+            throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Không thể lấy thông tin vị trí kho");
         }
         LocationClient.LocationDetailData locationData = locationResp.getData();
         if (locationData == null) {
@@ -362,7 +373,8 @@ public class PickingItemService {
         }
 
         // Get current available qty at this location for this product+lot
-        // Tối ưu: sử dụng getSingleStockRowIfExists thay vì listAllStocksForProduct để giảm API calls
+        // Tối ưu: sử dụng getSingleStockRowIfExists thay vì listAllStocksForProduct để
+        // giảm API calls
         int qtyAvailable = item.getQtyToPick();
         try {
             WarehouseStockData stock = warehouseStockGateway.getSingleStockRowIfExists(
@@ -371,7 +383,8 @@ public class PickingItemService {
                 qtyAvailable = availableQty(stock);
             }
         } catch (Exception e) {
-            // Log nhưng không throw lỗi, vì giao diện vẫn cần hiển thị picking item
+            // Keep API resilient for picker UI.
+            log.warn("Failed to query stock row for pickingItemId={}: {}", item.getId(), e.getMessage());
             qtyAvailable = item.getQtyToPick();
         }
 
@@ -379,7 +392,7 @@ public class PickingItemService {
                 item.getId(),
                 item.getSoItem().getId(),
                 so.getSoNumber(),
-                
+
                 productData.id(),
                 productData.sku(),
                 productData.name(),
@@ -387,7 +400,7 @@ public class PickingItemService {
                 productData.barcodeEan13(),
                 productData.categoryName(),
                 productData.baseUnit(),
-                
+
                 locationData.id(),
                 locationData.code(),
                 locationData.name(),
@@ -395,14 +408,13 @@ public class PickingItemService {
                 locationData.aisle(),
                 locationData.shelf(),
                 locationData.position(),
-                
+
                 item.getLotNumber(),
                 item.getQtyToPick(),
                 item.getQtyPicked(),
                 qtyAvailable,
-                
+
                 item.getStatus().name(),
-                item.getPickSequence()
-        );
+                item.getPickSequence());
     }
 }

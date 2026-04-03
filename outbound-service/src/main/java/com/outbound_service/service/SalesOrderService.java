@@ -216,13 +216,13 @@ public class SalesOrderService {
                     so.getWarehouseId(),
                     p.getLocationId(),
                     p.getProductId(),
-                    null,
+                    p.getLotNumber(),
                     -picked));
             StockAdjustCommand cmd = new StockAdjustCommand(
                     so.getWarehouseId(),
                     p.getLocationId(),
                     p.getProductId(),
-                    null,
+                    p.getLotNumber(),
                     -picked);
             warehouseStockGateway.adjustOrThrow(cmd);
         }
