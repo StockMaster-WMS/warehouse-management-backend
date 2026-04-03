@@ -18,6 +18,7 @@ public interface PoItemMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "purchaseOrder", ignore = true)
+    @Mapping(target = "receivedQty", ignore = true)
     void updateEntity(UpdatePoItemRequest request, @MappingTarget PoItem poItem);
 
     @Mapping(target = "purchaseOrderId", source = "purchaseOrder.id")

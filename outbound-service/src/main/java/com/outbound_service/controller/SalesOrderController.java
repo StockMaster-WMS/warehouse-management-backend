@@ -5,6 +5,7 @@ import com.common.api.PagedResponse;
 import com.outbound_service.dto.request.CreateSalesOrderRequest;
 import com.outbound_service.dto.request.UpdateSalesOrderRequest;
 import com.outbound_service.dto.response.SalesOrderResponse;
+import com.outbound_service.service.SalesOrderExcelExportService;
 import com.outbound_service.service.SalesOrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,6 +14,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 @RestController
@@ -32,6 +38,7 @@ import java.util.UUID;
 public class SalesOrderController {
 
     private final SalesOrderService salesOrderService;
+    private final SalesOrderExcelExportService salesOrderExcelExportService;
 
     @GetMapping
     @Operation(summary = "Lấy danh sách đơn xuất", description = "Phân trang; lọc keyword, status, warehouseId")
@@ -120,5 +127,22 @@ public class SalesOrderController {
     public ApiResponse<String> delete(@PathVariable UUID id) {
         salesOrderService.delete(id);
         return ApiResponse.success("Xóa đơn xuất thành công", id.toString());
+    }
+
+    @GetMapping(value = "/export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @Operation(summary = "Xuất phiếu xuất kho ra Excel", description = "Xuất danh sách sales order cùng chi tiết hàng hóa")
+    public ResponseEntity<byte[]> exportXlsx(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) UUID warehouseId) {
+        byte[] bytes = salesOrderExcelExportService.exportToXlsx(keyword, status, warehouseId);
+        String filename = "sales-orders-export-" + java.time.LocalDate.now() + ".xlsx";
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(bytes);
     }
 }
