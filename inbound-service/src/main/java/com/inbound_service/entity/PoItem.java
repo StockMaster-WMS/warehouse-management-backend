@@ -36,6 +36,10 @@ public class PoItem {
     @Column(name = "product_sku", nullable = false, length = 50)
     private String productSku;
 
+    /** Snapshot of product name at time of PO creation */
+    @Column(name = "product_name", length = 255)
+    private String productName;
+
     @Column(name = "ordered_qty", nullable = false)
     private Integer orderedQty;
 

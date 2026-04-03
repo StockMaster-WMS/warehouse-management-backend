@@ -21,6 +21,9 @@ public record CreatePoItemRequest(
         @Size(max = 50, message = "SKU không được vượt quá 50 ký tự")
         String productSku,
 
+        @Size(max = 255, message = "Tên sản phẩm không được vượt quá 255 ký tự")
+        String productName,
+
         @NotNull(message = "Số lượng đặt không được để trống")
         Integer orderedQty,
 
