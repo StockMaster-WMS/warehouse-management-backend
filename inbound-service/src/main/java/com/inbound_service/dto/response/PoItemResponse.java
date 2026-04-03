@@ -9,6 +9,7 @@ public record PoItemResponse(
         Short lineNumber,
         UUID productId,
         String productSku,
+        String productName,
         Integer orderedQty,
         Integer receivedQty,
         BigDecimal unitPrice
