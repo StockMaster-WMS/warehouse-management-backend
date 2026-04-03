@@ -32,38 +32,38 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    @Operation(summary = "Dang ky tai khoan")
+    @Operation(summary = "Đăng ký tài khoản")
     public ApiResponse<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
-        return ApiResponse.success("Dang ky thanh cong", authService.register(request));
+        return ApiResponse.success("Đăng ký thành công", authService.register(request));
     }
 
     @PostMapping("/login")
-    @Operation(summary = "Dang nhap")
+    @Operation(summary = "Đăng nhập")
     public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ApiResponse.success("Dang nhap thanh cong", authService.login(request));
+        return ApiResponse.success("Đăng nhập thành công", authService.login(request));
     }
 
     @PostMapping("/introspect")
-    @Operation(summary = "Kiem tra token noi bo")
+    @Operation(summary = "Kiểm tra token nội bộ")
     public ApiResponse<IntrospectResponse> introspect(@Valid @RequestBody IntrospectRequest request) {
-        return ApiResponse.success("Kiem tra token thanh cong", authService.introspect(request));
+        return ApiResponse.success("Kiểm tra token thành công", authService.introspect(request));
     }
 
     @PostMapping("/refresh")
-    @Operation(summary = "Lay token moi bang refresh token")
+    @Operation(summary = "Lấy token mới bằng refresh token")
     public ApiResponse<LoginResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
-        return ApiResponse.success("Lam moi token thanh cong", authService.refresh(request));
+        return ApiResponse.success("Làm mới token thành công", authService.refresh(request));
     }
 
     @PostMapping("/logout")
-    @Operation(summary = "Dang xuat", security = {@SecurityRequirement(name = "BearerAuth")})
+    @Operation(summary = "Đăng xuất", security = {@SecurityRequirement(name = "BearerAuth")})
     public ApiResponse<String> logout(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader) {
         String token = extractToken(authHeader);
         if (token == null || token.isBlank()) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Thieu Authorization header theo dinh dang Bearer <token>");
+            throw new AppException(ErrorCode.BAD_REQUEST, "Thiếu Authorization header theo định dạng Bearer <token>");
         }
         authService.logout(token);
-        return ApiResponse.success("Dang xuat thanh cong", "OK");
+        return ApiResponse.success("Đăng xuất thành công", "OK");
     }
 
     private String extractToken(String rawValue) {
