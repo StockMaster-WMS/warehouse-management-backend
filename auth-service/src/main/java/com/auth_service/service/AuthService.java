@@ -40,6 +40,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
+    // Đăng ký tài khoản mới và gán vai trò mặc định.
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
         if (userAccountRepository.existsByUsername(request.username())) {
@@ -71,7 +72,8 @@ public class AuthService {
                 saved.getCreatedAt());
     }
 
-        @Transactional(readOnly = true)
+    // Đăng nhập và phát hành access/refresh token.
+    @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
         UserAccount user = userAccountRepository.findByUsername(request.username().trim())
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST, "Thông tin đăng nhập không hợp lệ"));
@@ -89,6 +91,7 @@ public class AuthService {
         return new LoginResponse(accessToken, refreshToken);
     }
 
+    // Kiểm tra tính hợp lệ của token và trả thông tin claims.
     public IntrospectResponse introspect(IntrospectRequest request) {
         try {
             var claims = jwtTokenProvider.parseClaims(request.token());
@@ -108,6 +111,7 @@ public class AuthService {
         }
     }
 
+    // Làm mới phiên bằng refresh token hợp lệ.
     @Transactional
     public LoginResponse refresh(RefreshTokenRequest request) {
         try {
@@ -146,6 +150,7 @@ public class AuthService {
         }
     }
 
+    // Đăng xuất bằng cách đưa token vào blacklist.
     @Transactional
     public void logout(String token) {
         try {
@@ -164,6 +169,7 @@ public class AuthService {
         }
     }
 
+    // Lưu token vào blacklist theo cơ chế idempotent.
     private void blacklistToken(String token) {
         var userId = jwtTokenProvider.getUserId(token);
         String jti = jwtTokenProvider.getJti(token);

@@ -52,6 +52,7 @@ public class StockLevelService {
     private final StockLevelMapper stockLevelMapper;
     private final ProductBatchClient productBatchClient;
 
+    // Lấy danh sách tồn kho có phân trang và bộ lọc cơ bản.
     public PagedResponse<StockLevelResponse> findAll(Pageable pageable, UUID warehouseId, UUID locationId, UUID productId) {
         Specification<StockLevel> spec = StockLevelSpecification.hasWarehouseId(warehouseId)
                 .and(StockLevelSpecification.hasLocationId(locationId))
@@ -69,6 +70,7 @@ public class StockLevelService {
                 page.getTotalPages());
     }
 
+    // Lấy danh sách tồn kho dạng mở rộng kèm thông tin liên quan.
     public PagedResponse<StockLevelExpandedResponse> findAllExpanded(Pageable pageable,
             UUID warehouseId, UUID locationId, UUID productId,
             boolean expandWarehouse, boolean expandLocation, boolean expandProduct) {
@@ -120,11 +122,13 @@ public class StockLevelService {
                 page.getTotalPages());
     }
 
+    // Lấy chi tiết tồn kho theo id.
     public StockLevelResponse findById(UUID id) {
         StockLevel stock = getStockLevel(id);
         return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock));
     }
 
+    // Tạo mới bản ghi tồn kho.
     @Transactional
     public StockLevelResponse create(CreateStockLevelRequest request) {
         validateQuantities(request.qtyOnHand(), request.qtyReserved());
@@ -145,6 +149,7 @@ public class StockLevelService {
         return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
     }
 
+    // Cập nhật bản ghi tồn kho theo id.
     @Transactional
     public StockLevelResponse update(UUID id, UpdateStockLevelRequest request) {
         validateQuantities(request.qtyOnHand(), request.qtyReserved());
@@ -166,6 +171,7 @@ public class StockLevelService {
         return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
     }
 
+    // Xóa bản ghi tồn kho theo id.
     @Transactional
     public void delete(UUID id) {
         StockLevel stockLevel = getStockLevel(id);
@@ -174,10 +180,7 @@ public class StockLevelService {
 
     private static final int MAX_RETRY = 3;
 
-    /**
-     * Tăng/giảm tồn theo vị trí + sản phẩm + lô. qtyDelta > 0: nhập; < 0: xuất/trừ.
-     * Sử dụng optimistic locking (@Version) để đảm bảo tính nhất quán khi có concurrent requests.
-     */
+    // Điều chỉnh tồn kho theo vị trí, sản phẩm, lô với cơ chế retry optimistic lock.
     @Transactional
     public StockLevelResponse adjust(StockAdjustCommand cmd) {
         if (cmd.qtyDelta() == 0) {
@@ -205,9 +208,7 @@ public class StockLevelService {
         throw new AppException(ErrorCode.BAD_REQUEST, "Tồn kho đang được cập nhật đồng thời, vui lòng thử lại");
     }
 
-    /**
-     * Điều chỉnh lượng giữ chỗ. delta &gt; 0: cần đủ tồn khả dụng (on_hand − reserved); delta &lt; 0: nhả chỗ.
-     */
+    // Điều chỉnh lượng giữ chỗ reserved theo vị trí, sản phẩm, lô.
     @Transactional
     public StockLevelResponse adjustReserved(StockReserveCommand cmd) {
         if (cmd.reservedDelta() == 0) {
@@ -262,6 +263,7 @@ public class StockLevelService {
         throw new AppException(ErrorCode.BAD_REQUEST, "Tồn kho đang được cập nhật đồng thời, vui lòng thử lại");
     }
 
+    // Tạo bản ghi tồn mới khi điều chỉnh dương trên khóa chưa tồn tại.
     private StockLevelResponse createFromPositiveDelta(Warehouse warehouse, Location location, UUID productId,
             String lot, int qtyDelta) {
         if (qtyDelta < 0) {
@@ -282,6 +284,7 @@ public class StockLevelService {
         return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
     }
 
+    // Áp dụng biến động tồn lên bản ghi hiện có.
     private StockLevelResponse applyDelta(StockLevel stockLevel, int qtyDelta) {
         int newOnHand = stockLevel.getQtyOnHand() + qtyDelta;
         if (newOnHand < 0) {
@@ -295,27 +298,32 @@ public class StockLevelService {
         return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
     }
 
+    // Tìm thực thể tồn kho theo id.
     private StockLevel getStockLevel(UUID id) {
         return stockLevelRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy tồn kho"));
     }
 
+    // Tìm thực thể kho theo id.
     private Warehouse getWarehouse(UUID id) {
         return warehouseRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho"));
     }
 
+    // Tìm thực thể vị trí theo id.
     private Location getLocation(UUID id) {
         return locationRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy vị trí"));
     }
 
+    // Đảm bảo vị trí thuộc đúng kho được yêu cầu.
     private void ensureLocationInWarehouse(Location location, UUID warehouseId) {
         if (!location.getWarehouse().getId().equals(warehouseId)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Vị trí không thuộc kho đã chọn");
         }
     }
 
+    // Đảm bảo không trùng tồn kho theo tổ hợp vị trí-sản phẩm-lô.
     private void ensureUniqueStock(UUID locationId, UUID productId, String lotNumber, UUID currentStockId) {
         stockLevelRepository.findByLocationIdAndProductIdAndLotNumber(locationId, productId, lotNumber)
                 .filter(existing -> currentStockId == null || !existing.getId().equals(currentStockId))
@@ -324,6 +332,7 @@ public class StockLevelService {
                 });
     }
 
+    // Kiểm tra hợp lệ của số lượng tồn tay và giữ chỗ.
     private void validateQuantities(Integer qtyOnHand, Integer qtyReserved) {
         int reserved = qtyReserved == null ? 0 : qtyReserved;
         if (qtyOnHand < 0 || reserved < 0 || reserved > qtyOnHand) {
@@ -331,10 +340,12 @@ public class StockLevelService {
         }
     }
 
+    // Chuẩn hóa lot number về chuỗi không null.
     private String normalizeLot(String lotNumber) {
         return lotNumber == null ? "" : lotNumber.trim();
     }
 
+    // Bổ sung qtyAvailable nếu mapper chưa trả giá trị này.
     private StockLevelResponse fillQtyAvailableWhenMissing(StockLevelResponse response) {
         if (response.qtyAvailable() != null) {
             return response;
@@ -355,6 +366,7 @@ public class StockLevelService {
         );
     }
 
+    // Trích danh sách warehouseId từ tập tồn kho.
     private Set<UUID> extractWarehouseIds(Collection<StockLevel> stocks) {
         Set<UUID> ids = new HashSet<>();
         for (StockLevel s : stocks) {
@@ -365,6 +377,7 @@ public class StockLevelService {
         return ids;
     }
 
+    // Trích danh sách locationId từ tập tồn kho.
     private Set<UUID> extractLocationIds(Collection<StockLevel> stocks) {
         Set<UUID> ids = new HashSet<>();
         for (StockLevel s : stocks) {
@@ -375,6 +388,7 @@ public class StockLevelService {
         return ids;
     }
 
+    // Trích danh sách productId từ tập tồn kho.
     private Set<UUID> extractProductIds(Collection<StockLevel> stocks) {
         Set<UUID> ids = new HashSet<>();
         for (StockLevel s : stocks) {
@@ -385,6 +399,7 @@ public class StockLevelService {
         return ids;
     }
 
+    // Tải thông tin tóm tắt kho theo danh sách id.
     private Map<UUID, WarehouseSummary> loadWarehousesSummary(Set<UUID> ids) {
         if (ids.isEmpty()) return Map.of();
         List<Warehouse> warehouses = warehouseRepository.findAllById(ids);
@@ -395,6 +410,7 @@ public class StockLevelService {
         return map;
     }
 
+    // Tải thông tin tóm tắt vị trí theo danh sách id.
     private Map<UUID, LocationSummary> loadLocationsSummary(Set<UUID> ids) {
         if (ids.isEmpty()) return Map.of();
         List<Location> locations = locationRepository.findAllById(ids);
@@ -406,6 +422,7 @@ public class StockLevelService {
         return map;
     }
 
+    // Tải thông tin tóm tắt sản phẩm theo danh sách id.
     private Map<UUID, ProductSummary> loadProductsSummary(Set<UUID> ids) {
         if (ids.isEmpty()) return Map.of();
         try {

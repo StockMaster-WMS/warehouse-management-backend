@@ -32,6 +32,7 @@ public class ProductExcelExportService {
 
     private final ProductRepository productRepository;
 
+    // Xuất danh sách sản phẩm ra file Excel theo bộ lọc.
     @Transactional(readOnly = true)
     public byte[] exportToXlsx(String keyword, UUID categoryId, String status) {
         Specification<Product> spec = ProductSpecification.hasKeyword(keyword)
@@ -93,6 +94,7 @@ public class ProductExcelExportService {
         }
     }
 
+    // Ghi giá trị BigDecimal vào ô Excel nếu có dữ liệu.
     private static void setBigDecimalCell(Row row, int colIndex, BigDecimal v) {
         Cell cell = row.createCell(colIndex);
         if (v != null) {
