@@ -28,13 +28,13 @@ public interface SalesOrderMapper {
 
     @AfterMapping
     default void setDefaultsOnCreate(CreateSalesOrderRequest request,
-                                     @MappingTarget SalesOrder salesOrder) {
+            @MappingTarget SalesOrder salesOrder) {
         applyDefaults(salesOrder);
     }
 
     @AfterMapping
     default void setDefaultsOnUpdate(UpdateSalesOrderRequest request,
-                                     @MappingTarget SalesOrder salesOrder) {
+            @MappingTarget SalesOrder salesOrder) {
         applyDefaults(salesOrder);
     }
 

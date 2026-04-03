@@ -235,6 +235,9 @@ public class PickingItemService {
         if (so.getStatus() == SalesOrderStatus.PICKED) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không thao tác picking khi đơn đã pick xong");
         }
+        if (so.getStatus() == SalesOrderStatus.ON_HOLD || so.getStatus() == SalesOrderStatus.CANCELLED) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không thao tác picking khi đơn đang tạm dừng hoặc đã hủy");
+        }
     }
 
     private static PickingItemStatus parsePickingStatus(String raw) {

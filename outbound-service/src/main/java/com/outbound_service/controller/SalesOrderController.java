@@ -66,10 +66,34 @@ public class SalesOrderController {
         return ApiResponse.success("Chuyển sang picking thành công", salesOrderService.startPicking(id));
     }
 
+    @PostMapping("/{id}/mark-picked")
+    @Operation(summary = "Xác nhận đã pick xong", description = "PICKING → PICKED khi mọi picking line đã PICKED và đủ qty")
+    public ApiResponse<SalesOrderResponse> markPicked(@PathVariable UUID id) {
+        return ApiResponse.success("Xác nhận pick xong thành công", salesOrderService.markPicked(id));
+    }
+
     @PostMapping("/{id}/mark-packed")
-    @Operation(summary = "Đóng gói", description = "PICKING → PACKED khi mọi picking line đã PICKED và đủ qty")
+    @Operation(summary = "Đóng gói", description = "PICKED → PACKED")
     public ApiResponse<SalesOrderResponse> markPacked(@PathVariable UUID id) {
         return ApiResponse.success("Đóng gói thành công", salesOrderService.markPacked(id));
+    }
+
+    @PostMapping("/{id}/hold")
+    @Operation(summary = "Tạm dừng đơn xuất", description = "PENDING/PICKING/PICKED/PACKED → ON_HOLD")
+    public ApiResponse<SalesOrderResponse> hold(@PathVariable UUID id) {
+        return ApiResponse.success("Tạm dừng đơn xuất thành công", salesOrderService.hold(id));
+    }
+
+    @PostMapping("/{id}/resume")
+    @Operation(summary = "Tiếp tục đơn xuất", description = "ON_HOLD → PENDING hoặc PICKING hoặc PICKED (tùy tiến độ picking hiện tại)")
+    public ApiResponse<SalesOrderResponse> resume(@PathVariable UUID id) {
+        return ApiResponse.success("Tiếp tục đơn xuất thành công", salesOrderService.resume(id));
+    }
+
+    @PostMapping("/{id}/cancel")
+    @Operation(summary = "Hủy đơn xuất", description = "Hủy trước khi giao hàng; tự động nhả lượng đã giữ chỗ")
+    public ApiResponse<SalesOrderResponse> cancel(@PathVariable UUID id) {
+        return ApiResponse.success("Hủy đơn xuất thành công", salesOrderService.cancel(id));
     }
 
     @PostMapping("/{id}/mark-shipped")

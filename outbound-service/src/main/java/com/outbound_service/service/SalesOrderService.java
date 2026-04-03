@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -117,37 +118,66 @@ public class SalesOrderService {
     }
 
     @Transactional
+    public SalesOrderResponse markPicked(UUID id) {
+        SalesOrder so = getSalesOrder(id);
+        requireStatus(so, SalesOrderStatus.PICKING, "Chỉ xác nhận PICKED khi đơn đang PICKING");
+
+        ensurePickingCompleted(id);
+
+        so.setStatus(SalesOrderStatus.PICKED);
+        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+    }
+
+    @Transactional
     public SalesOrderResponse markPacked(UUID id) {
         SalesOrder so = getSalesOrder(id);
-        requireStatus(so, SalesOrderStatus.PICKING, "Chỉ đóng gói khi đơn đang PICKING");
+        requireStatus(so, SalesOrderStatus.PICKED, "Chỉ đóng gói khi đơn đang PICKED");
+
+        ensurePickingCompleted(id);
+
+        so.setStatus(SalesOrderStatus.PACKED);
+        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+    }
+
+    @Transactional
+    public SalesOrderResponse hold(UUID id) {
+        SalesOrder so = getSalesOrder(id);
+        if (!Set.of(SalesOrderStatus.PENDING, SalesOrderStatus.PICKING, SalesOrderStatus.PICKED, SalesOrderStatus.PACKED)
+                .contains(so.getStatus())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ tạm dừng đơn chưa giao hàng");
+        }
+        so.setStatus(SalesOrderStatus.ON_HOLD);
+        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+    }
+
+    @Transactional
+    public SalesOrderResponse resume(UUID id) {
+        SalesOrder so = getSalesOrder(id);
+        requireStatus(so, SalesOrderStatus.ON_HOLD, "Chỉ tiếp tục khi đơn đang ON_HOLD");
 
         List<PickingItem> picks = pickingItemRepository.findBySalesOrderIdWithSoItem(id);
         if (picks.isEmpty()) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Chưa có picking item cho đơn này");
+            so.setStatus(SalesOrderStatus.PENDING);
+        } else if (isPickingCompleted(id, picks)) {
+            so.setStatus(SalesOrderStatus.PICKED);
+        } else {
+            so.setStatus(SalesOrderStatus.PICKING);
         }
-        for (PickingItem p : picks) {
-            int picked = p.getQtyPicked() == null ? 0 : p.getQtyPicked();
-            if (p.getStatus() != PickingItemStatus.PICKED || picked < p.getQtyToPick()) {
-                throw new AppException(ErrorCode.BAD_REQUEST,
-                        "Chưa pick đủ: kiểm tra trạng thái PICKED và qtyPicked cho từng dòng picking");
-            }
+        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+    }
+
+    @Transactional
+    public SalesOrderResponse cancel(UUID id) {
+        SalesOrder so = getSalesOrder(id);
+        if (so.getStatus() == SalesOrderStatus.SHIPPED) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không thể hủy đơn đã giao hàng");
+        }
+        if (so.getStatus() == SalesOrderStatus.CANCELLED) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Đơn xuất đã hủy trước đó");
         }
 
-        Map<UUID, Integer> pickedBySoItem = picks.stream()
-                .collect(Collectors.groupingBy(
-                        p -> p.getSoItem().getId(),
-                        Collectors.summingInt(p -> p.getQtyPicked() == null ? 0 : p.getQtyPicked())));
-        List<SalesOrderItem> lines = salesOrderItemRepository.findBySalesOrder_Id(id);
-        for (SalesOrderItem line : lines) {
-            int sum = pickedBySoItem.getOrDefault(line.getId(), 0);
-            if (sum < line.getOrderedQty()) {
-                throw new AppException(ErrorCode.BAD_REQUEST,
-                        "Chưa pick đủ theo dòng đơn: line " + line.getLineNumber()
-                                + " (đặt " + line.getOrderedQty() + ", đã pick " + sum + ")");
-            }
-        }
-
-        so.setStatus(SalesOrderStatus.PACKED);
+        releaseReservedForOrder(so);
+        so.setStatus(SalesOrderStatus.CANCELLED);
         return salesOrderMapper.toResponse(salesOrderRepository.save(so));
     }
 
@@ -209,6 +239,55 @@ public class SalesOrderService {
             line.setShippedQty(pickedBySoItem.getOrDefault(line.getId(), 0));
         }
         salesOrderItemRepository.saveAll(lines);
+    }
+
+    private void ensurePickingCompleted(UUID salesOrderId) {
+        List<PickingItem> picks = pickingItemRepository.findBySalesOrderIdWithSoItem(salesOrderId);
+        if (!isPickingCompleted(salesOrderId, picks)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Chưa pick đủ: kiểm tra trạng thái PICKED và qtyPicked theo từng dòng đơn");
+        }
+    }
+
+    private boolean isPickingCompleted(UUID salesOrderId, List<PickingItem> picks) {
+        if (picks.isEmpty()) {
+            return false;
+        }
+        for (PickingItem p : picks) {
+            int picked = p.getQtyPicked() == null ? 0 : p.getQtyPicked();
+            if (p.getStatus() != PickingItemStatus.PICKED || picked < p.getQtyToPick()) {
+                return false;
+            }
+        }
+
+        Map<UUID, Integer> pickedBySoItem = picks.stream()
+                .collect(Collectors.groupingBy(
+                        p -> p.getSoItem().getId(),
+                        Collectors.summingInt(p -> p.getQtyPicked() == null ? 0 : p.getQtyPicked())));
+        List<SalesOrderItem> lines = salesOrderItemRepository.findBySalesOrder_Id(salesOrderId);
+        for (SalesOrderItem line : lines) {
+            int sum = pickedBySoItem.getOrDefault(line.getId(), 0);
+            if (sum < line.getOrderedQty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void releaseReservedForOrder(SalesOrder so) {
+        List<PickingItem> picks = pickingItemRepository.findBySalesOrderIdWithSoItem(so.getId());
+        for (PickingItem p : picks) {
+            int qtyToRelease = p.getQtyToPick() == null ? 0 : p.getQtyToPick();
+            if (qtyToRelease <= 0) {
+                continue;
+            }
+            warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
+                    so.getWarehouseId(),
+                    p.getLocationId(),
+                    p.getProductId(),
+                    p.getLotNumber(),
+                    -qtyToRelease));
+        }
     }
 
     private SalesOrder getSalesOrder(UUID id) {

@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: outbound-service
+  devtools:
+    restart:
+      enabled: false
   config:
     import:
       - optional:file:./.env[.properties]
