@@ -33,6 +33,7 @@ public class CategoryService {
 
     // ================= READ =================
 
+    // Lấy danh sách danh mục có phân trang và bộ lọc.
     public PagedResponse<CategoryResponse> findAll(Pageable pageable, String keyword, Boolean isActive) {
         Specification<Category> spec = CategorySpecification.hasKeyword(keyword)
                 .and(CategorySpecification.hasActive(isActive));
@@ -46,10 +47,12 @@ public class CategoryService {
                 mapped.getTotalPages());
     }
 
+    // Lấy chi tiết danh mục theo id.
     public CategoryResponse findById(UUID id) {
         return mapper.toResponse(get(id));
     }
 
+    // Lấy chi tiết danh mục theo mã.
     public CategoryResponse findByCode(String code) {
         return mapper.toResponse(repository.findByCode(code)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy danh mục")));
@@ -57,6 +60,7 @@ public class CategoryService {
 
     // ================= CREATE =================
 
+    // Tạo mới danh mục và sinh mã danh mục duy nhất.
     @Transactional
     public CategoryResponse create(CreateCategoryRequest request) {
         Category parent = resolveParent(request.parentId());
@@ -84,6 +88,7 @@ public class CategoryService {
         throw new AppException(ErrorCode.BAD_REQUEST, "Không thể tạo mã duy nhất sau 10 lần thử");
     }
 
+    // Kiểm tra lỗi vi phạm duy nhất có liên quan tới mã danh mục.
     private boolean isDuplicateCode(DataIntegrityViolationException e) {
         String message = e.getMostSpecificCause().getMessage();
         return message != null && message.contains("code");
@@ -91,6 +96,7 @@ public class CategoryService {
 
     // ================= UPDATE =================
 
+    // Cập nhật thông tin danh mục theo id.
     @Transactional
     public CategoryResponse update(UUID id, UpdateCategoryRequest request) {
         Category entity = get(id);
@@ -112,6 +118,7 @@ public class CategoryService {
 
     // ================= DELETE =================
 
+    // Xóa danh mục theo id.
     @Transactional
     public void delete(UUID id) {
         repository.delete(get(id));
@@ -119,19 +126,23 @@ public class CategoryService {
 
     // ================= HELPER =================
 
+    // Tìm thực thể danh mục theo id.
     private Category get(UUID id) {
         return repository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy danh mục"));
     }
 
+    // Resolve danh mục cha theo parentId.
     private Category resolveParent(UUID parentId) {
         return parentId == null ? null : get(parentId);
     }
 
+    // Tính cấp độ danh mục dựa trên danh mục cha.
     private short computeLevel(Category parent) {
         return (short) (parent == null ? 0 : (parent.getLevel() == null ? 0 : parent.getLevel()) + 1);
     }
 
+    // Tính đường dẫn path của danh mục.
     private String computePath(Category parent, String code) {
         if (parent == null) return code;
 

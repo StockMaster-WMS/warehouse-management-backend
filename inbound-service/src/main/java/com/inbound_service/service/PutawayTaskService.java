@@ -35,6 +35,7 @@ public class PutawayTaskService {
     private final InboundReceiptRepository inboundReceiptRepository;
     private final PutawayTaskMapper putawayTaskMapper;
 
+    // Lấy danh sách putaway task có phân trang và lọc trạng thái.
     public PagedResponse<PutawayTaskResponse> findAll(Pageable pageable, UUID poItemId, String status) {
         Specification<PutawayTask> spec = PutawayTaskSpecification.hasPoItemId(poItemId)
                 .and(PutawayTaskSpecification.hasStatus(status));
@@ -48,6 +49,7 @@ public class PutawayTaskService {
                 mapped.getTotalPages());
     }
 
+    // Lấy chi tiết putaway task theo id.
     public PutawayTaskResponse findById(UUID id) {
         return putawayTaskMapper.toResponse(getTask(id));
     }
@@ -58,6 +60,7 @@ public class PutawayTaskService {
     private static final EnumSet<PutawayStatus> UPDATABLE_STATUSES =
             EnumSet.of(PutawayStatus.PENDING, PutawayStatus.IN_PROGRESS, PutawayStatus.CANCELLED);
 
+        // Cập nhật thông tin putaway task khi chưa ở trạng thái kết thúc.
     @Transactional
     public PutawayTaskResponse update(UUID id, UpdatePutawayTaskRequest request) {
         PutawayTask task = getTask(id);
@@ -80,6 +83,7 @@ public class PutawayTaskService {
         return putawayTaskMapper.toResponse(putawayTaskRepository.save(task));
     }
 
+    // Parse chuỗi trạng thái putaway về enum tương ứng.
     private PutawayStatus parsePutawayStatus(String raw) {
         try {
             return PutawayStatus.valueOf(raw.trim().toUpperCase());
@@ -88,10 +92,7 @@ public class PutawayTaskService {
         }
     }
 
-    /**
-     * Hoàn tất putaway: ghi nhận vị trí thực tế trong kho.
-     * Tồn kho đã được cập nhật khi tạo phiếu nhập kho (InboundReceiptService).
-     */
+    // Hoàn tất putaway và cập nhật trạng thái phiếu nhập liên quan.
     @Transactional
     public PutawayTaskResponse complete(UUID id, CompletePutawayRequest request) {
         PutawayTask task = putawayTaskRepository.findByIdWithPoAndOrderForUpdate(id)
@@ -114,8 +115,12 @@ public class PutawayTaskService {
         return response;
     }
 
+    // Đồng bộ trạng thái inbound receipt theo tiến độ putaway.
     private void refreshReceiptStatus(UUID receiptId) {
         List<PutawayTask> tasks = putawayTaskRepository.findByInboundReceiptId(receiptId);
+        if (tasks.isEmpty()) {
+            return;
+        }
         boolean allCompleted = tasks.stream()
                 .allMatch(t -> t.getStatus() == PutawayStatus.COMPLETED);
         boolean anyInProgress = tasks.stream()
@@ -134,6 +139,7 @@ public class PutawayTaskService {
         inboundReceiptRepository.save(receipt);
     }
 
+    // Tìm thực thể putaway task theo id.
     private PutawayTask getTask(UUID id) {
         return putawayTaskRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy putaway"));

@@ -49,6 +49,7 @@ public class PurchaseOrderService {
     private final PutawayTaskMapper putawayTaskMapper;
     private final InboundReceiptMapper receiptMapper;
 
+    // Lấy danh sách đơn nhập có phân trang và bộ lọc.
     public PagedResponse<PurchaseOrderResponse> findAll(Pageable pageable, String keyword, String status,
             UUID supplierId, UUID warehouseId) {
         Specification<PurchaseOrder> spec = PurchaseOrderSpecification.hasKeyword(keyword)
@@ -65,15 +66,18 @@ public class PurchaseOrderService {
                 mapped.getTotalPages());
     }
 
+    // Lấy chi tiết đơn nhập theo id.
     public PurchaseOrderResponse findById(UUID id) {
         return purchaseOrderMapper.toResponse(getPurchaseOrder(id));
     }
 
+    // Lấy chi tiết đơn nhập theo mã PO.
     public PurchaseOrderResponse findByPoNumber(String poNumber) {
         return purchaseOrderMapper.toResponse(purchaseOrderRepository.findByPoNumber(poNumber)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập")));
     }
 
+    // Lấy đầy đủ thông tin đơn nhập gồm dòng hàng, putaway và phiếu nhập.
     public PurchaseOrderDetailResponse findDetail(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
         List<PoItem> items = poItemRepository.findByPurchaseOrderId(id);
@@ -110,6 +114,7 @@ public class PurchaseOrderService {
             fullyReceived);
     }
 
+    // Tạo mới đơn nhập và sinh mã PO duy nhất.
     @Transactional
     public PurchaseOrderResponse create(CreatePurchaseOrderRequest request) {
         PurchaseOrder purchaseOrder = purchaseOrderMapper.toEntity(request);
@@ -118,6 +123,7 @@ public class PurchaseOrderService {
         return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
     }
 
+    // Cập nhật đơn nhập khi chưa kết thúc.
     @Transactional
     public PurchaseOrderResponse update(UUID id, UpdatePurchaseOrderRequest request) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
@@ -134,6 +140,7 @@ public class PurchaseOrderService {
         return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
     }
 
+    // Xóa đơn nhập khi chưa có dòng hàng và chưa kết thúc.
     @Transactional
     public void delete(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
@@ -144,6 +151,7 @@ public class PurchaseOrderService {
         purchaseOrderRepository.delete(purchaseOrder);
     }
 
+    // Duyệt đơn nhập từ trạng thái DRAFT sang APPROVED.
     @Transactional
     public PurchaseOrderResponse approve(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
@@ -159,6 +167,7 @@ public class PurchaseOrderService {
         return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
     }
 
+    // Hủy đơn nhập khi chưa hoàn tất.
     @Transactional
     public PurchaseOrderResponse cancel(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
@@ -174,11 +183,13 @@ public class PurchaseOrderService {
         return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
     }
 
+    // Tìm thực thể đơn nhập theo id.
     private PurchaseOrder getPurchaseOrder(UUID id) {
         return purchaseOrderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
     }
 
+    // Kiểm tra đơn nhập chưa ở trạng thái kết thúc.
     private void requirePoNotFinished(PurchaseOrder purchaseOrder) {
         if (purchaseOrder.getStatus() == PurchaseOrderStatus.COMPLETED
                 || purchaseOrder.getStatus() == PurchaseOrderStatus.CANCELLED) {
@@ -187,6 +198,7 @@ public class PurchaseOrderService {
         }
     }
 
+    // Sinh mã PO duy nhất.
     private String generateUniquePoNumber() {
         for (int i = 0; i < 10; i++) {
             String candidate = CodeGenerator.generate("PO");

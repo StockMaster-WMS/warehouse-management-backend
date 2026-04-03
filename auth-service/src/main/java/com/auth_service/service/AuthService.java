@@ -9,8 +9,9 @@ import com.auth_service.dto.response.LoginResponse;
 import com.auth_service.dto.response.RegisterResponse;
 import com.auth_service.entity.TokenBlacklist;
 import com.auth_service.entity.UserAccount;
+import com.auth_service.repository.RoleRepository;
 import com.auth_service.repository.TokenBlacklistRepository;
-import com.auth_service.repository.UserAccountRepository;
+import com.auth_service.repository.UserRepository;
 import com.auth_service.security.JwtTokenProvider;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
@@ -23,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.LinkedHashSet;
 import java.util.UUID;
 
 @Service
@@ -30,11 +32,15 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class AuthService {
 
-    private final UserAccountRepository userAccountRepository;
+    private static final String DEFAULT_ROLE_CODE = "USER";
+
+    private final UserRepository userAccountRepository;
     private final TokenBlacklistRepository tokenBlacklistRepository;
+    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
+    // Đăng ký tài khoản mới và gán vai trò mặc định.
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
         if (userAccountRepository.existsByUsername(request.username())) {
@@ -44,11 +50,17 @@ public class AuthService {
             throw new AppException(ErrorCode.BAD_REQUEST, "Email đã tồn tại");
         }
 
+        var defaultRole = roleRepository.findByCode(DEFAULT_ROLE_CODE)
+            .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Vai trò mặc định chưa được khởi tạo"));
+
+        var assignedRoles = new LinkedHashSet<com.auth_service.entity.Role>();
+        assignedRoles.add(defaultRole);
+
         UserAccount user = UserAccount.builder()
                 .username(request.username().trim())
                 .email(request.email().trim().toLowerCase())
                 .passwordHash(passwordEncoder.encode(request.password()))
-                .roles("USER")
+            .roles(assignedRoles)
                 .build();
 
         UserAccount saved = userAccountRepository.save(user);
@@ -56,10 +68,12 @@ public class AuthService {
                 saved.getId(),
                 saved.getUsername(),
                 saved.getEmail(),
-                saved.getRoles(),
+            saved.getRoleCodesCsv(),
                 saved.getCreatedAt());
     }
 
+    // Đăng nhập và phát hành access/refresh token.
+    @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request) {
         UserAccount user = userAccountRepository.findByUsername(request.username().trim())
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST, "Thông tin đăng nhập không hợp lệ"));
@@ -74,16 +88,10 @@ public class AuthService {
 
         String accessToken = jwtTokenProvider.generateAccessToken(user);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user);
-        return new LoginResponse(
-                accessToken,
-                refreshToken,
-                "Bearer",
-                jwtTokenProvider.getAccessTokenExpirationSeconds(),
-                jwtTokenProvider.getRefreshTokenExpirationSeconds(),
-                user.getUsername(),
-                user.getRoles());
+        return new LoginResponse(accessToken, refreshToken);
     }
 
+    // Kiểm tra tính hợp lệ của token và trả thông tin claims.
     public IntrospectResponse introspect(IntrospectRequest request) {
         try {
             var claims = jwtTokenProvider.parseClaims(request.token());
@@ -103,6 +111,7 @@ public class AuthService {
         }
     }
 
+    // Làm mới phiên bằng refresh token hợp lệ.
     @Transactional
     public LoginResponse refresh(RefreshTokenRequest request) {
         try {
@@ -111,7 +120,7 @@ public class AuthService {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Thiếu refresh token");
             }
 
-            // Chi chap nhan dung refresh token
+            // Chỉ chấp nhận đúng refresh token
             if (!"REFRESH".equals(jwtTokenProvider.getTokenType(refreshToken))) {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Token không phải refresh token");
             }
@@ -122,32 +131,26 @@ public class AuthService {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Refresh token không còn hiệu lực");
             }
 
-            // Lấy user từ token
+            // Lấy người dùng từ token
             var userId = jwtTokenProvider.getUserId(refreshToken);
             UserAccount user = userAccountRepository.findById(userId)
                     .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Người dùng không tồn tại"));
 
             if (!Boolean.TRUE.equals(user.getIsActive())) {
-            throw new AppException(ErrorCode.FORBIDDEN, "Tài khoản đã bị khóa");
-        }
+                throw new AppException(ErrorCode.FORBIDDEN, "Tài khoản đã bị khóa");
+            }
 
-            // Rotation: vô hiệu hóa refresh token cũ và phát hành cặp token mới
+            // Xoay vòng token: vô hiệu hóa refresh token cũ và phát hành cặp token mới
             blacklistToken(refreshToken);
             String newAccessToken = jwtTokenProvider.generateAccessToken(user);
             String newRefreshToken = jwtTokenProvider.generateRefreshToken(user);
-            return new LoginResponse(
-                    newAccessToken,
-                    newRefreshToken,
-                    "Bearer",
-                    jwtTokenProvider.getAccessTokenExpirationSeconds(),
-                    jwtTokenProvider.getRefreshTokenExpirationSeconds(),
-                    user.getUsername(),
-                    user.getRoles());
+            return new LoginResponse(newAccessToken, newRefreshToken);
         } catch (JwtException | IllegalArgumentException ex) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Refresh token không hợp lệ");
         }
     }
 
+    // Đăng xuất bằng cách đưa token vào blacklist.
     @Transactional
     public void logout(String token) {
         try {
@@ -166,6 +169,7 @@ public class AuthService {
         }
     }
 
+    // Lưu token vào blacklist theo cơ chế idempotent.
     private void blacklistToken(String token) {
         var userId = jwtTokenProvider.getUserId(token);
         String jti = jwtTokenProvider.getJti(token);

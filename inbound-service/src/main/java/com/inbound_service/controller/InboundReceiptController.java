@@ -5,6 +5,7 @@ import com.common.api.PagedResponse;
 import com.inbound_service.dto.request.CreateInboundReceiptRequest;
 import com.inbound_service.dto.response.InboundReceiptResponse;
 import com.inbound_service.entity.InboundReceiptStatus;
+import com.inbound_service.service.InboundReceiptExcelExportService;
 import com.inbound_service.service.InboundReceiptService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,8 +14,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,6 +31,7 @@ import java.util.UUID;
 public class InboundReceiptController {
 
     private final InboundReceiptService receiptService;
+    private final InboundReceiptExcelExportService receiptExcelExportService;
 
     @GetMapping
     @Operation(summary = "Danh sách phiếu nhập kho", description = "Phân trang; lọc keyword, purchaseOrderId, warehouseId, status")
@@ -62,4 +69,22 @@ public class InboundReceiptController {
         return ApiResponse.success("Lấy danh sách phiếu nhập thành công",
                 receiptService.findByPurchaseOrderId(purchaseOrderId));
     }
+
+        @GetMapping(value = "/export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        @Operation(summary = "Xuất phiếu nhập kho ra Excel", description = "Xuất danh sách phiếu nhập theo bộ lọc hiện có")
+        public ResponseEntity<byte[]> exportXlsx(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) UUID purchaseOrderId,
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) InboundReceiptStatus status) {
+            byte[] bytes = receiptExcelExportService.exportToXlsx(keyword, purchaseOrderId, warehouseId, status);
+        String filename = "inbound-receipts-export-" + java.time.LocalDate.now() + ".xlsx";
+        ContentDisposition disposition = ContentDisposition.attachment()
+            .filename(filename, StandardCharsets.UTF_8)
+            .build();
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+            .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+            .body(bytes);
+        }
 }

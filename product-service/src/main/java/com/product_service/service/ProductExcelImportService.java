@@ -49,6 +49,7 @@ public class ProductExcelImportService {
     private final CategoryRepository categoryRepository;
     private final SupplierRepository supplierRepository;
 
+    // Import sản phẩm từ file Excel và trả thống kê kết quả.
     public ProductImportResponse importFromXlsx(MultipartFile file, UUID createdBy) {
         if (file == null || file.isEmpty()) {
             throw new AppException(ErrorCode.BAD_REQUEST, "File không được để trống");
@@ -109,6 +110,7 @@ public class ProductExcelImportService {
         return new ProductImportResponse(attempted, success, failureCount, List.copyOf(errors));
     }
 
+    // Chuẩn hóa tên cột header Excel về key nội bộ.
     /** Tiêu đề cột (dòng 1) → key nội bộ; alias tiếng Việt không dấu / tiếng Anh. */
     private static Optional<String> resolveProductColumnHeader(String rawHeaderCellText) {
         String k = ExcelImportSupport.normalizeForAlias(rawHeaderCellText);
@@ -131,6 +133,7 @@ public class ProductExcelImportService {
         };
     }
 
+    // Bắt buộc file có ít nhất một cột danh mục hợp lệ.
     private static void requireCategoryColumnPresent(Map<String, Integer> col) {
         if (!col.containsKey("categoryCode") && !col.containsKey("categoryId")) {
             throw new AppException(ErrorCode.BAD_REQUEST,
@@ -138,6 +141,7 @@ public class ProductExcelImportService {
         }
     }
 
+    // Parse một dòng Excel thành request tạo sản phẩm.
     private CreateProductRequest parseProductRow(Row row, Map<String, Integer> col, DataFormatter fmt,
             UUID createdBy) {
         String name = ExcelRowReader.requireString(row, col, "name", fmt);
@@ -177,6 +181,7 @@ public class ProductExcelImportService {
         );
     }
 
+    // Resolve categoryId theo ưu tiên categoryId rồi đến categoryCode.
     /**
      * Ưu tiên {@code categoryId} (UUID) nếu ô có giá trị — kéo fill trong Excel ít bị sai hơn mã {@code categoryCode}.
      */
@@ -208,6 +213,7 @@ public class ProductExcelImportService {
                 .getId();
     }
 
+    // Ghi nhận lỗi của một dòng import (có giới hạn số lượng chi tiết lỗi).
     private static void addError(List<ImportRowError> errors, int rowNumber, String message) {
         if (errors.size() >= MAX_ERROR_DETAILS) {
             return;
