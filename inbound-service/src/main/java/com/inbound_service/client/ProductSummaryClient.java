@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import java.util.List;
 import java.util.UUID;
 
-@FeignClient(name = "product-service", path = "/api/products")
+@FeignClient(name = "product-service", contextId = "productSummaryClient", path = "/api/products")
 public interface ProductSummaryClient {
 
     @PostMapping("/batch")
