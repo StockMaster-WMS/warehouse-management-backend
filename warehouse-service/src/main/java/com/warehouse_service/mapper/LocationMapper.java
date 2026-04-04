@@ -47,5 +47,14 @@ public interface LocationMapper {
         if (location.getIsActive() == null) {
             location.setIsActive(true);
         }
+        if (location.getIsColdZone() == null) {
+            location.setIsColdZone(false);
+        }
+        if (location.getIsHazmatZone() == null) {
+            location.setIsHazmatZone(false);
+        }
+        if (location.getIsHeavyZone() == null) {
+            location.setIsHeavyZone(false);
+        }
     }
 }
