@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-@FeignClient(name = "product-service", path = "/api/suppliers")
+@FeignClient(name = "product-service", contextId = "supplierClient", path = "/api/suppliers")
 public interface SupplierClient {
 
     @GetMapping("/{id}")
