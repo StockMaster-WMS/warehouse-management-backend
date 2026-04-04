@@ -70,6 +70,8 @@ class ProductServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 "ACTIVE"
         );
 
@@ -109,6 +111,8 @@ class ProductServiceTest {
                 categoryId,
                 null,
                 "box",
+                null,
+                null,
                 null,
                 null,
                 null,

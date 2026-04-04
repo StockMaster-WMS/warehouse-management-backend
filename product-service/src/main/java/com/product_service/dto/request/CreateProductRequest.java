@@ -32,18 +32,22 @@ public record CreateProductRequest(
 
         @Schema(example = "0.45")
         BigDecimal weightKg,
-        @Schema(example = "18")
-        BigDecimal lengthCm,
-        @Schema(example = "12")
-        BigDecimal widthCm,
-        @Schema(example = "6")
-        BigDecimal heightCm,
+        @Schema(example = "1296")
+        BigDecimal volumeCm3,
         @Schema(example = "20")
         Integer minStockQty,
         @Schema(example = "true")
         Boolean isLotTracked,
         @Schema(example = "true")
         Boolean isExpiryTracked,
+        @Schema(example = "false")
+        Boolean isFrozen,
+        @Schema(example = "false")
+        Boolean isFragile,
+        @Schema(example = "false")
+        Boolean isHazmat,
+        @Schema(example = "false")
+        Boolean isHeavy,
         @Schema(example = "ACTIVE")
         String status,
 
