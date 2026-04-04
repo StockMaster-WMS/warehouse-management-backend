@@ -2,10 +2,8 @@ package com.auth_service.service;
 
 import com.auth_service.dto.request.IntrospectRequest;
 import com.auth_service.dto.request.LoginRequest;
-import com.auth_service.dto.request.RefreshTokenRequest;
 import com.auth_service.dto.request.RegisterRequest;
 import com.auth_service.dto.response.IntrospectResponse;
-import com.auth_service.dto.response.LoginResponse;
 import com.auth_service.dto.response.RegisterResponse;
 import com.auth_service.entity.TokenBlacklist;
 import com.auth_service.entity.UserAccount;
@@ -25,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -74,8 +73,9 @@ public class AuthService {
 
     // Đăng nhập và phát hành access/refresh token.
     @Transactional(readOnly = true)
-    public LoginResponse login(LoginRequest request) {
-        UserAccount user = userAccountRepository.findByUsername(request.username().trim())
+    public AuthTokens login(LoginRequest request) {
+        String credential = request.username().trim();
+        UserAccount user = userAccountRepository.findByUsernameOrEmail(credential, credential)
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST, "Thông tin đăng nhập không hợp lệ"));
 
         if (!Boolean.TRUE.equals(user.getIsActive())) {
@@ -88,7 +88,7 @@ public class AuthService {
 
         String accessToken = jwtTokenProvider.generateAccessToken(user);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user);
-        return new LoginResponse(accessToken, refreshToken);
+        return toAuthTokens(user, accessToken, refreshToken);
     }
 
     // Kiểm tra tính hợp lệ của token và trả thông tin claims.
@@ -113,9 +113,8 @@ public class AuthService {
 
     // Làm mới phiên bằng refresh token hợp lệ.
     @Transactional
-    public LoginResponse refresh(RefreshTokenRequest request) {
+    public AuthTokens refresh(String refreshToken) {
         try {
-            String refreshToken = request.refreshToken();
             if (refreshToken == null || refreshToken.isBlank()) {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Thiếu refresh token");
             }
@@ -144,7 +143,7 @@ public class AuthService {
             blacklistToken(refreshToken);
             String newAccessToken = jwtTokenProvider.generateAccessToken(user);
             String newRefreshToken = jwtTokenProvider.generateRefreshToken(user);
-            return new LoginResponse(newAccessToken, newRefreshToken);
+            return toAuthTokens(user, newAccessToken, newRefreshToken);
         } catch (JwtException | IllegalArgumentException ex) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Refresh token không hợp lệ");
         }
@@ -152,20 +151,12 @@ public class AuthService {
 
     // Đăng xuất bằng cách đưa token vào blacklist.
     @Transactional
-    public void logout(String token) {
-        try {
-            if (token == null || token.isBlank()) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Thiếu token đăng xuất");
-            }
-
-            String tokenType = jwtTokenProvider.getTokenType(token);
-            if (!"ACCESS".equals(tokenType) && !"REFRESH".equals(tokenType)) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Loại token không hợp lệ");
-            }
-
-            blacklistToken(token);
-        } catch (JwtException | IllegalArgumentException ex) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Token không hợp lệ");
+    public void logout(String accessToken, String refreshToken) {
+        if (accessToken != null && !accessToken.isBlank()) {
+            blacklistByType(accessToken, "ACCESS");
+        }
+        if (refreshToken != null && !refreshToken.isBlank()) {
+            blacklistByType(refreshToken, "REFRESH");
         }
     }
 
@@ -186,5 +177,41 @@ public class AuthService {
         } catch (DataIntegrityViolationException ex) {
             // Idempotent: token đã tồn tại trong blacklist thì bỏ qua
         }
+    }
+
+    private void blacklistByType(String token, String expectedType) {
+        try {
+            String tokenType = jwtTokenProvider.getTokenType(token);
+            if (!Objects.equals(expectedType, tokenType)) {
+                return;
+            }
+            blacklistToken(token);
+        } catch (JwtException | IllegalArgumentException ignored) {
+            // Logout vẫn trả thành công ngay cả khi token lỗi hoặc hết hạn.
+        }
+    }
+
+    private AuthTokens toAuthTokens(UserAccount user, String accessToken, String refreshToken) {
+        return new AuthTokens(
+                accessToken,
+                refreshToken,
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getRoleCodesCsv());
+    }
+
+    public long getRefreshTokenExpirationSeconds() {
+        return jwtTokenProvider.getRefreshTokenExpirationSeconds();
+    }
+
+    public record AuthTokens(
+            String accessToken,
+            String refreshToken,
+            UUID userId,
+            String username,
+            String email,
+            String roles
+    ) {
     }
 }
