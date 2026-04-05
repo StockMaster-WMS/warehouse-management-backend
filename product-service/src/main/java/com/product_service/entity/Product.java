@@ -48,17 +48,7 @@ public class Product {
     @Column(name = "weight_kg", precision = 10, scale = 4)
     private BigDecimal weightKg;
 
-    @Column(name = "length_cm", precision = 8, scale = 2)
-    private BigDecimal lengthCm;
-
-    @Column(name = "width_cm", precision = 8, scale = 2)
-    private BigDecimal widthCm;
-
-    @Column(name = "height_cm", precision = 8, scale = 2)
-    private BigDecimal heightCm;
-
-    /** Computed column: length_cm * width_cm * height_cm */
-    @Column(name = "volume_cm3", precision = 12, scale = 4, insertable = false, updatable = false)
+    @Column(name = "volume_cm3", precision = 12, scale = 4)
     private BigDecimal volumeCm3;
 
     @Column(name = "min_stock_qty")
@@ -72,6 +62,22 @@ public class Product {
     @Column(name = "is_expiry_tracked")
     @Builder.Default
     private Boolean isExpiryTracked = false;
+
+    @Column(name = "is_frozen")
+    @Builder.Default
+    private Boolean isFrozen = false;
+
+    @Column(name = "is_fragile")
+    @Builder.Default
+    private Boolean isFragile = false;
+
+    @Column(name = "is_hazmat")
+    @Builder.Default
+    private Boolean isHazmat = false;
+
+    @Column(name = "is_heavy")
+    @Builder.Default
+    private Boolean isHeavy = false;
 
     @Column(name = "status", length = 20)
     @Builder.Default

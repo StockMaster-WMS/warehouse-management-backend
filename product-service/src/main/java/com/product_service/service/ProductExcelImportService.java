@@ -122,12 +122,14 @@ public class ProductExcelImportService {
             case "barcodeean13", "barcode", "mavach", "ean13" -> Optional.of("barcodeEan13");
             case "suppliercode", "manhacungcap", "supplier" -> Optional.of("supplierCode");
             case "weightkg", "cannangkg" -> Optional.of("weightKg");
-            case "lengthcm", "dai" -> Optional.of("lengthCm");
-            case "widthcm", "rong" -> Optional.of("widthCm");
-            case "heightcm", "cao" -> Optional.of("heightCm");
+            case "volumecm3", "thetich", "thetichcm3" -> Optional.of("volumeCm3");
             case "minstockqty", "tonmin" -> Optional.of("minStockQty");
             case "islottracked", "theolot" -> Optional.of("isLotTracked");
             case "isexpirytracked" -> Optional.of("isExpiryTracked");
+            case "isfrozen", "donglanh" -> Optional.of("isFrozen");
+            case "isfragile", "devo" -> Optional.of("isFragile");
+            case "ishazmat", "hangnguyhiem" -> Optional.of("isHazmat");
+            case "isheavy", "hangnang" -> Optional.of("isHeavy");
             case "status", "trangthai" -> Optional.of("status");
             default -> Optional.empty();
         };
@@ -170,12 +172,14 @@ public class ProductExcelImportService {
                 primarySupplierId,
                 baseUnit.trim(),
                 ExcelRowReader.optionalBigDecimal(row, col, "weightKg", fmt),
-                ExcelRowReader.optionalBigDecimal(row, col, "lengthCm", fmt),
-                ExcelRowReader.optionalBigDecimal(row, col, "widthCm", fmt),
-                ExcelRowReader.optionalBigDecimal(row, col, "heightCm", fmt),
+                ExcelRowReader.optionalBigDecimal(row, col, "volumeCm3", fmt),
                 ExcelRowReader.optionalInteger(row, col, "minStockQty", fmt),
                 ExcelRowReader.optionalBoolean(row, col, "isLotTracked", fmt),
                 ExcelRowReader.optionalBoolean(row, col, "isExpiryTracked", fmt),
+                ExcelRowReader.optionalBoolean(row, col, "isFrozen", fmt),
+                ExcelRowReader.optionalBoolean(row, col, "isFragile", fmt),
+                ExcelRowReader.optionalBoolean(row, col, "isHazmat", fmt),
+                ExcelRowReader.optionalBoolean(row, col, "isHeavy", fmt),
                 ExcelRowReader.blankToNull(ExcelRowReader.optionalString(row, col, "status", fmt)),
                 createdBy
         );

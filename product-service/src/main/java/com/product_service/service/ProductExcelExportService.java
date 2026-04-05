@@ -51,8 +51,9 @@ public class ProductExcelExportService {
             Sheet sheet = wb.createSheet("Products");
             String[] headers = {
                     "sku", "id", "name", "categoryCode", "categoryId", "baseUnit",
-                    "barcodeEan13", "supplierCode", "weightKg", "lengthCm", "widthCm", "heightCm",
-                    "minStockQty", "isLotTracked", "isExpiryTracked", "status"
+                    "barcodeEan13", "supplierCode", "weightKg", "volumeCm3",
+                    "minStockQty", "isLotTracked", "isExpiryTracked",
+                    "isFrozen", "isFragile", "isHazmat", "isHeavy", "status"
             };
             Row headerRow = sheet.createRow(0);
             for (int i = 0; i < headers.length; i++) {
@@ -72,9 +73,7 @@ public class ProductExcelExportService {
                 row.createCell(c++).setCellValue(
                         p.getPrimarySupplier() != null ? p.getPrimarySupplier().getCode() : "");
                 setBigDecimalCell(row, c++, p.getWeightKg());
-                setBigDecimalCell(row, c++, p.getLengthCm());
-                setBigDecimalCell(row, c++, p.getWidthCm());
-                setBigDecimalCell(row, c++, p.getHeightCm());
+                setBigDecimalCell(row, c++, p.getVolumeCm3());
                 if (p.getMinStockQty() != null) {
                     row.createCell(c++).setCellValue(p.getMinStockQty());
                 } else {
@@ -82,6 +81,10 @@ public class ProductExcelExportService {
                 }
                 row.createCell(c++).setCellValue(Boolean.TRUE.equals(p.getIsLotTracked()));
                 row.createCell(c++).setCellValue(Boolean.TRUE.equals(p.getIsExpiryTracked()));
+                row.createCell(c++).setCellValue(Boolean.TRUE.equals(p.getIsFrozen()));
+                row.createCell(c++).setCellValue(Boolean.TRUE.equals(p.getIsFragile()));
+                row.createCell(c++).setCellValue(Boolean.TRUE.equals(p.getIsHazmat()));
+                row.createCell(c++).setCellValue(Boolean.TRUE.equals(p.getIsHeavy()));
                 row.createCell(c++).setCellValue(p.getStatus() != null ? p.getStatus() : "");
             }
             for (int i = 0; i < headers.length; i++) {

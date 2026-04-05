@@ -16,7 +16,6 @@ public interface ProductMapper {
     @Mapping(target = "sku", ignore = true)
     @Mapping(target = "category", ignore = true)
     @Mapping(target = "primarySupplier", ignore = true)
-    @Mapping(target = "volumeCm3", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     Product toEntity(CreateProductRequest request);
@@ -24,7 +23,6 @@ public interface ProductMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "category", ignore = true)
     @Mapping(target = "primarySupplier", ignore = true)
-    @Mapping(target = "volumeCm3", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "createdBy", ignore = true)
@@ -56,6 +54,18 @@ public interface ProductMapper {
         }
         if (product.getIsExpiryTracked() == null) {
             product.setIsExpiryTracked(false);
+        }
+        if (product.getIsFrozen() == null) {
+            product.setIsFrozen(false);
+        }
+        if (product.getIsFragile() == null) {
+            product.setIsFragile(false);
+        }
+        if (product.getIsHazmat() == null) {
+            product.setIsHazmat(false);
+        }
+        if (product.getIsHeavy() == null) {
+            product.setIsHeavy(false);
         }
         if (product.getStatus() == null || product.getStatus().isBlank()) {
             product.setStatus("ACTIVE");
