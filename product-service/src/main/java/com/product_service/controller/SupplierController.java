@@ -15,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -71,6 +72,13 @@ public class SupplierController {
     public ApiResponse<SupplierResponse> update(@PathVariable UUID id,
                                                 @Valid @RequestBody UpdateSupplierRequest request) {
         return ApiResponse.success("Cập nhật nhà cung cấp thành công", supplierService.update(id, request));
+    }
+
+    @PatchMapping("/{id}/status")
+    @Operation(summary = "Thay đổi trạng thái nhà cung cấp", description = "Đổi trạng thái: ACTIVE, INACTIVE, SUSPENDED")
+    public ApiResponse<SupplierResponse> changeStatus(@PathVariable UUID id,
+                                                      @RequestParam String status) {
+        return ApiResponse.success("Cập nhật trạng thái thành công", supplierService.changeStatus(id, status));
     }
 
     @DeleteMapping("/{id}")

@@ -51,6 +51,7 @@ public class ProductExcelExportService {
             Sheet sheet = wb.createSheet("Products");
             String[] headers = {
                     "sku", "id", "name", "categoryCode", "categoryId", "baseUnit",
+
                     "barcodeEan13", "supplierCode", "weightKg", "volumeCm3",
                     "minStockQty", "isLotTracked", "isExpiryTracked",
                     "isFrozen", "isFragile", "isHazmat", "isHeavy", "status"

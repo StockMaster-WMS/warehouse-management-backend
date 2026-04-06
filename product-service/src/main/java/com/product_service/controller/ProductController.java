@@ -95,6 +95,12 @@ public class ProductController {
         return ApiResponse.success("Lấy sản phẩm thành công", productService.findBySku(sku));
     }
 
+    @GetMapping("/find-by-name")
+    @Operation(summary = "Tìm sản phẩm theo tên", description = "Tìm chính xác theo tên (không phân biệt hoa/thường)")
+    public ApiResponse<ProductResponse> findByName(@RequestParam String name) {
+        return ApiResponse.success("Lấy sản phẩm thành công", productService.findByName(name));
+    }
+
     @PostMapping
     @Operation(summary = "Tạo sản phẩm",
             description = "Tạo mới sản phẩm; mã SKU do hệ thống tự sinh (tiền tố SP)")

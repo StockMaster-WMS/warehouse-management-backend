@@ -24,4 +24,6 @@ public interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpec
     boolean existsBySku(String sku);
 
     boolean existsByBarcodeEan13(String barcodeEan13);
+
+    Optional<Product> findByNameIgnoreCase(String name);
 }

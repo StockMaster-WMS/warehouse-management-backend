@@ -56,7 +56,7 @@ class SupplierServiceTest {
                 null,
                 null,
                 null,
-                "ACTIVE"
+                "active"
         );
 
         when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(existingSupplier));
@@ -90,7 +90,7 @@ class SupplierServiceTest {
                 null,
                 null,
                 null,
-                "ACTIVE"
+                "active"
         );
 
         when(supplierRepository.findById(supplierId)).thenReturn(Optional.of(existingSupplier));

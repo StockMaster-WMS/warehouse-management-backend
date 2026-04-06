@@ -21,4 +21,7 @@ public interface ProductClient {
 
     @PostMapping("/batch")
     ApiResponse<List<ProductSummaryData>> getByIds(@RequestBody List<UUID> ids);
+
+    @GetMapping("/find-by-name")
+    ApiResponse<ProductData> findByName(@org.springframework.web.bind.annotation.RequestParam("name") String name);
 }
