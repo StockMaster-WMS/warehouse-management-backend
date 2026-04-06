@@ -36,7 +36,7 @@ public record SupplierResponse(
         @Schema(example = "7")
         Short leadTimeDays,
 
-        @Schema(example = "ACTIVE")
+        @Schema(example = "active")
         String status,
 
         @Schema(example = "2026-03-14T08:30:00Z")

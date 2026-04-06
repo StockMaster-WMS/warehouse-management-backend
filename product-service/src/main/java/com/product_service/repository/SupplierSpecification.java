@@ -26,7 +26,7 @@ public class SupplierSpecification {
             if (!StringUtils.hasText(status)) {
                 return null;
             }
-            return cb.equal(root.get("status"), status);
+            return cb.equal(cb.lower(root.get("status")), status.toLowerCase());
         };
     }
 }

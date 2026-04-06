@@ -109,8 +109,8 @@ public class PoItemExcelImportService {
                     // 1. Parse thông tin sản phẩm + PO item từ dòng Excel
                     ParsedRow parsed = parseRow(row, col, fmt, effectiveCreatedBy);
 
-                    // 2. Tạo sản phẩm mới qua product-service
-                    ProductData product = createProductViaFeign(parsed.productCommand, excelRowNum);
+                    // 2. Kiểm tra sản phẩm đã tồn tại chưa (theo tên), nếu chưa thì tạo mới
+                    ProductData product = findOrCreateProduct(parsed.productCommand, excelRowNum);
 
                     // 3. Tạo PoItem
                     CreatePoItemRequest poItemReq = new CreatePoItemRequest(
@@ -159,9 +159,6 @@ public class PoItemExcelImportService {
             case "barcodeean13", "barcode", "mavach", "ean13" -> Optional.of("barcodeEan13");
             case "suppliercode", "manhacungcap", "supplier" -> Optional.of("supplierCode");
             case "weightkg", "cannangkg" -> Optional.of("weightKg");
-            case "lengthcm", "dai" -> Optional.of("lengthCm");
-            case "widthcm", "rong" -> Optional.of("widthCm");
-            case "heightcm", "cao" -> Optional.of("heightCm");
             case "minstockqty", "tonmin" -> Optional.of("minStockQty");
             case "islottracked", "theolot" -> Optional.of("isLotTracked");
             case "isexpirytracked" -> Optional.of("isExpiryTracked");
@@ -209,9 +206,6 @@ public class PoItemExcelImportService {
                 null,  // primarySupplierId resolved by product-service from supplierCode
                 baseUnit,
                 ExcelRowReader.optionalBigDecimal(row, col, "weightKg", fmt),
-                ExcelRowReader.optionalBigDecimal(row, col, "lengthCm", fmt),
-                ExcelRowReader.optionalBigDecimal(row, col, "widthCm", fmt),
-                ExcelRowReader.optionalBigDecimal(row, col, "heightCm", fmt),
                 ExcelRowReader.optionalInteger(row, col, "minStockQty", fmt),
                 ExcelRowReader.optionalBoolean(row, col, "isLotTracked", fmt),
                 ExcelRowReader.optionalBoolean(row, col, "isExpiryTracked", fmt),
@@ -248,6 +242,26 @@ public class PoItemExcelImportService {
     }
 
     // ---- Feign call ----
+
+    private ProductData findOrCreateProduct(CreateProductCommand command, int excelRow) {
+        // Thử tìm sản phẩm đã tồn tại theo tên
+        try {
+            ApiResponse<ProductData> res = productClient.findByName(command.name());
+            if (res.isSuccess() && res.getData() != null) {
+                log.info("Dòng {}: Sản phẩm '{}' đã tồn tại (id={}), bỏ qua tạo mới",
+                        excelRow, command.name(), res.getData().id());
+                return res.getData();
+            }
+        } catch (FeignException.NotFound e) {
+            // Sản phẩm chưa tồn tại → tiếp tục tạo mới
+            log.debug("Dòng {}: Sản phẩm '{}' chưa tồn tại, sẽ tạo mới", excelRow, command.name());
+        } catch (FeignException e) {
+            log.warn("Dòng {}: Không thể kiểm tra sản phẩm '{}', sẽ thử tạo mới. Lỗi: {}",
+                    excelRow, command.name(), e.getMessage());
+        }
+        // Tạo sản phẩm mới
+        return createProductViaFeign(command, excelRow);
+    }
 
     private ProductData createProductViaFeign(CreateProductCommand command, int excelRow) {
         try {

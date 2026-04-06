@@ -50,7 +50,7 @@ public class ProductExcelExportService {
             Sheet sheet = wb.createSheet("Products");
             String[] headers = {
                     "sku", "id", "name", "categoryCode", "categoryId", "baseUnit",
-                    "barcodeEan13", "supplierCode", "weightKg", "lengthCm", "widthCm", "heightCm",
+                    "barcodeEan13", "supplierCode", "weightKg",
                     "minStockQty", "isLotTracked", "isExpiryTracked", "status"
             };
             Row headerRow = sheet.createRow(0);
@@ -71,9 +71,6 @@ public class ProductExcelExportService {
                 row.createCell(c++).setCellValue(
                         p.getPrimarySupplier() != null ? p.getPrimarySupplier().getCode() : "");
                 setBigDecimalCell(row, c++, p.getWeightKg());
-                setBigDecimalCell(row, c++, p.getLengthCm());
-                setBigDecimalCell(row, c++, p.getWidthCm());
-                setBigDecimalCell(row, c++, p.getHeightCm());
                 if (p.getMinStockQty() != null) {
                     row.createCell(c++).setCellValue(p.getMinStockQty());
                 } else {

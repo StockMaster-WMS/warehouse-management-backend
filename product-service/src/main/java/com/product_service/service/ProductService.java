@@ -66,6 +66,11 @@ public class ProductService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm")));
     }
 
+    public ProductResponse findByName(String name) {
+        return productMapper.toResponse(productRepository.findByNameIgnoreCase(name)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm")));
+    }
+
     public List<ProductSummaryResponse> findSummariesByIds(List<UUID> ids) {
         if (ids == null || ids.isEmpty()) {
             return List.of();

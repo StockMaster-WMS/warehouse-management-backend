@@ -51,7 +51,7 @@ public class Supplier {
 
     @Builder.Default
     @Column(name = "status", length = 20)
-    private String status = "ACTIVE";
+    private String status = "active";
 
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;

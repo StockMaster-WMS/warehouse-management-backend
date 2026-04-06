@@ -40,7 +40,7 @@ public record UpdateSupplierRequest(
         @Schema(example = "7")
         Short leadTimeDays,
 
-        @Schema(example = "ACTIVE")
+        @Schema(example = "active")
         String status
 ) {
 }

@@ -17,12 +17,15 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class SupplierService {
+
+    private static final Set<String> VALID_STATUSES = Set.of("active", "inactive", "suspended");
 
     private final SupplierRepository supplierRepository;
     private final SupplierMapper supplierMapper;
@@ -65,6 +68,18 @@ public class SupplierService {
 
         supplierMapper.updateEntity(request, supplier);
 
+        return supplierMapper.toResponse(supplierRepository.save(supplier));
+    }
+
+    @Transactional
+    public SupplierResponse changeStatus(UUID id, String status) {
+        String normalized = status.toLowerCase();
+        if (!VALID_STATUSES.contains(normalized)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Trạng thái không hợp lệ. Chỉ chấp nhận: " + VALID_STATUSES);
+        }
+        Supplier supplier = getSupplier(id);
+        supplier.setStatus(normalized);
         return supplierMapper.toResponse(supplierRepository.save(supplier));
     }
 

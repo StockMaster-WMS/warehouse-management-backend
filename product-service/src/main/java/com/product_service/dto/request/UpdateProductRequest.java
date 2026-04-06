@@ -37,12 +37,6 @@ public record UpdateProductRequest(
 
         @Schema(example = "0.45")
         BigDecimal weightKg,
-        @Schema(example = "18")
-        BigDecimal lengthCm,
-        @Schema(example = "12")
-        BigDecimal widthCm,
-        @Schema(example = "6")
-        BigDecimal heightCm,
         @Schema(example = "20")
         Integer minStockQty,
         @Schema(example = "true")

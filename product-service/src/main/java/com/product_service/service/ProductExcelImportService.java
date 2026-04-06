@@ -120,9 +120,6 @@ public class ProductExcelImportService {
             case "barcodeean13", "barcode", "mavach", "ean13" -> Optional.of("barcodeEan13");
             case "suppliercode", "manhacungcap", "supplier" -> Optional.of("supplierCode");
             case "weightkg", "cannangkg" -> Optional.of("weightKg");
-            case "lengthcm", "dai" -> Optional.of("lengthCm");
-            case "widthcm", "rong" -> Optional.of("widthCm");
-            case "heightcm", "cao" -> Optional.of("heightCm");
             case "minstockqty", "tonmin" -> Optional.of("minStockQty");
             case "islottracked", "theolot" -> Optional.of("isLotTracked");
             case "isexpirytracked" -> Optional.of("isExpiryTracked");
@@ -166,9 +163,6 @@ public class ProductExcelImportService {
                 primarySupplierId,
                 baseUnit.trim(),
                 ExcelRowReader.optionalBigDecimal(row, col, "weightKg", fmt),
-                ExcelRowReader.optionalBigDecimal(row, col, "lengthCm", fmt),
-                ExcelRowReader.optionalBigDecimal(row, col, "widthCm", fmt),
-                ExcelRowReader.optionalBigDecimal(row, col, "heightCm", fmt),
                 ExcelRowReader.optionalInteger(row, col, "minStockQty", fmt),
                 ExcelRowReader.optionalBoolean(row, col, "isLotTracked", fmt),
                 ExcelRowReader.optionalBoolean(row, col, "isExpiryTracked", fmt),
