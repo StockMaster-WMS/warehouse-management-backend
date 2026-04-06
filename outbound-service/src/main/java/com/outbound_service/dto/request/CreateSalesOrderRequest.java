@@ -31,7 +31,7 @@ public record CreateSalesOrderRequest(
         Short priority,
 
         @Schema(description = "Trạng thái (mặc định PENDING nếu bỏ trống)", example = "PENDING", allowableValues = {
-                "PENDING", "PICKING", "PICKED", "PACKED", "SHIPPED" })
+                "PENDING", "ON_HOLD", "PICKING", "PICKED", "PACKED", "SHIPPED", "CANCELLED" })
         String status
 ) {
 }

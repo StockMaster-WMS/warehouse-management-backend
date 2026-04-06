@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -45,6 +46,7 @@ public class SalesOrderService {
     private final WarehouseStockGateway warehouseStockGateway;
     private final SalesOrderMapper salesOrderMapper;
 
+    // Lấy danh sách đơn xuất có phân trang và bộ lọc.
     public PagedResponse<SalesOrderResponse> findAll(Pageable pageable, String keyword, String status,
             UUID warehouseId) {
         Specification<SalesOrder> spec = SalesOrderSpecification.hasKeyword(keyword)
@@ -60,15 +62,18 @@ public class SalesOrderService {
                 mapped.getTotalPages());
     }
 
+    // Lấy đơn xuất theo id.
     public SalesOrderResponse findById(UUID id) {
         return salesOrderMapper.toResponse(getSalesOrder(id));
     }
 
+    // Lấy đơn xuất theo mã số đơn.
     public SalesOrderResponse findBySoNumber(String soNumber) {
         return salesOrderMapper.toResponse(salesOrderRepository.findBySoNumber(soNumber)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất")));
     }
 
+    // Tạo mới đơn xuất và sinh mã đơn tự động.
     @Transactional
     public SalesOrderResponse create(CreateSalesOrderRequest request) {
         SalesOrder salesOrder = salesOrderMapper.toEntity(request);
@@ -77,6 +82,7 @@ public class SalesOrderService {
         return salesOrderMapper.toResponse(salesOrderRepository.save(salesOrder));
     }
 
+    // Cập nhật thông tin đơn xuất khi đang ở trạng thái PENDING.
     @Transactional
     public SalesOrderResponse update(UUID id, UpdateSalesOrderRequest request) {
         SalesOrder salesOrder = getSalesOrder(id);
@@ -94,6 +100,7 @@ public class SalesOrderService {
         return salesOrderMapper.toResponse(salesOrderRepository.save(salesOrder));
     }
 
+    // Xóa đơn xuất khi chưa phát sinh picking.
     @Transactional
     public void delete(UUID id) {
         SalesOrder salesOrder = getSalesOrder(id);
@@ -104,6 +111,7 @@ public class SalesOrderService {
         salesOrderRepository.delete(salesOrder);
     }
 
+    // Chuyển đơn từ PENDING sang PICKING.
     @Transactional
     public SalesOrderResponse startPicking(UUID id) {
         SalesOrder so = getSalesOrder(id);
@@ -116,41 +124,76 @@ public class SalesOrderService {
         return salesOrderMapper.toResponse(salesOrderRepository.save(so));
     }
 
+    // Xác nhận đơn đã pick xong khi đủ điều kiện.
+    @Transactional
+    public SalesOrderResponse markPicked(UUID id) {
+        SalesOrder so = getSalesOrder(id);
+        requireStatus(so, SalesOrderStatus.PICKING, "Chỉ xác nhận PICKED khi đơn đang PICKING");
+
+        ensurePickingCompleted(id);
+
+        so.setStatus(SalesOrderStatus.PICKED);
+        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+    }
+
+    // Chuyển đơn sang trạng thái đóng gói.
     @Transactional
     public SalesOrderResponse markPacked(UUID id) {
         SalesOrder so = getSalesOrder(id);
-        requireStatus(so, SalesOrderStatus.PICKING, "Chỉ đóng gói khi đơn đang PICKING");
+        requireStatus(so, SalesOrderStatus.PICKED, "Chỉ đóng gói khi đơn đang PICKED");
 
-        List<PickingItem> picks = pickingItemRepository.findBySalesOrderIdWithSoItem(id);
-        if (picks.isEmpty()) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Chưa có picking item cho đơn này");
-        }
-        for (PickingItem p : picks) {
-            int picked = p.getQtyPicked() == null ? 0 : p.getQtyPicked();
-            if (p.getStatus() != PickingItemStatus.PICKED || picked < p.getQtyToPick()) {
-                throw new AppException(ErrorCode.BAD_REQUEST,
-                        "Chưa pick đủ: kiểm tra trạng thái PICKED và qtyPicked cho từng dòng picking");
-            }
-        }
-
-        Map<UUID, Integer> pickedBySoItem = picks.stream()
-                .collect(Collectors.groupingBy(
-                        p -> p.getSoItem().getId(),
-                        Collectors.summingInt(p -> p.getQtyPicked() == null ? 0 : p.getQtyPicked())));
-        List<SalesOrderItem> lines = salesOrderItemRepository.findBySalesOrder_Id(id);
-        for (SalesOrderItem line : lines) {
-            int sum = pickedBySoItem.getOrDefault(line.getId(), 0);
-            if (sum < line.getOrderedQty()) {
-                throw new AppException(ErrorCode.BAD_REQUEST,
-                        "Chưa pick đủ theo dòng đơn: line " + line.getLineNumber()
-                                + " (đặt " + line.getOrderedQty() + ", đã pick " + sum + ")");
-            }
-        }
+        ensurePickingCompleted(id);
 
         so.setStatus(SalesOrderStatus.PACKED);
         return salesOrderMapper.toResponse(salesOrderRepository.save(so));
     }
 
+    // Tạm dừng xử lý đơn xuất khi trạng thái cho phép.
+    @Transactional
+    public SalesOrderResponse hold(UUID id) {
+        SalesOrder so = getSalesOrder(id);
+        if (!Set.of(SalesOrderStatus.PENDING, SalesOrderStatus.PICKING, SalesOrderStatus.PICKED, SalesOrderStatus.PACKED)
+                .contains(so.getStatus())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ tạm dừng đơn chưa giao hàng");
+        }
+        so.setStatus(SalesOrderStatus.ON_HOLD);
+        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+    }
+
+    // Tiếp tục xử lý đơn từ trạng thái ON_HOLD.
+    @Transactional
+    public SalesOrderResponse resume(UUID id) {
+        SalesOrder so = getSalesOrder(id);
+        requireStatus(so, SalesOrderStatus.ON_HOLD, "Chỉ tiếp tục khi đơn đang ON_HOLD");
+
+        List<PickingItem> picks = pickingItemRepository.findBySalesOrderIdWithSoItem(id);
+        if (picks.isEmpty()) {
+            so.setStatus(SalesOrderStatus.PENDING);
+        } else if (isPickingCompleted(id, picks)) {
+            so.setStatus(SalesOrderStatus.PICKED);
+        } else {
+            so.setStatus(SalesOrderStatus.PICKING);
+        }
+        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+    }
+
+    // Hủy đơn xuất và giải phóng lượng reserved đã giữ.
+    @Transactional
+    public SalesOrderResponse cancel(UUID id) {
+        SalesOrder so = getSalesOrder(id);
+        if (so.getStatus() == SalesOrderStatus.SHIPPED) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không thể hủy đơn đã giao hàng");
+        }
+        if (so.getStatus() == SalesOrderStatus.CANCELLED) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Đơn xuất đã hủy trước đó");
+        }
+
+        releaseReservedForOrder(so);
+        so.setStatus(SalesOrderStatus.CANCELLED);
+        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+    }
+
+    // Xác nhận giao hàng, trừ tồn kho và cập nhật shippedQty.
     @Transactional
     public SalesOrderResponse markShipped(UUID id) {
         SalesOrder so = getSalesOrder(id);
@@ -170,12 +213,14 @@ public class SalesOrderService {
 
     // ==================== private helpers ====================
 
+    // Kiểm tra trạng thái hiện tại của đơn có đúng kỳ vọng.
     private void requireStatus(SalesOrder so, SalesOrderStatus expected, String errorMessage) {
         if (so.getStatus() != expected) {
             throw new AppException(ErrorCode.BAD_REQUEST, errorMessage);
         }
     }
 
+    // Trừ reserved và trừ on-hand theo số lượng đã pick.
     private void deductStock(SalesOrder so, List<PickingItem> picks) {
         for (PickingItem p : picks) {
             int picked = p.getQtyPicked() == null ? 0 : p.getQtyPicked();
@@ -186,18 +231,19 @@ public class SalesOrderService {
                     so.getWarehouseId(),
                     p.getLocationId(),
                     p.getProductId(),
-                    null,
+                    p.getLotNumber(),
                     -picked));
             StockAdjustCommand cmd = new StockAdjustCommand(
                     so.getWarehouseId(),
                     p.getLocationId(),
                     p.getProductId(),
-                    null,
+                    p.getLotNumber(),
                     -picked);
             warehouseStockGateway.adjustOrThrow(cmd);
         }
     }
 
+    // Tổng hợp picked theo từng dòng đơn và cập nhật shippedQty.
     private void updateShippedQuantities(UUID salesOrderId, List<PickingItem> picks) {
         Map<UUID, Integer> pickedBySoItem = picks.stream()
                 .collect(Collectors.groupingBy(
@@ -211,6 +257,59 @@ public class SalesOrderService {
         salesOrderItemRepository.saveAll(lines);
     }
 
+    // Đảm bảo toàn bộ picking của đơn đã hoàn tất.
+    private void ensurePickingCompleted(UUID salesOrderId) {
+        List<PickingItem> picks = pickingItemRepository.findBySalesOrderIdWithSoItem(salesOrderId);
+        if (!isPickingCompleted(salesOrderId, picks)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Chưa pick đủ: kiểm tra trạng thái PICKED và qtyPicked theo từng dòng đơn");
+        }
+    }
+
+    // Kiểm tra điều kiện complete của tất cả picking và từng dòng đơn.
+    private boolean isPickingCompleted(UUID salesOrderId, List<PickingItem> picks) {
+        if (picks.isEmpty()) {
+            return false;
+        }
+        for (PickingItem p : picks) {
+            int picked = p.getQtyPicked() == null ? 0 : p.getQtyPicked();
+            if (p.getStatus() != PickingItemStatus.PICKED || picked < p.getQtyToPick()) {
+                return false;
+            }
+        }
+
+        Map<UUID, Integer> pickedBySoItem = picks.stream()
+                .collect(Collectors.groupingBy(
+                        p -> p.getSoItem().getId(),
+                        Collectors.summingInt(p -> p.getQtyPicked() == null ? 0 : p.getQtyPicked())));
+        List<SalesOrderItem> lines = salesOrderItemRepository.findBySalesOrder_Id(salesOrderId);
+        for (SalesOrderItem line : lines) {
+            int sum = pickedBySoItem.getOrDefault(line.getId(), 0);
+            if (sum < line.getOrderedQty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Giải phóng reserved cho toàn bộ picking thuộc đơn xuất.
+    private void releaseReservedForOrder(SalesOrder so) {
+        List<PickingItem> picks = pickingItemRepository.findBySalesOrderIdWithSoItem(so.getId());
+        for (PickingItem p : picks) {
+            int qtyToRelease = p.getQtyToPick() == null ? 0 : p.getQtyToPick();
+            if (qtyToRelease <= 0) {
+                continue;
+            }
+            warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
+                    so.getWarehouseId(),
+                    p.getLocationId(),
+                    p.getProductId(),
+                    p.getLotNumber(),
+                    -qtyToRelease));
+        }
+    }
+
+    // Tìm thực thể đơn xuất theo id, ném lỗi nếu không tồn tại.
     private SalesOrder getSalesOrder(UUID id) {
         return salesOrderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất"));

@@ -72,10 +72,7 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /**
-     * FIX: Khai báo rõ bean CorsConfigurationSource để Spring Security dùng.
-     * Không khai báo bean này thì .cors(cors -> cors.configurationSource(...)) sẽ không hoạt động.
-     */
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();

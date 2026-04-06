@@ -63,6 +63,22 @@ public class Product {
     @Builder.Default
     private Boolean isExpiryTracked = false;
 
+    @Column(name = "is_frozen")
+    @Builder.Default
+    private Boolean isFrozen = false;
+
+    @Column(name = "is_fragile")
+    @Builder.Default
+    private Boolean isFragile = false;
+
+    @Column(name = "is_hazmat")
+    @Builder.Default
+    private Boolean isHazmat = false;
+
+    @Column(name = "is_heavy")
+    @Builder.Default
+    private Boolean isHeavy = false;
+
     @Column(name = "status", length = 20)
     @Builder.Default
     private String status = "ACTIVE";

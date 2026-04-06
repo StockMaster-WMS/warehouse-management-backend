@@ -31,6 +31,7 @@ public class PoItemService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final PoItemMapper poItemMapper;
 
+    // Lấy danh sách dòng đơn nhập có phân trang và tìm kiếm.
     public PagedResponse<PoItemResponse> findAll(Pageable pageable, UUID purchaseOrderId, String keyword) {
         Specification<PoItem> spec = PoItemSpecification.hasPurchaseOrderId(purchaseOrderId)
                 .and(PoItemSpecification.hasKeyword(keyword));
@@ -44,10 +45,12 @@ public class PoItemService {
                 mapped.getTotalPages());
     }
 
+    // Lấy chi tiết dòng đơn nhập theo id.
     public PoItemResponse findById(UUID id) {
         return poItemMapper.toResponse(getPoItem(id));
     }
 
+    // Tạo mới dòng đơn nhập.
     @Transactional
     public PoItemResponse create(CreatePoItemRequest request) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(request.purchaseOrderId());
@@ -62,6 +65,7 @@ public class PoItemService {
         return poItemMapper.toResponse(poItemRepository.save(item));
     }
 
+    // Cập nhật dòng đơn nhập theo id.
     @Transactional
     public PoItemResponse update(UUID id, UpdatePoItemRequest request) {
         PoItem item = getPoItem(id);
@@ -85,6 +89,7 @@ public class PoItemService {
         return poItemMapper.toResponse(poItemRepository.save(item));
     }
 
+    // Xóa dòng đơn nhập khi chưa phát sinh nhận hàng.
     @Transactional
     public void delete(UUID id) {
         PoItem item = getPoItem(id);
@@ -96,16 +101,19 @@ public class PoItemService {
         poItemRepository.delete(item);
     }
 
+    // Tìm thực thể dòng đơn nhập theo id.
     private PoItem getPoItem(UUID id) {
         return poItemRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn nhập"));
     }
 
+    // Tìm thực thể đơn nhập theo id.
     private PurchaseOrder getPurchaseOrder(UUID id) {
         return purchaseOrderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
     }
 
+    // Kiểm tra trùng số dòng trong cùng đơn nhập.
     private void ensureLineNumberUnique(UUID poId, Short lineNumber, UUID currentItemId) {
         poItemRepository.findByPurchaseOrderIdAndLineNumber(poId, lineNumber)
                 .filter(existing -> currentItemId == null || !existing.getId().equals(currentItemId))
@@ -114,6 +122,7 @@ public class PoItemService {
                 });
     }
 
+    // Bắt buộc PO ở trạng thái DRAFT mới cho sửa dòng.
     private void requirePoEditable(PurchaseOrder purchaseOrder) {
         if (purchaseOrder.getStatus() != PurchaseOrderStatus.DRAFT) {
             throw new AppException(ErrorCode.BAD_REQUEST,
@@ -121,6 +130,7 @@ public class PoItemService {
         }
     }
 
+    // Kiểm tra số lượng đặt hợp lệ.
     private void validateOrderedQty(Integer orderedQty) {
         if (orderedQty <= 0) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng đặt phải lớn hơn 0");

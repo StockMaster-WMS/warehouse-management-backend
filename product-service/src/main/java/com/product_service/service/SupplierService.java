@@ -30,6 +30,7 @@ public class SupplierService {
     private final SupplierRepository supplierRepository;
     private final SupplierMapper supplierMapper;
 
+    // Lấy danh sách nhà cung cấp có phân trang và bộ lọc.
     public PagedResponse<SupplierResponse> findAll(Pageable pageable, String keyword, String status) {
         Specification<Supplier> spec = SupplierSpecification.hasKeyword(keyword)
                 .and(SupplierSpecification.hasStatus(status));
@@ -43,15 +44,18 @@ public class SupplierService {
                 mapped.getTotalPages());
     }
 
+    // Lấy chi tiết nhà cung cấp theo id.
     public SupplierResponse findById(UUID id) {
         return supplierMapper.toResponse(getSupplier(id));
     }
 
+    // Lấy chi tiết nhà cung cấp theo mã.
     public SupplierResponse findByCode(String code) {
         return supplierMapper.toResponse(supplierRepository.findByCode(code)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy nhà cung cấp")));
     }
 
+    // Tạo mới nhà cung cấp.
     @Transactional
     public SupplierResponse create(CreateSupplierRequest request) {
         validateCreateRequest(request.code(), request.taxCode());
@@ -61,6 +65,7 @@ public class SupplierService {
         return supplierMapper.toResponse(supplierRepository.save(supplier));
     }
 
+    // Cập nhật nhà cung cấp theo id.
     @Transactional
     public SupplierResponse update(UUID id, UpdateSupplierRequest request) {
         Supplier supplier = getSupplier(id);
@@ -71,6 +76,7 @@ public class SupplierService {
         return supplierMapper.toResponse(supplierRepository.save(supplier));
     }
 
+    // Xóa nhà cung cấp theo id.
     @Transactional
     public SupplierResponse changeStatus(UUID id, String status) {
         String normalized = status.toLowerCase();
@@ -89,11 +95,13 @@ public class SupplierService {
         supplierRepository.delete(supplier);
     }
 
+    // Tìm thực thể nhà cung cấp theo id.
     private Supplier getSupplier(UUID id) {
         return supplierRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy nhà cung cấp"));
     }
 
+    // Kiểm tra hợp lệ khi tạo mới nhà cung cấp.
     private void validateCreateRequest(String code, String taxCode) {
         if (supplierRepository.existsByCode(code)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Mã nhà cung cấp đã tồn tại");
@@ -101,6 +109,7 @@ public class SupplierService {
         validateTaxCodeUniqueness(taxCode, null);
     }
 
+    // Kiểm tra hợp lệ khi cập nhật nhà cung cấp.
     private void validateUpdateRequest(UUID id, String code, String taxCode) {
         supplierRepository.findByCode(code)
                 .filter(existing -> !existing.getId().equals(id))
@@ -111,6 +120,7 @@ public class SupplierService {
         validateTaxCodeUniqueness(taxCode, id);
     }
 
+    // Kiểm tra mã số thuế là duy nhất.
     private void validateTaxCodeUniqueness(String taxCode, UUID supplierId) {
         if (taxCode == null || taxCode.isBlank()) {
             return;

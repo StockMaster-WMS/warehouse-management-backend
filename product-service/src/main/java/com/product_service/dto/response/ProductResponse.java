@@ -32,6 +32,14 @@ public record ProductResponse(
         Boolean isLotTracked,
         @Schema(example = "true")
         Boolean isExpiryTracked,
+        @Schema(example = "false")
+        Boolean isFrozen,
+        @Schema(example = "false")
+        Boolean isFragile,
+        @Schema(example = "false")
+        Boolean isHazmat,
+        @Schema(example = "false")
+        Boolean isHeavy,
         @Schema(example = "ACTIVE")
         String status,
         @Schema(example = "2026-03-14T08:30:00Z")

@@ -41,6 +41,7 @@ public class ProductService {
     private final SupplierRepository supplierRepository;
     private final ProductMapper productMapper;
 
+    // Lấy danh sách sản phẩm có phân trang và bộ lọc.
     public PagedResponse<ProductResponse> findAll(Pageable pageable, String keyword, UUID categoryId,
             String status) {
         Specification<Product> spec = ProductSpecification
@@ -57,20 +58,18 @@ public class ProductService {
                 mappedPage.getTotalPages());
     }
 
+    // Lấy chi tiết sản phẩm theo id.
     public ProductResponse findById(UUID id) {
         return productMapper.toResponse(getProduct(id));
     }
 
+    // Lấy chi tiết sản phẩm theo SKU.
     public ProductResponse findBySku(String sku) {
         return productMapper.toResponse(productRepository.findBySku(sku)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm")));
     }
 
-    public ProductResponse findByName(String name) {
-        return productMapper.toResponse(productRepository.findByNameIgnoreCase(name)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm")));
-    }
-
+    // Lấy danh sách tóm tắt sản phẩm theo danh sách id.
     public List<ProductSummaryResponse> findSummariesByIds(List<UUID> ids) {
         if (ids == null || ids.isEmpty()) {
             return List.of();
@@ -92,6 +91,7 @@ public class ProductService {
         return result;
     }
 
+    // Tạo mới sản phẩm và sinh SKU duy nhất.
     @Transactional
     public ProductResponse create(CreateProductRequest request) {
         validateBarcodeUniqueness(request.barcodeEan13(), null);
@@ -109,6 +109,7 @@ public class ProductService {
         return productMapper.toResponse(productRepository.save(product));
     }
 
+    // Cập nhật thông tin sản phẩm theo id.
     @Transactional
     public ProductResponse update(UUID id, UpdateProductRequest request) {
         Product product = getProduct(id);
@@ -126,17 +127,20 @@ public class ProductService {
         return productMapper.toResponse(productRepository.save(product));
     }
 
+    // Xóa sản phẩm theo id.
     @Transactional
     public void delete(UUID id) {
         Product product = getProduct(id);
         productRepository.delete(product);
     }
 
+    // Tìm thực thể sản phẩm, ném lỗi nếu không tồn tại.
     private Product getProduct(UUID id) {
         return productRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm"));
     }
 
+    // Sinh SKU mới và kiểm tra trùng lặp.
     private String generateUniqueSku() {
         for (int attempt = 0; attempt < 10; attempt++) {
             String sku = CodeGenerator.generate(PRODUCT_SKU_PREFIX);
@@ -148,6 +152,7 @@ public class ProductService {
                 "Không thể tạo mã SKU duy nhất, vui lòng thử lại");
     }
 
+    // Kiểm tra hợp lệ khi cập nhật SKU và barcode.
     private void validateUpdateRequest(UUID id, String sku, String barcodeEan13) {
         productRepository.findBySku(sku).ifPresent(existing -> {
             if (!existing.getId().equals(id)) {
@@ -157,6 +162,7 @@ public class ProductService {
         validateBarcodeUniqueness(barcodeEan13, id);
     }
 
+    // Kiểm tra barcode là duy nhất trong hệ thống.
     private void validateBarcodeUniqueness(String barcodeEan13, UUID productId) {
         if (barcodeEan13 == null || barcodeEan13.isBlank()) {
             return;
@@ -169,6 +175,7 @@ public class ProductService {
         });
     }
 
+    // Resolve nhà cung cấp chính theo id.
     private Supplier resolveSupplier(UUID primarySupplierId) {
         if (primarySupplierId == null) {
             return null;

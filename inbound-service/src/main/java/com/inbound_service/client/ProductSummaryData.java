@@ -1,7 +1,5 @@
 package com.inbound_service.client;
-
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-
 import java.util.UUID;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
