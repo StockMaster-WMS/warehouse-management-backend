@@ -5,7 +5,6 @@ import com.outbound_service.dto.request.UpdateSalesOrderItemRequest;
 import com.outbound_service.dto.response.SalesOrderItemResponse;
 import com.outbound_service.entity.SalesOrderItem;
 import org.mapstruct.AfterMapping;
-import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
@@ -13,7 +12,6 @@ import org.mapstruct.MappingTarget;
 @Mapper(componentModel = "spring")
 public interface SalesOrderItemMapper {
 
-    @BeanMapping(ignoreUnmappedSourceProperties = "autoAllocatePicking")
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "salesOrder", ignore = true)
     @Mapping(target = "shippedQty", ignore = true)

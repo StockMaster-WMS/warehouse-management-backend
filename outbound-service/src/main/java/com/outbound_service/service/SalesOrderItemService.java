@@ -30,7 +30,6 @@ public class SalesOrderItemService {
     private final SalesOrderItemRepository salesOrderItemRepository;
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderItemMapper salesOrderItemMapper;
-    private final PickingItemService pickingItemService;
 
     // Lấy danh sách dòng đơn xuất có phân trang và tìm kiếm.
     public PagedResponse<SalesOrderItemResponse> findAll(Pageable pageable, UUID salesOrderId, String keyword) {
@@ -51,7 +50,7 @@ public class SalesOrderItemService {
         return salesOrderItemMapper.toResponse(getLine(id));
     }
 
-    // Tạo mới dòng đơn xuất và tự động allocate picking nếu được bật.
+    // Tạo mới dòng đơn xuất.
     @Transactional
     public SalesOrderItemResponse create(CreateSalesOrderItemRequest request) {
         SalesOrder order = getOrder(request.salesOrderId());
@@ -61,10 +60,6 @@ public class SalesOrderItemService {
         SalesOrderItem item = salesOrderItemMapper.toEntity(request);
         item.setSalesOrder(order);
         SalesOrderItem saved = salesOrderItemRepository.save(item);
-        boolean autoAllocate = request.autoAllocatePicking() == null || Boolean.TRUE.equals(request.autoAllocatePicking());
-        if (autoAllocate) {
-            pickingItemService.allocatePickingLinesForNewSoItem(saved);
-        }
         return salesOrderItemMapper.toResponse(saved);
     }
 

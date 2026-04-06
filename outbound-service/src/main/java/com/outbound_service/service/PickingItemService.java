@@ -30,7 +30,6 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
@@ -41,10 +40,6 @@ import java.util.UUID;
 @Slf4j
 @Transactional(readOnly = true)
 public class PickingItemService {
-
-    private static final Comparator<WarehouseStockData> FEFO_THEN_LOCATION = Comparator
-            .comparing(WarehouseStockData::expiryDate, Comparator.nullsLast(Comparator.naturalOrder()))
-            .thenComparing(WarehouseStockData::locationId);
 
     private final PickingItemRepository pickingItemRepository;
     private final SalesOrderItemRepository salesOrderItemRepository;
@@ -129,12 +124,6 @@ public class PickingItemService {
             return null;
         }
     }
-
-    // Lấy picking item theo id.
-    public PickingItemResponse findById(UUID id) {
-        return pickingItemMapper.toResponse(getPickingItem(id));
-    }
-
     // Tạo mới picking item và cộng lượng reserved tương ứng.
     @Transactional
     public PickingItemResponse create(CreatePickingItemRequest request) {
@@ -235,11 +224,7 @@ public class PickingItemService {
         pickingItemRepository.delete(item);
     }
 
-    // Tìm thực thể picking item, ném lỗi nếu không tồn tại.
-    private PickingItem getPickingItem(UUID id) {
-        return pickingItemRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy picking item"));
-    }
+
 
     // Kiểm tra trạng thái đơn xuất có cho phép chỉnh sửa nghiệp vụ picking hay không.
     private static void assertSalesOrderAllowsPickingMutation(SalesOrder so) {
@@ -275,57 +260,6 @@ public class PickingItemService {
         }
         if (status == PickingItemStatus.PICKED && picked != qtyToPick) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Trạng thái PICKED yêu cầu qtyPicked bằng qtyToPick");
-        }
-    }
-
-    // Tự động tách và tạo các dòng picking theo FEFO và tồn khả dụng.
-    @Transactional
-    public void allocatePickingLinesForNewSoItem(SalesOrderItem line) {
-        SalesOrder so = line.getSalesOrder();
-        if (so.getStatus() != SalesOrderStatus.PENDING) {
-            return;
-        }
-        int need = line.getOrderedQty();
-        if (need <= 0) {
-            return;
-        }
-        UUID warehouseId = so.getWarehouseId();
-        UUID productId = line.getProductId();
-
-        List<WarehouseStockData> rows = warehouseStockGateway.listAllStocksForProduct(warehouseId, productId).stream()
-                .filter(r -> availableQty(r) > 0)
-                .sorted(FEFO_THEN_LOCATION)
-                .toList();
-
-        long totalAvail = rows.stream().mapToLong(PickingItemService::availableQty).sum();
-        if (totalAvail < need) {
-            throw new AppException(ErrorCode.BAD_REQUEST,
-                    "Không đủ tồn khả dụng để tự tạo picking (cần " + need + ", khả dụng " + totalAvail + ")");
-        }
-
-        int remaining = need;
-        int seq = 1;
-        for (WarehouseStockData r : rows) {
-            if (remaining <= 0) {
-                break;
-            }
-            int av = availableQty(r);
-            if (av <= 0) {
-                continue;
-            }
-            int take = Math.min(remaining, av);
-            CreatePickingItemRequest req = new CreatePickingItemRequest(
-                    line.getId(),
-                    line.getProductId(),
-                    r.locationId(),
-                    take,
-                    0,
-                    PickingItemStatus.PENDING.name(),
-                    seq,
-                    normalizeLot(r.lotNumber()));
-            create(req);
-            seq++;
-            remaining -= take;
         }
     }
 
