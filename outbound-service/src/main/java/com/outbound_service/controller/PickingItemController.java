@@ -58,15 +58,9 @@ public class PickingItemController {
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Lấy picking item theo ID", description = "Thêm details=true để lấy đầy đủ thông tin sản phẩm, vị trí, tồn khả dụng")
-    public ApiResponse<?> getById(
-            @PathVariable UUID id,
-            @RequestParam(defaultValue = "false") boolean details) {
-        if (details) {
-            return ApiResponse.success("Lấy chi tiết picking item thành công", pickingItemService.findDetailForPicker(id));
-        } else {
-            return ApiResponse.success("Lấy picking item thành công", pickingItemService.findById(id));
-        }
+    @Operation(summary = "Lấy picking item theo ID")
+    public ApiResponse<?> getById(@PathVariable UUID id) {
+        return ApiResponse.success("Lấy chi tiết picking item thành công", pickingItemService.findDetailForPicker(id));
     }
 
     @PostMapping

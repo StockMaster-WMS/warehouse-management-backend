@@ -2,9 +2,7 @@ package com.outbound_service.integration;
 
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
-import com.outbound_service.client.WarehouseStockData;
 import com.outbound_service.client.WarehouseStockGateway;
-import com.outbound_service.dto.request.CreateSalesOrderItemRequest;
 import com.outbound_service.entity.PickingItem;
 import com.outbound_service.entity.PickingItemStatus;
 import com.outbound_service.entity.SalesOrder;
@@ -13,7 +11,6 @@ import com.outbound_service.entity.SalesOrderStatus;
 import com.outbound_service.repository.PickingItemRepository;
 import com.outbound_service.repository.SalesOrderItemRepository;
 import com.outbound_service.repository.SalesOrderRepository;
-import com.outbound_service.service.SalesOrderItemService;
 import com.outbound_service.service.SalesOrderService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,7 +18,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 
@@ -32,7 +28,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 @SpringBootTest(properties = {
                 "spring.cloud.discovery.enabled=false",
@@ -45,9 +40,6 @@ class SalesOrderFlowErrorIntegrationTest {
 
         @Autowired
         private SalesOrderService salesOrderService;
-
-        @Autowired
-        private SalesOrderItemService salesOrderItemService;
 
         @Autowired
         private SalesOrderRepository salesOrderRepository;
@@ -126,44 +118,6 @@ class SalesOrderFlowErrorIntegrationTest {
                 SalesOrder reloaded = salesOrderRepository.findById(order.getId()).orElseThrow();
                 assertEquals(SalesOrderStatus.PACKED, reloaded.getStatus());
                 verify(warehouseStockGateway, never()).adjustOrThrow(any());
-        }
-
-        @Test
-        @DisplayName("create SO item thất bại khi auto-allocate không đủ tồn khả dụng")
-        void createSoItem_shouldFail_whenAutoAllocateInsufficientStock() {
-                SalesOrder order = saveOrder(SalesOrderStatus.PENDING);
-                UUID productId = UUID.randomUUID();
-
-                when(warehouseStockGateway.listAllStocksForProduct(order.getWarehouseId(), productId))
-                                .thenReturn(java.util.List.of(
-                                                new WarehouseStockData(
-                                                                UUID.randomUUID(),
-                                                                order.getWarehouseId(),
-                                                                UUID.randomUUID(),
-                                                                productId,
-                                                                "LOT-1",
-                                                                LocalDate.now().plusDays(30),
-                                                                2,
-                                                                0,
-                                                                2,
-                                                                null)));
-
-                CreateSalesOrderItemRequest request = new CreateSalesOrderItemRequest(
-                                order.getId(),
-                                (short) 1,
-                                productId,
-                                "SKU-ERR-001",
-                                10,
-                                null,
-                                true);
-
-                AppException ex = assertThrows(AppException.class,
-                                () -> salesOrderItemService.create(request));
-
-                assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
-                assertTrue(ex.getMessage().contains("Không đủ tồn khả dụng"));
-                assertEquals(0, salesOrderItemRepository.count());
-                assertEquals(0, pickingItemRepository.count());
         }
 
         private SalesOrder saveOrder(SalesOrderStatus status) {

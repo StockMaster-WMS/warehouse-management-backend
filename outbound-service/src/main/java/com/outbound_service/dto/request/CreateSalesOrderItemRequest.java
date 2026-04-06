@@ -14,8 +14,6 @@ public record CreateSalesOrderItemRequest(
         @NotNull UUID productId,
         @NotBlank @Size(max = 50) String productSku,
         @NotNull @Positive Integer orderedQty,
-        BigDecimal unitPrice,
-        /** Mặc định true: tự phân bổ picking theo tồn kho (nhiều vị trí/lô) */
-        Boolean autoAllocatePicking
+        BigDecimal unitPrice
 ) {
 }
