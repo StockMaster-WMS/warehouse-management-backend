@@ -69,6 +69,12 @@ public class ProductService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm")));
     }
 
+    // Tìm sản phẩm theo tên (không phân biệt hoa/thường).
+    public ProductResponse findByName(String name) {
+        return productMapper.toResponse(productRepository.findByNameIgnoreCase(name)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm")));
+    }
+
     // Lấy danh sách tóm tắt sản phẩm theo danh sách id.
     public List<ProductSummaryResponse> findSummariesByIds(List<UUID> ids) {
         if (ids == null || ids.isEmpty()) {
