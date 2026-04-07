@@ -16,6 +16,7 @@ public interface ProductMapper {
     @Mapping(target = "sku", ignore = true)
     @Mapping(target = "category", ignore = true)
     @Mapping(target = "primarySupplier", ignore = true)
+    @Mapping(target = "volumeCm3", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     Product toEntity(CreateProductRequest request);
@@ -23,6 +24,7 @@ public interface ProductMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "category", ignore = true)
     @Mapping(target = "primarySupplier", ignore = true)
+    @Mapping(target = "volumeCm3", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(target = "createdBy", ignore = true)

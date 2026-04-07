@@ -44,7 +44,7 @@ public interface SupplierMapper {
             supplier.setLeadTimeDays((short) 7);
         }
         if (supplier.getStatus() == null || supplier.getStatus().isBlank()) {
-            supplier.setStatus("ACTIVE");
+            supplier.setStatus("active");
         }
     }
 }

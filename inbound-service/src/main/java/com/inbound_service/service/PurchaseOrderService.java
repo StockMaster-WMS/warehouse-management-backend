@@ -144,6 +144,10 @@ public class PurchaseOrderService {
         purchaseOrderRepository.delete(purchaseOrder);
     }
 
+    public boolean existsBySupplierId(UUID supplierId) {
+        return purchaseOrderRepository.existsBySupplierId(supplierId);
+    }
+
     @Transactional
     public PurchaseOrderResponse approve(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
