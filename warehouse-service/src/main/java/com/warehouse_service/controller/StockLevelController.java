@@ -8,6 +8,7 @@ import com.warehouse_service.dto.request.CreateStockLevelRequest;
 import com.warehouse_service.dto.request.UpdateStockLevelRequest;
 import com.warehouse_service.dto.response.StockLevelExpandedResponse;
 import com.warehouse_service.dto.response.StockLevelResponse;
+import com.warehouse_service.service.StockLevelExcelExportService;
 import com.warehouse_service.service.StockLevelService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -17,6 +18,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,6 +32,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 @RestController
@@ -36,6 +42,7 @@ import java.util.UUID;
 public class StockLevelController {
 
     private final StockLevelService stockLevelService;
+    private final StockLevelExcelExportService stockLevelExcelExportService;
 
     @GetMapping
     @Operation(summary = "Lấy danh sách tồn kho", description = "Phân trang; lọc theo kho, vị trí hoặc sản phẩm")
@@ -107,4 +114,39 @@ public class StockLevelController {
         stockLevelService.delete(id);
         return ApiResponse.success("Xóa tồn kho thành công", id.toString());
     }
+
+    @GetMapping(value = "/export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @Operation(summary = "Xuất báo cáo tồn kho ra Excel", description = "Xuất danh sách tồn kho theo kho / vị trí / sản phẩm")
+    public ResponseEntity<byte[]> exportXlsx(
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) UUID locationId,
+            @RequestParam(required = false) UUID productId) {
+        byte[] bytes = stockLevelExcelExportService.exportOnHandToXlsx(warehouseId, locationId, productId);
+        String filename = "stock-report-" + java.time.LocalDate.now() + ".xlsx";
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(bytes);
+    }
+
+            @GetMapping(value = "/reports/near-expiry-export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            @Operation(summary = "Xuất danh sách hàng sắp hết hạn", description = "Lọc các stock level có expiryDate trong khoảng ngày sắp tới")
+            public ResponseEntity<byte[]> exportNearExpiryXlsx(
+                @RequestParam(defaultValue = "30") Integer days,
+                @RequestParam(required = false) UUID warehouseId,
+                @RequestParam(required = false) UUID locationId,
+                @RequestParam(required = false) UUID productId) {
+            byte[] bytes = stockLevelExcelExportService.exportNearExpiryToXlsx(warehouseId, locationId, productId, days);
+            String filename = "near-expiry-stock-" + java.time.LocalDate.now() + ".xlsx";
+            ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build();
+            return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(bytes);
+            }
 }

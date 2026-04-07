@@ -34,7 +34,7 @@ public class JwtTokenProvider {
                 .subject(user.getId().toString())
                 .id(jti)
                 .claim("username", user.getUsername())
-                .claim("roles", user.getRoles())
+            .claim("roles", user.getRoleCodesCsv())
                 .claim("token_type", "ACCESS")
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiresAt))

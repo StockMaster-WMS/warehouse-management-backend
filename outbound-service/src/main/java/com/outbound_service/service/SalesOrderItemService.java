@@ -30,8 +30,8 @@ public class SalesOrderItemService {
     private final SalesOrderItemRepository salesOrderItemRepository;
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderItemMapper salesOrderItemMapper;
-    private final PickingItemService pickingItemService;
 
+    // Lấy danh sách dòng đơn xuất có phân trang và tìm kiếm.
     public PagedResponse<SalesOrderItemResponse> findAll(Pageable pageable, UUID salesOrderId, String keyword) {
         Specification<SalesOrderItem> spec = SalesOrderItemSpecification.hasSalesOrderId(salesOrderId)
                 .and(SalesOrderItemSpecification.hasKeyword(keyword));
@@ -45,10 +45,12 @@ public class SalesOrderItemService {
                 mapped.getTotalPages());
     }
 
+    // Lấy chi tiết một dòng đơn xuất theo id.
     public SalesOrderItemResponse findById(UUID id) {
         return salesOrderItemMapper.toResponse(getLine(id));
     }
 
+    // Tạo mới dòng đơn xuất.
     @Transactional
     public SalesOrderItemResponse create(CreateSalesOrderItemRequest request) {
         SalesOrder order = getOrder(request.salesOrderId());
@@ -58,13 +60,10 @@ public class SalesOrderItemService {
         SalesOrderItem item = salesOrderItemMapper.toEntity(request);
         item.setSalesOrder(order);
         SalesOrderItem saved = salesOrderItemRepository.save(item);
-        boolean autoAllocate = request.autoAllocatePicking() == null || Boolean.TRUE.equals(request.autoAllocatePicking());
-        if (autoAllocate) {
-            pickingItemService.allocatePickingLinesForNewSoItem(saved);
-        }
         return salesOrderItemMapper.toResponse(saved);
     }
 
+    // Cập nhật thông tin dòng đơn xuất khi đơn còn ở trạng thái cho phép.
     @Transactional
     public SalesOrderItemResponse update(UUID id, UpdateSalesOrderItemRequest request) {
         SalesOrderItem item = getLine(id);
@@ -84,6 +83,7 @@ public class SalesOrderItemService {
         return salesOrderItemMapper.toResponse(salesOrderItemRepository.save(item));
     }
 
+    // Xóa dòng đơn xuất theo id.
     @Transactional
     public void delete(UUID id) {
         SalesOrderItem item = getLine(id);
@@ -91,16 +91,19 @@ public class SalesOrderItemService {
         salesOrderItemRepository.delete(item);
     }
 
+    // Tìm thực thể dòng đơn xuất, ném lỗi nếu không tồn tại.
     private SalesOrderItem getLine(UUID id) {
         return salesOrderItemRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn xuất"));
     }
 
+    // Tìm đơn xuất theo id, ném lỗi nếu không tồn tại.
     private SalesOrder getOrder(UUID id) {
         return salesOrderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất"));
     }
 
+    // Bắt buộc đơn xuất đang PENDING mới được chỉnh sửa dòng đơn.
     private static void requireOrderPending(SalesOrder order) {
         if (order.getStatus() != SalesOrderStatus.PENDING) {
             throw new AppException(ErrorCode.BAD_REQUEST,
@@ -108,6 +111,7 @@ public class SalesOrderItemService {
         }
     }
 
+    // Kiểm tra trùng số dòng trong cùng một đơn xuất.
     private void ensureLineUnique(UUID salesOrderId, Short lineNumber, UUID currentId) {
         salesOrderItemRepository.findBySalesOrder_IdAndLineNumber(salesOrderId, lineNumber)
                 .filter(existing -> currentId == null || !existing.getId().equals(currentId))

@@ -40,11 +40,13 @@ public class InboundReceiptService {
     private static final EnumSet<PurchaseOrderStatus> RECEIVABLE_STATUSES =
             EnumSet.of(PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.PARTIAL);
 
-    /**
-     * Tạo phiếu nhập kho: kiểm tra số lượng → tạo phiếu → cập nhật tồn kho → cập nhật PO.
-     */
+        // Tạo phiếu nhập kho và cập nhật tồn kho, trạng thái PO, putaway task.
     @Transactional
     public InboundReceiptResponse createReceipt(CreateInboundReceiptRequest request) {
+        if (request.items() == null || request.items().isEmpty()) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Phiếu nhập phải có ít nhất một dòng nhận hàng");
+        }
+
         // 1. Lấy PO và kiểm tra trạng thái
         PurchaseOrder po = purchaseOrderRepository.findById(request.purchaseOrderId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
@@ -64,6 +66,10 @@ public class InboundReceiptService {
         // 3. Kiểm tra số lượng từng dòng
         List<InboundReceiptItem> receiptItems = new ArrayList<>();
         for (ReceiveLineRequest line : request.items()) {
+            if (line.receivedQty() == null || line.receivedQty() <= 0) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng nhận phải lớn hơn 0");
+            }
+
             PoItem poItem = poItemMap.get(line.poItemId());
             if (poItem == null) {
                 throw new AppException(ErrorCode.BAD_REQUEST,
@@ -144,6 +150,7 @@ public class InboundReceiptService {
         return receiptMapper.toResponse(receipt);
     }
 
+    // Lấy danh sách phiếu nhập có phân trang và bộ lọc.
     @Transactional(readOnly = true)
     public PagedResponse<InboundReceiptResponse> findAll(Pageable pageable, String keyword,
             UUID purchaseOrderId, UUID warehouseId, InboundReceiptStatus status) {
@@ -161,6 +168,7 @@ public class InboundReceiptService {
                 mapped.getTotalPages());
     }
 
+    // Lấy chi tiết phiếu nhập theo id.
     @Transactional(readOnly = true)
     public InboundReceiptResponse findById(UUID id) {
         InboundReceipt receipt = receiptRepository.findById(id)
@@ -168,6 +176,7 @@ public class InboundReceiptService {
         return receiptMapper.toResponse(receipt);
     }
 
+    // Lấy danh sách phiếu nhập theo đơn nhập.
     @Transactional(readOnly = true)
     public List<InboundReceiptResponse> findByPurchaseOrderId(UUID purchaseOrderId) {
         return receiptRepository.findByPurchaseOrderId(purchaseOrderId).stream()
@@ -177,6 +186,7 @@ public class InboundReceiptService {
 
     // ---- helpers ----
 
+    // Đồng bộ trạng thái đơn nhập theo tổng tiến độ nhận hàng.
     private void refreshPoStatus(UUID purchaseOrderId) {
         PurchaseOrder po = purchaseOrderRepository.findById(purchaseOrderId)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
@@ -193,6 +203,7 @@ public class InboundReceiptService {
         purchaseOrderRepository.save(po);
     }
 
+    // Sinh mã phiếu nhập duy nhất.
     private String generateUniqueReceiptNumber() {
         for (int i = 0; i < 10; i++) {
             String candidate = CodeGenerator.generate("GRN");

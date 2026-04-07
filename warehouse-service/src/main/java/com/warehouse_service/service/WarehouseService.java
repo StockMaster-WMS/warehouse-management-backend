@@ -31,6 +31,7 @@ public class WarehouseService {
     private final StockLevelRepository stockLevelRepository;
     private final WarehouseMapper warehouseMapper;
 
+    // Lấy danh sách kho có phân trang và bộ lọc.
     public PagedResponse<WarehouseResponse> findAll(Pageable pageable, String keyword, Boolean isActive,
             String timezone) {
         Specification<Warehouse> spec = WarehouseSpecification
@@ -51,6 +52,7 @@ public class WarehouseService {
                 page.getTotalPages());
     }
 
+    // Lấy số liệu tổng quan của hệ thống kho.
     public WarehouseSummaryResponse getSummary() {
         long totalWarehouses = warehouseRepository.count();
         long activeWarehouses = warehouseRepository.countByIsActiveTrue();
@@ -64,16 +66,19 @@ public class WarehouseService {
                 warehousesWithStock);
     }
 
+    // Lấy chi tiết kho theo id.
     public WarehouseResponse findById(UUID id) {
         return warehouseMapper.toResponse(getWarehouse(id));
     }
 
+    // Lấy chi tiết kho theo mã kho.
     public WarehouseResponse findByCode(String code) {
         Warehouse warehouse = warehouseRepository.findByCode(code)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho"));
         return warehouseMapper.toResponse(warehouse);
     }
 
+    // Tạo mới kho.
     @Transactional
     public WarehouseResponse create(CreateWarehouseRequest request) {
         if (warehouseRepository.existsByCode(request.code())) {
@@ -85,6 +90,7 @@ public class WarehouseService {
         return warehouseMapper.toResponse(saved);
     }
 
+    // Cập nhật thông tin kho theo id.
     @Transactional
     public WarehouseResponse update(UUID id, UpdateWarehouseRequest request) {
         Warehouse warehouse = getWarehouse(id);
@@ -100,12 +106,14 @@ public class WarehouseService {
         return warehouseMapper.toResponse(saved);
     }
 
+    // Xóa kho theo id.
     @Transactional
     public void delete(UUID id) {
         Warehouse warehouse = getWarehouse(id);
         warehouseRepository.delete(warehouse);
     }
 
+    // Tìm thực thể kho, ném lỗi nếu không tồn tại.
     private Warehouse getWarehouse(UUID id) {
         return warehouseRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho"));

@@ -57,6 +57,18 @@ public interface ProductMapper {
         if (product.getIsExpiryTracked() == null) {
             product.setIsExpiryTracked(false);
         }
+        if (product.getIsFrozen() == null) {
+            product.setIsFrozen(false);
+        }
+        if (product.getIsFragile() == null) {
+            product.setIsFragile(false);
+        }
+        if (product.getIsHazmat() == null) {
+            product.setIsHazmat(false);
+        }
+        if (product.getIsHeavy() == null) {
+            product.setIsHeavy(false);
+        }
         if (product.getStatus() == null || product.getStatus().isBlank()) {
             product.setStatus("ACTIVE");
         }

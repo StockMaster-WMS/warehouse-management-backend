@@ -2,21 +2,22 @@ package com.auth_service.controller;
 
 import com.auth_service.dto.request.IntrospectRequest;
 import com.auth_service.dto.request.LoginRequest;
-import com.auth_service.dto.request.RefreshTokenRequest;
 import com.auth_service.dto.request.RegisterRequest;
 import com.auth_service.dto.response.IntrospectResponse;
 import com.auth_service.dto.response.LoginResponse;
 import com.auth_service.dto.response.RegisterResponse;
 import com.auth_service.service.AuthService;
 import com.common.api.ApiResponse;
-import com.common.exception.AppException;
-import com.common.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -29,41 +30,101 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Auth APIs", description = "Đăng ký, đăng nhập và xác thực token")
 public class AuthController {
 
+    private static final String REFRESH_COOKIE_NAME = "refreshToken";
+    private static final String REFRESH_COOKIE_PATH = "/";
+
     private final AuthService authService;
 
     @PostMapping("/register")
-    @Operation(summary = "Dang ky tai khoan")
+    @Operation(summary = "Đăng ký tài khoản")
     public ApiResponse<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
-        return ApiResponse.success("Dang ky thanh cong", authService.register(request));
+        return ApiResponse.success("Đăng ký thành công", authService.register(request));
     }
 
     @PostMapping("/login")
-    @Operation(summary = "Dang nhap")
-    public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        return ApiResponse.success("Dang nhap thanh cong", authService.login(request));
+    @Operation(summary = "Đăng nhập")
+    public ApiResponse<LoginResponse> login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletResponse response) {
+        AuthService.AuthTokens tokens = authService.login(request);
+        addRefreshCookie(response, tokens.refreshToken());
+        return ApiResponse.success("Đăng nhập thành công", toLoginResponse(tokens));
     }
 
     @PostMapping("/introspect")
-    @Operation(summary = "Kiem tra token noi bo")
+    @Operation(summary = "Kiểm tra token nội bộ")
     public ApiResponse<IntrospectResponse> introspect(@Valid @RequestBody IntrospectRequest request) {
-        return ApiResponse.success("Kiem tra token thanh cong", authService.introspect(request));
+        return ApiResponse.success("Kiểm tra token thành công", authService.introspect(request));
     }
 
     @PostMapping("/refresh")
-    @Operation(summary = "Lay token moi bang refresh token")
-    public ApiResponse<LoginResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
-        return ApiResponse.success("Lam moi token thanh cong", authService.refresh(request));
+    @Operation(summary = "Lấy token mới bằng refresh token")
+    public ApiResponse<LoginResponse> refresh(
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        String refreshToken = extractCookieValue(request, REFRESH_COOKIE_NAME);
+        AuthService.AuthTokens tokens = authService.refresh(refreshToken);
+        addRefreshCookie(response, tokens.refreshToken());
+        return ApiResponse.success("Làm mới token thành công", toLoginResponse(tokens));
     }
 
     @PostMapping("/logout")
-    @Operation(summary = "Dang xuat", security = {@SecurityRequirement(name = "BearerAuth")})
-    public ApiResponse<String> logout(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader) {
-        String token = extractToken(authHeader);
-        if (token == null || token.isBlank()) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Thieu Authorization header theo dinh dang Bearer <token>");
+    @Operation(summary = "Đăng xuất", security = {@SecurityRequirement(name = "BearerAuth")})
+    public ApiResponse<String> logout(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        String accessToken = extractToken(authHeader);
+        String refreshToken = extractCookieValue(request, REFRESH_COOKIE_NAME);
+        authService.logout(accessToken, refreshToken);
+        clearRefreshCookie(response);
+        return ApiResponse.success("Đăng xuất thành công", "OK");
+    }
+
+    private LoginResponse toLoginResponse(AuthService.AuthTokens tokens) {
+        return new LoginResponse(
+                tokens.accessToken(),
+                new LoginResponse.UserInfo(
+                        tokens.userId(),
+                        tokens.username(),
+                        tokens.email(),
+                        tokens.roles()));
+    }
+
+    private void addRefreshCookie(HttpServletResponse response, String refreshToken) {
+        ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, refreshToken)
+                .httpOnly(true)
+                .secure(true)
+                .sameSite("Strict")
+                .path(REFRESH_COOKIE_PATH)
+                .maxAge(authService.getRefreshTokenExpirationSeconds())
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private void clearRefreshCookie(HttpServletResponse response) {
+        ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, "")
+                .httpOnly(true)
+                .secure(true)
+                .sameSite("Strict")
+                .path(REFRESH_COOKIE_PATH)
+                .maxAge(0)
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private String extractCookieValue(HttpServletRequest request, String cookieName) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null || cookies.length == 0) {
+            return null;
         }
-        authService.logout(token);
-        return ApiResponse.success("Dang xuat thanh cong", "OK");
+
+        for (Cookie cookie : cookies) {
+            if (cookieName.equals(cookie.getName())) {
+                return cookie.getValue();
+            }
+        }
+        return null;
     }
 
     private String extractToken(String rawValue) {

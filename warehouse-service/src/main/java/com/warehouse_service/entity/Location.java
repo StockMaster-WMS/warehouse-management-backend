@@ -66,6 +66,18 @@ public class Location {
     @Column(name = "is_active")
     private Boolean isActive = true;
 
+    @Builder.Default
+    @Column(name = "is_cold_zone")
+    private Boolean isColdZone = false;
+
+    @Builder.Default
+    @Column(name = "is_hazmat_zone")
+    private Boolean isHazmatZone = false;
+
+    @Builder.Default
+    @Column(name = "is_heavy_zone")
+    private Boolean isHeavyZone = false;
+
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
 

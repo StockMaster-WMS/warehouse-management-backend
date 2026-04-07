@@ -30,6 +30,7 @@ public class LocationService {
     private final WarehouseRepository warehouseRepository;
     private final LocationMapper locationMapper;
 
+    // Lấy danh sách vị trí có phân trang và bộ lọc.
     public PagedResponse<LocationResponse> findAll(Pageable pageable, UUID warehouseId, String zone, String keyword) {
         Specification<Location> spec = LocationSpecification.hasWarehouseId(warehouseId)
                 .and(LocationSpecification.hasZone(zone))
@@ -44,10 +45,12 @@ public class LocationService {
                 mapped.getTotalPages());
     }
 
+    // Lấy chi tiết vị trí theo id.
     public LocationResponse findById(UUID id) {
         return locationMapper.toResponse(getLocation(id));
     }
 
+    // Tạo mới vị trí trong kho.
     @Transactional
     public LocationResponse create(CreateLocationRequest request) {
         Warehouse warehouse = getWarehouse(request.warehouseId());
@@ -59,6 +62,7 @@ public class LocationService {
         return locationMapper.toResponse(locationRepository.save(location));
     }
 
+    // Cập nhật thông tin vị trí theo id.
     @Transactional
     public LocationResponse update(UUID id, UpdateLocationRequest request) {
         Location location = getLocation(id);
@@ -72,22 +76,26 @@ public class LocationService {
         return locationMapper.toResponse(locationRepository.save(location));
     }
 
+    // Xóa vị trí theo id.
     @Transactional
     public void delete(UUID id) {
         Location location = getLocation(id);
         locationRepository.delete(location);
     }
 
+    // Tìm thực thể vị trí, ném lỗi nếu không tồn tại.
     private Location getLocation(UUID id) {
         return locationRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy vị trí"));
     }
 
+    // Tìm thực thể kho, ném lỗi nếu không tồn tại.
     private Warehouse getWarehouse(UUID id) {
         return warehouseRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho"));
     }
 
+    // Kiểm tra mã vị trí không trùng trong cùng một kho.
     private void ensureCodeUnique(UUID warehouseId, String code, UUID currentLocationId) {
         locationRepository.findByWarehouseIdAndCode(warehouseId, code)
                 .filter(existing -> currentLocationId == null || !existing.getId().equals(currentLocationId))

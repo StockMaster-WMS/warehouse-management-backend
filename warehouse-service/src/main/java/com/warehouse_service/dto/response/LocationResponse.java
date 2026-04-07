@@ -19,6 +19,9 @@ public record LocationResponse(
         Integer pickSequence,
         String status,
         Boolean isActive,
+        Boolean isColdZone,
+        Boolean isHazmatZone,
+        Boolean isHeavyZone,
         OffsetDateTime createdAt
 ) {
 }

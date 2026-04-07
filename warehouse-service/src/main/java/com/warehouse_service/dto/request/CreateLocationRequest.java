@@ -43,6 +43,9 @@ public record CreateLocationRequest(
 
         @Size(max = 20, message = "Trạng thái không được vượt quá 20 ký tự")
         String status,
-        Boolean isActive
+        Boolean isActive,
+        Boolean isColdZone,
+        Boolean isHazmatZone,
+        Boolean isHeavyZone
 ) {
 }
