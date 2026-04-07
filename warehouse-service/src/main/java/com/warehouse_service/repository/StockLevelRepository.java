@@ -8,7 +8,9 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -31,4 +33,20 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 
 	@Query("select count(distinct s.warehouse.id) from StockLevel s where s.qtyOnHand > 0")
 	long countWarehousesWithStock();
+
+	@Query("select count(distinct s.productId) from StockLevel s where s.qtyOnHand > 0")
+	long countDistinctProducts();
+
+	@Query("select coalesce(sum(s.qtyOnHand), 0) from StockLevel s")
+	long sumTotalQtyOnHand();
+
+	@Query("select coalesce(sum(s.qtyReserved), 0) from StockLevel s")
+	long sumTotalQtyReserved();
+
+	@Query("select count(s) from StockLevel s where s.expiryDate is not null and s.expiryDate <= :threshold and s.qtyOnHand > 0")
+	long countNearExpiry(@Param("threshold") LocalDate threshold);
+
+	@EntityGraph(attributePaths = {"warehouse", "location"})
+	@Query("select s from StockLevel s where s.expiryDate is not null and s.expiryDate <= :threshold and s.qtyOnHand > 0 order by s.expiryDate asc")
+	List<StockLevel> findNearExpiry(@Param("threshold") LocalDate threshold);
 }
