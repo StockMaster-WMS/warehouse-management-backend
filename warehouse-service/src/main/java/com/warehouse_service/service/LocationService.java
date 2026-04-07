@@ -3,6 +3,7 @@ package com.warehouse_service.service;
 import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.warehouse_service.dto.request.BulkLocationGeneratorRequest;
 import com.warehouse_service.dto.request.CreateLocationRequest;
 import com.warehouse_service.dto.request.UpdateLocationRequest;
 import com.warehouse_service.dto.response.LocationResponse;
@@ -19,6 +20,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -60,6 +63,72 @@ public class LocationService {
         location.setWarehouse(warehouse);
 
         return locationMapper.toResponse(locationRepository.save(location));
+    }
+
+    // Tạo hàng loạt vị trí theo quy luật.
+    @Transactional
+    public void generateBulk(BulkLocationGeneratorRequest request) {
+        Warehouse warehouse = getWarehouse(request.getWarehouseId());
+        List<Location> locations = new ArrayList<>();
+
+        for (int a = 1; a <= request.getAisleCount(); a++) {
+            String aisle = String.format("%s%02d",
+                    request.getAislePrefix() != null ? request.getAislePrefix() : "", a);
+
+            for (int r = 1; r <= request.getRackCount(); r++) {
+                String rack = String.format("%s%02d",
+                        request.getRackPrefix() != null ? request.getRackPrefix() : "", r);
+
+                for (int l = 1; l <= request.getLevelCount(); l++) {
+                    short level = (short) l;
+
+                    for (int b = 1; b <= request.getBinCount(); b++) {
+                        String bin = String.format("%s%02d",
+                                request.getBinPrefix() != null ? request.getBinPrefix() : "", b);
+
+                        // Quy luật mã: ZONE-AISLE-RACK-L(Level)-B(Bin)
+                        String code = String.format("%s-%s-%s-L%02d-B%02d",
+                                request.getZone(), aisle, rack, level, b);
+
+                        // Tự động gán các thuộc tính vùng dựa trên tên vùng chọn từ FE
+                        boolean isCold = "COLD".equalsIgnoreCase(request.getZone());
+                        boolean isHeavy = "HEAVY".equalsIgnoreCase(request.getZone());
+                        boolean isHazmat = "HAZMAT".equalsIgnoreCase(request.getZone());
+                        
+                        // Gán độ ưu tiên lấy hàng dựa trên khoảng cách dock: FAST gần nhất (nhỏ nhất)
+                        int pickSeq = switch (request.getZone().toUpperCase()) {
+                            case "FAST" -> 10;
+                            case "HEAVY" -> 20;
+                            case "BULK" -> 30;
+                            case "COLD" -> 50;
+                            case "HAZMAT" -> 80;
+                            default -> 100;
+                        };
+
+                        Location location = Location.builder()
+                                .warehouse(warehouse)
+                                .zone(request.getZone())
+                                .aisle(aisle)
+                                .rack(rack)
+                                .level(level)
+                                .bin(bin)
+                                .code(code)
+                                .locationType(request.getLocationType())
+                                .status("AVAILABLE")
+                                .isColdZone(isCold)
+                                .isHeavyZone(isHeavy)
+                                .isHazmatZone(isHazmat)
+                                .pickSequence(pickSeq)
+                                .isActive(true)
+                                .build();
+
+                        locations.add(location);
+                    }
+                }
+            }
+        }
+        // Lưu toàn bộ danh sách (JPA sẽ tự tối ưu batch insert nếu cấu hình hibernate.jdbc.batch_size)
+        locationRepository.saveAll(locations);
     }
 
     // Cập nhật thông tin vị trí theo id.
