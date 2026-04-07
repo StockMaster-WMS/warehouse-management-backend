@@ -2,6 +2,7 @@ package com.warehouse_service.controller;
 
 import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
+import com.warehouse_service.dto.request.BulkLocationGeneratorRequest;
 import com.warehouse_service.dto.request.CreateLocationRequest;
 import com.warehouse_service.dto.request.UpdateLocationRequest;
 import com.warehouse_service.dto.response.LocationResponse;
@@ -61,6 +62,13 @@ public class LocationController {
     @Operation(summary = "Tạo vị trí")
     public ApiResponse<LocationResponse> create(@Valid @RequestBody CreateLocationRequest request) {
         return ApiResponse.success("Tạo vị trí thành công", locationService.create(request));
+    }
+
+    @PostMapping("/bulk-generate")
+    @Operation(summary = "Tạo hàng loạt vị trí theo quy luật")
+    public ApiResponse<String> bulkGenerate(@Valid @RequestBody BulkLocationGeneratorRequest request) {
+        locationService.generateBulk(request);
+        return ApiResponse.success("Bắt đầu tiến trình tạo hàng loạt vị trí thành công", "SUCCESS");
     }
 
     @PutMapping("/{id}")

@@ -11,7 +11,7 @@ import com.product_service.entity.Supplier;
 import com.product_service.mapper.SupplierMapper;
 import com.product_service.repository.SupplierRepository;
 import com.product_service.repository.SupplierSpecification;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -22,7 +22,6 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class SupplierService {
 
@@ -31,6 +30,15 @@ public class SupplierService {
     private final SupplierRepository supplierRepository;
     private final SupplierMapper supplierMapper;
     private final InboundClient inboundClient;
+
+    @Autowired
+    public SupplierService(SupplierRepository supplierRepository,
+                           SupplierMapper supplierMapper,
+                           InboundClient inboundClient) {
+        this.supplierRepository = supplierRepository;
+        this.supplierMapper = supplierMapper;
+        this.inboundClient = inboundClient;
+    }
 
     // Lấy danh sách nhà cung cấp có phân trang và bộ lọc.
     public PagedResponse<SupplierResponse> findAll(Pageable pageable, String keyword, String status) {
