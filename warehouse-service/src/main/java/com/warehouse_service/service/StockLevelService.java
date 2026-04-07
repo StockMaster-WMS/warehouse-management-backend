@@ -9,17 +9,21 @@ import com.warehouse_service.client.ProductBatchClient;
 import com.warehouse_service.dto.request.CreateStockLevelRequest;
 import com.warehouse_service.dto.request.UpdateStockLevelRequest;
 import com.warehouse_service.dto.response.LocationSummary;
+import com.warehouse_service.dto.response.NearExpiryStockResponse;
 import com.warehouse_service.dto.response.ProductSummary;
 import com.warehouse_service.dto.response.StockLevelExpandedResponse;
 import com.warehouse_service.dto.response.StockLevelResponse;
+import com.warehouse_service.dto.response.StockSummaryResponse;
 import com.warehouse_service.dto.response.WarehouseSummary;
 import com.warehouse_service.entity.Location;
 import com.warehouse_service.entity.StockLevel;
+import com.warehouse_service.entity.StockMovement;
 import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.mapper.StockLevelMapper;
 import com.warehouse_service.repository.LocationRepository;
 import com.warehouse_service.repository.StockLevelRepository;
 import com.warehouse_service.repository.StockLevelSpecification;
+import com.warehouse_service.repository.StockMovementRepository;
 import com.warehouse_service.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +34,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -51,6 +56,7 @@ public class StockLevelService {
     private final LocationRepository locationRepository;
     private final StockLevelMapper stockLevelMapper;
     private final ProductBatchClient productBatchClient;
+    private final StockMovementRepository stockMovementRepository;
 
     // Lấy danh sách tồn kho có phân trang và bộ lọc cơ bản.
     public PagedResponse<StockLevelResponse> findAll(Pageable pageable, UUID warehouseId, UUID locationId, UUID productId) {
@@ -252,6 +258,10 @@ public class StockLevelService {
                 validateQuantities(onHand, newReserved);
                 stock.setQtyReserved(newReserved);
                 StockLevel saved = stockLevelRepository.save(stock);
+
+                recordMovement(saved, 0, cmd.reservedDelta(),
+                        cmd.reservedDelta() > 0 ? "RESERVE" : "RELEASE");
+
                 return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
             } catch (ObjectOptimisticLockingFailureException e) {
                 if (attempt == MAX_RETRY - 1) {
@@ -281,6 +291,9 @@ public class StockLevelService {
                 .build();
 
         StockLevel saved = stockLevelRepository.save(stockLevel);
+
+        recordMovement(saved, qtyDelta, 0, "INBOUND");
+
         return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
     }
 
@@ -295,6 +308,10 @@ public class StockLevelService {
 
         stockLevel.setQtyOnHand(newOnHand);
         StockLevel saved = stockLevelRepository.save(stockLevel);
+
+        recordMovement(saved, qtyDelta, 0,
+                qtyDelta > 0 ? "INBOUND" : "OUTBOUND");
+
         return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
     }
 
@@ -442,5 +459,124 @@ public class StockLevelService {
             log.warn("Failed to load product summaries for {} product IDs: {}", ids.size(), e.getMessage());
             return Map.of();
         }
+    }
+
+    // Ghi log biến động tồn kho.
+    private void recordMovement(StockLevel stock, int qtyChange, int reservedChange, String movementType) {
+        StockMovement movement = StockMovement.builder()
+                .warehouse(stock.getWarehouse())
+                .location(stock.getLocation())
+                .productId(stock.getProductId())
+                .lotNumber(stock.getLotNumber())
+                .movementType(movementType)
+                .qtyChange(qtyChange)
+                .qtyAfter(stock.getQtyOnHand())
+                .reservedChange(reservedChange)
+                .reservedAfter(stock.getQtyReserved() == null ? 0 : stock.getQtyReserved())
+                .build();
+        stockMovementRepository.save(movement);
+    }
+
+    // Lấy số liệu tổng quan tồn kho phục vụ dashboard.
+    public StockSummaryResponse getSummary(int nearExpiryDays) {
+        long totalSkus = stockLevelRepository.countDistinctProducts();
+        long totalOnHand = stockLevelRepository.sumTotalQtyOnHand();
+        long totalReserved = stockLevelRepository.sumTotalQtyReserved();
+        long nearExpiry = stockLevelRepository.countNearExpiry(LocalDate.now().plusDays(nearExpiryDays));
+
+        // Đếm low-stock: lấy tất cả stock, so minQty từ product-service
+        long lowStockCount = countLowStock();
+
+        return new StockSummaryResponse(
+                totalSkus,
+                totalOnHand,
+                totalReserved,
+                totalOnHand - totalReserved,
+                lowStockCount,
+                nearExpiry);
+    }
+
+    // Lấy danh sách sản phẩm tồn kho thấp (qtyAvailable < minQty).
+    public List<StockLevelExpandedResponse> findLowStock() {
+        // Lấy tất cả stock, group theo productId, so với minQty từ product-service
+        List<StockLevel> allStocks = stockLevelRepository.findAll();
+        if (allStocks.isEmpty()) return List.of();
+
+        Set<UUID> productIds = extractProductIds(allStocks);
+        Map<UUID, ProductSummary> productMap = loadProductsSummary(productIds);
+        Map<UUID, WarehouseSummary> warehouseMap = loadWarehousesSummary(extractWarehouseIds(allStocks));
+        Map<UUID, LocationSummary> locationMap = loadLocationsSummary(extractLocationIds(allStocks));
+
+        List<StockLevelExpandedResponse> result = new ArrayList<>();
+        for (StockLevel stock : allStocks) {
+            ProductSummary product = productMap.get(stock.getProductId());
+            if (product == null || product.minQty() == null) continue;
+
+            int onHand = stock.getQtyOnHand() == null ? 0 : stock.getQtyOnHand();
+            int reserved = stock.getQtyReserved() == null ? 0 : stock.getQtyReserved();
+            int available = onHand - reserved;
+
+            if (available < product.minQty()) {
+                StockLevelResponse base = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock));
+                result.add(new StockLevelExpandedResponse(
+                        base.id(), base.warehouseId(), base.locationId(), base.productId(),
+                        base.lotNumber(), base.expiryDate(),
+                        base.qtyOnHand(), base.qtyReserved(), base.qtyAvailable(), base.updatedAt(),
+                        warehouseMap.get(base.warehouseId()),
+                        locationMap.get(base.locationId()),
+                        product));
+            }
+        }
+        return result;
+    }
+
+    // Lấy danh sách hàng sắp hết hạn dạng JSON.
+    public List<NearExpiryStockResponse> findNearExpiry(int days,
+            UUID warehouseId, UUID locationId, UUID productId) {
+        LocalDate threshold = LocalDate.now().plusDays(days);
+        List<StockLevel> stocks = stockLevelRepository.findNearExpiry(threshold);
+
+        return stocks.stream()
+                .filter(s -> warehouseId == null || s.getWarehouse().getId().equals(warehouseId))
+                .filter(s -> locationId == null || s.getLocation().getId().equals(locationId))
+                .filter(s -> productId == null || s.getProductId().equals(productId))
+                .map(s -> {
+                    long daysLeft = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), s.getExpiryDate());
+                    int onHand = s.getQtyOnHand() == null ? 0 : s.getQtyOnHand();
+                    int reserved = s.getQtyReserved() == null ? 0 : s.getQtyReserved();
+                    return new NearExpiryStockResponse(
+                            s.getId(),
+                            s.getWarehouse().getId(),
+                            s.getWarehouse().getCode(),
+                            s.getLocation().getId(),
+                            s.getLocation().getCode(),
+                            s.getProductId(),
+                            s.getLotNumber(),
+                            s.getExpiryDate(),
+                            daysLeft,
+                            onHand,
+                            reserved,
+                            onHand - reserved);
+                })
+                .toList();
+    }
+
+    // Đếm số stock record có qtyAvailable < minQty.
+    private long countLowStock() {
+        List<StockLevel> allStocks = stockLevelRepository.findAll();
+        if (allStocks.isEmpty()) return 0;
+
+        Set<UUID> productIds = extractProductIds(allStocks);
+        Map<UUID, ProductSummary> productMap = loadProductsSummary(productIds);
+
+        long count = 0;
+        for (StockLevel stock : allStocks) {
+            ProductSummary product = productMap.get(stock.getProductId());
+            if (product == null || product.minQty() == null) continue;
+            int onHand = stock.getQtyOnHand() == null ? 0 : stock.getQtyOnHand();
+            int reserved = stock.getQtyReserved() == null ? 0 : stock.getQtyReserved();
+            if ((onHand - reserved) < product.minQty()) count++;
+        }
+        return count;
     }
 }

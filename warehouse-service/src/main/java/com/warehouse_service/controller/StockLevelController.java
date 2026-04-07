@@ -8,6 +8,8 @@ import com.warehouse_service.dto.request.CreateStockLevelRequest;
 import com.warehouse_service.dto.request.UpdateStockLevelRequest;
 import com.warehouse_service.dto.response.StockLevelExpandedResponse;
 import com.warehouse_service.dto.response.StockLevelResponse;
+import com.warehouse_service.dto.response.NearExpiryStockResponse;
+import com.warehouse_service.dto.response.StockSummaryResponse;
 import com.warehouse_service.service.StockLevelExcelExportService;
 import com.warehouse_service.service.StockLevelService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -43,6 +46,30 @@ public class StockLevelController {
 
     private final StockLevelService stockLevelService;
     private final StockLevelExcelExportService stockLevelExcelExportService;
+
+    @GetMapping("/summary")
+    @Operation(summary = "Tổng quan tồn kho", description = "Trả về số liệu tổng quan: tổng SKU, tổng tồn, tồn thấp, sắp hết hạn")
+    public ApiResponse<StockSummaryResponse> getSummary(
+            @Parameter(description = "Số ngày tính sắp hết hạn") @RequestParam(defaultValue = "30") int nearExpiryDays) {
+        return ApiResponse.success("Lấy tổng quan tồn kho thành công", stockLevelService.getSummary(nearExpiryDays));
+    }
+
+    @GetMapping("/alerts/low-stock")
+    @Operation(summary = "Cảnh báo tồn kho thấp", description = "Danh sách sản phẩm có tồn khả dụng < mức tối thiểu (minQty)")
+    public ApiResponse<List<StockLevelExpandedResponse>> getLowStock() {
+        return ApiResponse.success("Lấy danh sách tồn kho thấp thành công", stockLevelService.findLowStock());
+    }
+
+    @GetMapping("/alerts/near-expiry")
+    @Operation(summary = "Cảnh báo hàng sắp hết hạn", description = "Danh sách stock có expiryDate trong khoảng N ngày tới")
+    public ApiResponse<List<NearExpiryStockResponse>> getNearExpiry(
+            @Parameter(description = "Số ngày") @RequestParam(defaultValue = "30") int days,
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) UUID locationId,
+            @RequestParam(required = false) UUID productId) {
+        return ApiResponse.success("Lấy danh sách hàng sắp hết hạn thành công",
+                stockLevelService.findNearExpiry(days, warehouseId, locationId, productId));
+    }
 
     @GetMapping
     @Operation(summary = "Lấy danh sách tồn kho", description = "Phân trang; lọc theo kho, vị trí hoặc sản phẩm")

@@ -13,6 +13,8 @@ public record UpdateWarehouseRequest(
         String name,
 
         String address,
+        @Size(max = 120, message = "Tên người quản lý không được vượt quá 120 ký tự")
+        String managerName,
         String timezone,
         Boolean isActive
 ) {

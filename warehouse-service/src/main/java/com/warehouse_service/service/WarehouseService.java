@@ -9,6 +9,7 @@ import com.warehouse_service.dto.response.WarehouseResponse;
 import com.warehouse_service.dto.response.WarehouseSummaryResponse;
 import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.mapper.WarehouseMapper;
+import com.warehouse_service.repository.LocationRepository;
 import com.warehouse_service.repository.StockLevelRepository;
 import com.warehouse_service.repository.WarehouseRepository;
 import com.warehouse_service.repository.WarehouseSpecification;
@@ -29,6 +30,7 @@ public class WarehouseService {
 
     private final WarehouseRepository warehouseRepository;
     private final StockLevelRepository stockLevelRepository;
+    private final LocationRepository locationRepository;
     private final WarehouseMapper warehouseMapper;
 
     // Lấy danh sách kho có phân trang và bộ lọc.
@@ -106,10 +108,20 @@ public class WarehouseService {
         return warehouseMapper.toResponse(saved);
     }
 
-    // Xóa kho theo id.
+    // Xóa kho theo id (kiểm tra ràng buộc trước khi xóa).
     @Transactional
     public void delete(UUID id) {
         Warehouse warehouse = getWarehouse(id);
+
+        if (!stockLevelRepository.findByWarehouseId(id).isEmpty()) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Không thể xóa kho đang có tồn kho. Vui lòng chuyển hoặc xóa tồn kho trước");
+        }
+        if (!locationRepository.findByWarehouseId(id).isEmpty()) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Không thể xóa kho đang có vị trí. Vui lòng xóa vị trí trước");
+        }
+
         warehouseRepository.delete(warehouse);
     }
 
