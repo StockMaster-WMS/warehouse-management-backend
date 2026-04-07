@@ -43,7 +43,7 @@ public interface SalesOrderMapper {
             salesOrder.setPriority((short) 5);
         }
         if (salesOrder.getStatus() == null) {
-            salesOrder.setStatus(SalesOrderStatus.PENDING);
+            salesOrder.setStatus(SalesOrderStatus.DRAFT);
         }
     }
 }

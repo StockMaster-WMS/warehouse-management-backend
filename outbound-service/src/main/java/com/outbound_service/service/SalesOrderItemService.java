@@ -103,11 +103,11 @@ public class SalesOrderItemService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất"));
     }
 
-    // Bắt buộc đơn xuất đang PENDING mới được chỉnh sửa dòng đơn.
+    // Cho phép chỉnh sửa dòng đơn khi đơn ở trạng thái DRAFT hoặc PENDING.
     private static void requireOrderPending(SalesOrder order) {
-        if (order.getStatus() != SalesOrderStatus.PENDING) {
+        if (order.getStatus() != SalesOrderStatus.DRAFT && order.getStatus() != SalesOrderStatus.PENDING) {
             throw new AppException(ErrorCode.BAD_REQUEST,
-                    "Chỉ thêm/sửa/xóa dòng đơn khi đơn xuất đang PENDING");
+                    "Chỉ thêm/sửa/xóa dòng đơn khi đơn xuất đang DRAFT hoặc PENDING");
         }
     }
 

@@ -46,6 +46,6 @@ public class GlobalExceptionHandler {
         }
         log.error("Unexpected error (rootCause={}): {}", root.getClass().getName(), root.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Loi he thong noi bo", "INTERNAL_SERVER_ERROR"));
+                .body(ApiResponse.error("Lỗi hệ thống", "INTERNAL_SERVER_ERROR"));
     }
 }

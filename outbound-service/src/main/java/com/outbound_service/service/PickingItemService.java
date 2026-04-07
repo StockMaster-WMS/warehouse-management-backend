@@ -145,9 +145,14 @@ public class PickingItemService {
 
         PickingItem saved = pickingItemRepository.save(item);
 
-        warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
-                so.getWarehouseId(), request.locationId(), request.productId(), normalizeLot(request.lotNumber()),
-                request.qtyToPick()));
+        try {
+            warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
+                    so.getWarehouseId(), request.locationId(), request.productId(), normalizeLot(request.lotNumber()),
+                    request.qtyToPick()));
+        } catch (Exception e) {
+            log.error("Failed to reserve stock via Gateway: {}", e.getMessage());
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không thể giữ chỗ tồn kho (Reserved) tại Warehouse Service. Lỗi: " + e.getMessage());
+        }
 
         if (saved.getStatus() == PickingItemStatus.PICKED) {
             int picked = saved.getQtyPicked() == null ? 0 : saved.getQtyPicked();
@@ -228,16 +233,14 @@ public class PickingItemService {
 
     // Kiểm tra trạng thái đơn xuất có cho phép chỉnh sửa nghiệp vụ picking hay không.
     private static void assertSalesOrderAllowsPickingMutation(SalesOrder so) {
-        if (so.getStatus() == SalesOrderStatus.PACKED || so.getStatus() == SalesOrderStatus.SHIPPED) {
-            throw new AppException(ErrorCode.BAD_REQUEST,
-                    "Không thao tác picking khi đơn đã đóng gói hoặc đã giao");
+        SalesOrderStatus status = so.getStatus();
+        // Chỉ cho phép thao tác picking khi đơn đang ở trạng thái chuẩn bị (DRAFT, PENDING) hoặc đang lấy hàng (PICKING).
+        if (status == SalesOrderStatus.DRAFT || status == SalesOrderStatus.PENDING || status == SalesOrderStatus.PICKING) {
+            return;
         }
-        if (so.getStatus() == SalesOrderStatus.PICKED) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Không thao tác picking khi đơn đã pick xong");
-        }
-        if (so.getStatus() == SalesOrderStatus.ON_HOLD || so.getStatus() == SalesOrderStatus.CANCELLED) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Không thao tác picking khi đơn đang tạm dừng hoặc đã hủy");
-        }
+        
+        throw new AppException(ErrorCode.BAD_REQUEST, 
+            "Không thể thao tác picking khi đơn ở trạng thái: " + status);
     }
 
     // Parse chuỗi trạng thái về enum PickingItemStatus.

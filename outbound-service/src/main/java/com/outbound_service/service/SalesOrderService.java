@@ -1,5 +1,6 @@
 package com.outbound_service.service;
 
+import com.outbound_service.dto.request.SalesOrderActionRequest;
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.api.stock.StockReserveCommand;
@@ -86,7 +87,7 @@ public class SalesOrderService {
     @Transactional
     public SalesOrderResponse update(UUID id, UpdateSalesOrderRequest request) {
         SalesOrder salesOrder = getSalesOrder(id);
-        requireStatus(salesOrder, SalesOrderStatus.PENDING, "Chỉ cập nhật đơn xuất khi đang PENDING");
+        requireStatus(salesOrder, SalesOrderStatus.DRAFT, "Chỉ cập nhật đơn xuất khi đang DRAFT");
 
         salesOrderRepository.findBySoNumber(request.soNumber())
                 .filter(existing -> !existing.getId().equals(id))
@@ -104,7 +105,7 @@ public class SalesOrderService {
     @Transactional
     public void delete(UUID id) {
         SalesOrder salesOrder = getSalesOrder(id);
-        requireStatus(salesOrder, SalesOrderStatus.PENDING, "Chỉ xóa đơn xuất khi đang PENDING");
+        requireStatus(salesOrder, SalesOrderStatus.DRAFT, "Chỉ xóa đơn xuất khi đang DRAFT");
         if (pickingItemRepository.existsBySoItem_SalesOrder_Id(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không xóa đơn đã có picking; xóa picking trước");
         }
@@ -124,23 +125,11 @@ public class SalesOrderService {
         return salesOrderMapper.toResponse(salesOrderRepository.save(so));
     }
 
-    // Xác nhận đơn đã pick xong khi đủ điều kiện.
-    @Transactional
-    public SalesOrderResponse markPicked(UUID id) {
-        SalesOrder so = getSalesOrder(id);
-        requireStatus(so, SalesOrderStatus.PICKING, "Chỉ xác nhận PICKED khi đơn đang PICKING");
-
-        ensurePickingCompleted(id);
-
-        so.setStatus(SalesOrderStatus.PICKED);
-        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
-    }
-
-    // Chuyển đơn sang trạng thái đóng gói.
+    // Xác nhận đơn đã pick xong (PICKING -> PACKED)
     @Transactional
     public SalesOrderResponse markPacked(UUID id) {
         SalesOrder so = getSalesOrder(id);
-        requireStatus(so, SalesOrderStatus.PICKED, "Chỉ đóng gói khi đơn đang PICKED");
+        requireStatus(so, SalesOrderStatus.PICKING, "Chỉ đóng gói khi đơn đang PICKING");
 
         ensurePickingCompleted(id);
 
@@ -152,7 +141,7 @@ public class SalesOrderService {
     @Transactional
     public SalesOrderResponse hold(UUID id) {
         SalesOrder so = getSalesOrder(id);
-        if (!Set.of(SalesOrderStatus.PENDING, SalesOrderStatus.PICKING, SalesOrderStatus.PICKED, SalesOrderStatus.PACKED)
+        if (!Set.of(SalesOrderStatus.DRAFT, SalesOrderStatus.PENDING, SalesOrderStatus.PICKING, SalesOrderStatus.PACKED)
                 .contains(so.getStatus())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ tạm dừng đơn chưa giao hàng");
         }
@@ -170,7 +159,7 @@ public class SalesOrderService {
         if (picks.isEmpty()) {
             so.setStatus(SalesOrderStatus.PENDING);
         } else if (isPickingCompleted(id, picks)) {
-            so.setStatus(SalesOrderStatus.PICKED);
+            so.setStatus(SalesOrderStatus.PACKED);
         } else {
             so.setStatus(SalesOrderStatus.PICKING);
         }
@@ -209,6 +198,31 @@ public class SalesOrderService {
 
         so.setStatus(SalesOrderStatus.SHIPPED);
         return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+    }
+
+    // Xác nhận đơn nháp trước khi xử lý (DRAFT -> PENDING).
+    @Transactional
+    public SalesOrderResponse confirmOrder(UUID id) {
+        SalesOrder so = getSalesOrder(id);
+        requireStatus(so, SalesOrderStatus.DRAFT, "Chỉ xác nhận đơn khi đang DRAFT");
+        so.setStatus(SalesOrderStatus.PENDING);
+        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+    }
+
+    // Thực thi hành động tập trung.
+    @Transactional
+    public SalesOrderResponse executeAction(UUID id, SalesOrderActionRequest request) {
+        String action = request.getAction().toLowerCase();
+        return switch (action) {
+            case "confirm" -> confirmOrder(id);
+            case "start-picking" -> startPicking(id);
+            case "mark-packed" -> markPacked(id);
+            case "mark-shipped" -> markShipped(id);
+            case "hold" -> hold(id);
+            case "resume" -> resume(id);
+            case "cancel" -> cancel(id);
+            default -> throw new AppException(ErrorCode.BAD_REQUEST, "Hành động (action) không tồn tại: " + action);
+        };
     }
 
     // ==================== private helpers ====================
@@ -262,7 +276,7 @@ public class SalesOrderService {
         List<PickingItem> picks = pickingItemRepository.findBySalesOrderIdWithSoItem(salesOrderId);
         if (!isPickingCompleted(salesOrderId, picks)) {
             throw new AppException(ErrorCode.BAD_REQUEST,
-                    "Chưa pick đủ: kiểm tra trạng thái PICKED và qtyPicked theo từng dòng đơn");
+                    "Chưa lấy đủ hàng từ kệ: Bạn cần xác nhận đã lấy xong tất cả các sản phẩm trước khi thực hiện đóng gói đơn hàng này.");
         }
     }
 
