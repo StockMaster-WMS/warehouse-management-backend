@@ -3,6 +3,7 @@ package com.product_service.service;
 import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.product_service.client.InboundClient;
 import com.product_service.dto.request.CreateSupplierRequest;
 import com.product_service.dto.request.UpdateSupplierRequest;
 import com.product_service.dto.response.SupplierResponse;
@@ -29,6 +30,7 @@ public class SupplierService {
 
     private final SupplierRepository supplierRepository;
     private final SupplierMapper supplierMapper;
+    private final InboundClient inboundClient;
 
     // Lấy danh sách nhà cung cấp có phân trang và bộ lọc.
     public PagedResponse<SupplierResponse> findAll(Pageable pageable, String keyword, String status) {
@@ -92,6 +94,20 @@ public class SupplierService {
     @Transactional
     public void delete(UUID id) {
         Supplier supplier = getSupplier(id);
+
+        try {
+            Boolean hasPo = inboundClient.existsBySupplierId(id).getData();
+            if (Boolean.TRUE.equals(hasPo)) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Không thể xóa nhà cung cấp đang có đơn nhập hàng");
+            }
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR,
+                    "Không thể kiểm tra đơn nhập hàng của nhà cung cấp. Vui lòng thử lại sau.");
+        }
+
         supplierRepository.delete(supplier);
     }
 

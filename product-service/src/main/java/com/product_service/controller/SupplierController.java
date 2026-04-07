@@ -5,6 +5,7 @@ import com.common.api.PagedResponse;
 import com.product_service.dto.request.CreateSupplierRequest;
 import com.product_service.dto.request.UpdateSupplierRequest;
 import com.product_service.dto.response.SupplierResponse;
+import com.product_service.service.SupplierExcelExportService;
 import com.product_service.service.SupplierService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,6 +14,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -33,6 +37,7 @@ import java.util.UUID;
 public class SupplierController {
 
     private final SupplierService supplierService;
+    private final SupplierExcelExportService supplierExcelExportService;
 
     @GetMapping
     @Operation(summary = "Lấy danh sách nhà cung cấp",
@@ -79,6 +84,18 @@ public class SupplierController {
     public ApiResponse<SupplierResponse> changeStatus(@PathVariable UUID id,
                                                       @RequestParam String status) {
         return ApiResponse.success("Cập nhật trạng thái thành công", supplierService.changeStatus(id, status));
+    }
+
+    @GetMapping("/export")
+    @Operation(summary = "Xuất Excel danh sách NCC", description = "Download file .xlsx theo bộ lọc hiện tại")
+    public ResponseEntity<byte[]> exportExcel(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status) {
+        byte[] bytes = supplierExcelExportService.exportToXlsx(keyword, status);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=suppliers.xlsx")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(bytes);
     }
 
     @DeleteMapping("/{id}")

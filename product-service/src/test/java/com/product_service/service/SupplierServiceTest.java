@@ -1,6 +1,7 @@
 package com.product_service.service;
 
 import com.common.exception.AppException;
+import com.product_service.client.InboundClient;
 import com.product_service.dto.request.UpdateSupplierRequest;
 import com.product_service.entity.Supplier;
 import com.product_service.mapper.SupplierMapper;
@@ -27,6 +28,9 @@ class SupplierServiceTest {
 
     @Mock
     private SupplierMapper supplierMapper;
+
+    @Mock
+    private InboundClient inboundClient;
 
     @InjectMocks
     private SupplierService supplierService;

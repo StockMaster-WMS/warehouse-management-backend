@@ -99,4 +99,11 @@ public class PurchaseOrderController {
         purchaseOrderService.delete(id);
         return ApiResponse.success("Xóa đơn nhập thành công", id.toString());
     }
+
+    @GetMapping("/exists-by-supplier/{supplierId}")
+    @Operation(summary = "Kiểm tra NCC có đơn nhập", description = "Trả về true nếu supplier đã có ít nhất 1 PO")
+    public ApiResponse<Boolean> existsBySupplierId(@PathVariable UUID supplierId) {
+        return ApiResponse.success("Kiểm tra thành công",
+                purchaseOrderService.existsBySupplierId(supplierId));
+    }
 }

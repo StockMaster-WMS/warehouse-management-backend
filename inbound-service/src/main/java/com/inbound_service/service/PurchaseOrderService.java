@@ -151,6 +151,10 @@ public class PurchaseOrderService {
         purchaseOrderRepository.delete(purchaseOrder);
     }
 
+    public boolean existsBySupplierId(UUID supplierId) {
+        return purchaseOrderRepository.existsBySupplierId(supplierId);
+    }
+
     // Duyệt đơn nhập từ trạng thái DRAFT sang APPROVED.
     @Transactional
     public PurchaseOrderResponse approve(UUID id) {
