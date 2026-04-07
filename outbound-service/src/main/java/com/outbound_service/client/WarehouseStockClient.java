@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.UUID;
 
-@FeignClient(contextId = "warehouseStockClient", name = "api-gateway", path = "/api/stocks")
+@FeignClient(contextId = "warehouseStockClient", name = "warehouse-service", path = "/api/stocks")
 public interface WarehouseStockClient {
 
     @PostMapping("/adjust")

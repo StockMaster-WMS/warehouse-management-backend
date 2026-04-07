@@ -45,9 +45,6 @@ public class SecurityConfig {
                 // FIX: Cho phép toàn bộ OPTIONS request đi qua (preflight CORS)
                 .pathMatchers(HttpMethod.OPTIONS).permitAll()
                 // Public APIs (không cần Bearer) - dùng cho curl/test nhanh
-                .pathMatchers(HttpMethod.GET,
-                    "/api/**"
-                ).permitAll()
                 .pathMatchers(
                     // Auth
                     "/api/auth/**",
