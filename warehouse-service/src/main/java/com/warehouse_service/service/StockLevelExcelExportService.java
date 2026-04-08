@@ -176,6 +176,63 @@ public class StockLevelExcelExportService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public byte[] exportLowStockToXlsx(UUID warehouseId, UUID locationId, UUID productId) {
+        Specification<StockLevel> spec = StockLevelSpecification.hasWarehouseId(warehouseId)
+                .and(StockLevelSpecification.hasLocationId(locationId))
+                .and(StockLevelSpecification.hasProductId(productId));
+
+        Page<StockLevel> page = stockLevelRepository.findAll(spec, Pageable.unpaged());
+        List<StockLevel> allStocks = page.getContent();
+        
+        Map<UUID, ProductSummary> productMap = loadProducts(allStocks);
+        
+        List<StockLevel> lowStocks = allStocks.stream()
+                .filter(stock -> {
+                    ProductSummary p = productMap.get(stock.getProductId());
+                    return p != null && p.minQty() != null && stock.getQtyAvailable() < p.minQty();
+                })
+                .toList();
+
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet dataSheet = workbook.createSheet("LowStockData");
+            String[] headers = {
+                    "warehouseCode", "warehouseName", "locationCode", "productId", "productSku", "productName", 
+                    "minQty", "qtyOnHand", "qtyReserved", "qtyAvailable", "lotNumber", "expiryDate"
+            };
+
+            Row headerRow = dataSheet.createRow(0);
+            for (int i = 0; i < headers.length; i++) {
+                headerRow.createCell(i).setCellValue(headers[i]);
+            }
+
+            int rowIndex = 1;
+            for (StockLevel stock : lowStocks) {
+                ProductSummary product = productMap.get(stock.getProductId());
+                Row row = dataSheet.createRow(rowIndex++);
+                int col = 0;
+                row.createCell(col++).setCellValue(stock.getWarehouse() == null ? "" : nvl(stock.getWarehouse().getCode()));
+                row.createCell(col++).setCellValue(stock.getWarehouse() == null ? "" : nvl(stock.getWarehouse().getName()));
+                row.createCell(col++).setCellValue(stock.getLocation() == null ? "" : nvl(stock.getLocation().getCode()));
+                row.createCell(col++).setCellValue(stock.getProductId() == null ? "" : stock.getProductId().toString());
+                row.createCell(col++).setCellValue(product == null ? "" : nvl(product.sku()));
+                row.createCell(col++).setCellValue(product == null ? "" : nvl(product.name()));
+                setIntCell(row, col++, product == null ? null : product.minQty());
+                setIntCell(row, col++, stock.getQtyOnHand());
+                setIntCell(row, col++, stock.getQtyReserved());
+                setIntCell(row, col++, stock.getQtyAvailable());
+                row.createCell(col++).setCellValue(nvl(stock.getLotNumber()));
+                row.createCell(col++).setCellValue(stock.getExpiryDate() == null ? "" : stock.getExpiryDate().toString());
+            }
+
+            for (int i = 0; i < headers.length; i++) dataSheet.autoSizeColumn(i);
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Không tạo được file Excel: " + e.getMessage());
+        }
+    }
+
     private Map<UUID, ProductSummary> loadProducts(List<StockLevel> stocks) {
         List<UUID> ids = new ArrayList<>();
         for (StockLevel stock : stocks) {
