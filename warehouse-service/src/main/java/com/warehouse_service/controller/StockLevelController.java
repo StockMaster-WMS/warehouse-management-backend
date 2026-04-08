@@ -176,4 +176,21 @@ public class StockLevelController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .body(bytes);
             }
+
+            @GetMapping(value = "/reports/low-stock-export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            @Operation(summary = "Xuất danh sách hàng tồn kho thấp", description = "Lọc các stock level có qtyAvailable < minQty")
+            public ResponseEntity<byte[]> exportLowStockXlsx(
+                @RequestParam(required = false) UUID warehouseId,
+                @RequestParam(required = false) UUID locationId,
+                @RequestParam(required = false) UUID productId) {
+            byte[] bytes = stockLevelExcelExportService.exportLowStockToXlsx(warehouseId, locationId, productId);
+            String filename = "low-stock-report-" + java.time.LocalDate.now() + ".xlsx";
+            ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build();
+            return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(bytes);
+            }
 }
