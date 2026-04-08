@@ -19,7 +19,7 @@ target/
 *.iws
 *.iml
 *.ipr
-
+.grapuco
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/
