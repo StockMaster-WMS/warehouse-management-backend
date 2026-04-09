@@ -3,6 +3,7 @@ package com.inbound_service.controller;
 import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.inbound_service.dto.request.CreateInboundReceiptRequest;
+import com.inbound_service.dto.response.InboundPrintResponse;
 import com.inbound_service.dto.response.InboundReceiptResponse;
 import com.inbound_service.entity.InboundReceiptStatus;
 import com.inbound_service.service.InboundReceiptExcelExportService;
@@ -60,6 +61,12 @@ public class InboundReceiptController {
     @Operation(summary = "Lấy phiếu nhập theo ID")
     public ApiResponse<InboundReceiptResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy phiếu nhập thành công", receiptService.findById(id));
+    }
+
+    @GetMapping("/{id}/print")
+    @Operation(summary = "Lấy thông tin in phiếu nhập kho", description = "Trả về dữ liệu chi tiết của phiếu nhập gồm cả thông tin NCC và Tên SP để in ấn")
+    public ApiResponse<InboundPrintResponse> getPrintData(@PathVariable UUID id) {
+        return ApiResponse.success("Lấy thông tin in phiếu nhập kho thành công", receiptService.getPrintData(id));
     }
 
     @GetMapping("/by-po/{purchaseOrderId}")
