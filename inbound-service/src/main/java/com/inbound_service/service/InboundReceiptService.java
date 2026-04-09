@@ -5,9 +5,13 @@ import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.common.util.CodeGenerator;
+import com.inbound_service.client.ProductClient;
+import com.inbound_service.client.SupplierClient;
 import com.inbound_service.client.WarehouseStockGateway;
 import com.inbound_service.dto.request.CreateInboundReceiptRequest;
 import com.inbound_service.dto.request.ReceiveLineRequest;
+import com.inbound_service.dto.response.InboundPrintItemResponse;
+import com.inbound_service.dto.response.InboundPrintResponse;
 import com.inbound_service.dto.response.InboundReceiptResponse;
 import com.inbound_service.entity.*;
 import com.inbound_service.mapper.InboundReceiptMapper;
@@ -35,6 +39,8 @@ public class InboundReceiptService {
     private final PoItemRepository poItemRepository;
     private final PutawayTaskRepository putawayTaskRepository;
     private final WarehouseStockGateway warehouseStockGateway;
+    private final SupplierClient supplierClient;
+    private final ProductClient productClient;
     private final InboundReceiptMapper receiptMapper;
 
     private static final EnumSet<PurchaseOrderStatus> RECEIVABLE_STATUSES =
@@ -174,6 +180,74 @@ public class InboundReceiptService {
         InboundReceipt receipt = receiptRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy phiếu nhập"));
         return receiptMapper.toResponse(receipt);
+    }
+
+    // Lấy dữ liệu in phiếu nhập kho (Packing List/GRN) chuyên dụng
+    @Transactional(readOnly = true)
+    public InboundPrintResponse getPrintData(UUID receiptId) {
+        InboundReceipt receipt = receiptRepository.findById(receiptId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy phiếu nhập"));
+
+        PurchaseOrder po = receipt.getPurchaseOrder();
+
+        String supplierName = "";
+        String supplierAddress = "";
+        String supplierPhone = "";
+
+        try {
+            var supplierResp = supplierClient.getById(po.getSupplierId());
+            if (supplierResp != null && supplierResp.getData() != null) {
+                supplierName = supplierResp.getData().name();
+                supplierAddress = supplierResp.getData().address();
+                supplierPhone = supplierResp.getData().contactPhone();
+            }
+        } catch (Exception e) {
+            // fallback
+        }
+
+        List<InboundPrintItemResponse> itemResponses = new ArrayList<>();
+        short stt = 1;
+        for (InboundReceiptItem item : receipt.getItems()) {
+            String productName = item.getProductSku();
+            String unit = "";
+            try {
+                var productResp = productClient.getById(item.getProductId());
+                if (productResp != null && productResp.getData() != null) {
+                    productName = productResp.getData().name();
+                    unit = productResp.getData().baseUnit();
+                }
+            } catch (Exception e) {
+                // fallback
+            }
+
+            Integer orderedQty = item.getPoItem() != null ? item.getPoItem().getOrderedQty() : item.getReceivedQty();
+
+            itemResponses.add(new InboundPrintItemResponse(
+                    stt++,
+                    item.getProductId(),
+                    item.getProductSku(),
+                    productName,
+                    unit,
+                    orderedQty,
+                    item.getReceivedQty(),
+                    item.getNote()
+            ));
+        }
+
+        return new InboundPrintResponse(
+                receipt.getId(),
+                receipt.getReceiptNumber(),
+                po.getPoNumber(),
+                receipt.getWarehouseId(),
+                receipt.getLocationId(),
+                receipt.getReceivedDate(),
+                supplierName,
+                supplierAddress,
+                supplierPhone,
+                receipt.getReceivedBy(),
+                receipt.getNote(),
+                itemResponses
+        );
     }
 
     // Lấy danh sách phiếu nhập theo đơn nhập.
