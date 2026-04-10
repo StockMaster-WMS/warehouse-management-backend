@@ -35,6 +35,11 @@ auth:
     issuer: ${AUTH_JWT_ISSUER:auth-service}
     secret: ${AUTH_JWT_SECRET:change-me-to-a-very-long-secret-key-at-least-32-bytes}
     access-token-expiration-seconds: ${AUTH_JWT_ACCESS_EXPIRATION_SECONDS:3600}
+  cookie:
+    secure: ${AUTH_COOKIE_SECURE:false}
+    same-site: ${AUTH_COOKIE_SAME_SITE:Lax}
+  bootstrap:
+    default-users-enabled: ${AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED:false}
   blacklist:
     cleanup-interval-ms: ${AUTH_BLACKLIST_CLEANUP_INTERVAL_MS:3600000}
 

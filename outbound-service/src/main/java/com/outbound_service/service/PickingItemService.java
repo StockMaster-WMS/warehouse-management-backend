@@ -138,12 +138,19 @@ public class PickingItemService {
 
         PickingItemStatus status = parsePickingStatus(request.status());
         validateQuantities(request.qtyToPick(), request.qtyPicked(), status);
+        validateAllocationAgainstOrderedQty(line, request.qtyToPick(), request.qtyPicked(), null);
 
         PickingItem item = pickingItemMapper.toEntity(request);
         item.setSoItem(line);
         item.setStatus(status);
 
         PickingItem saved = pickingItemRepository.save(item);
+
+        if (saved.getStatus() == PickingItemStatus.PICKED) {
+            int picked = saved.getQtyPicked() == null ? 0 : saved.getQtyPicked();
+            warehouseStockGateway.requireOnHandAtLeast(
+                    so.getWarehouseId(), saved.getLocationId(), saved.getProductId(), saved.getLotNumber(), picked);
+        }
 
         try {
             warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
@@ -152,12 +159,6 @@ public class PickingItemService {
         } catch (Exception e) {
             log.error("Failed to reserve stock via Gateway: {}", e.getMessage());
             throw new AppException(ErrorCode.BAD_REQUEST, "Không thể giữ chỗ tồn kho (Reserved) tại Warehouse Service. Lỗi: " + e.getMessage());
-        }
-
-        if (saved.getStatus() == PickingItemStatus.PICKED) {
-            int picked = saved.getQtyPicked() == null ? 0 : saved.getQtyPicked();
-            warehouseStockGateway.requireOnHandAtLeast(
-                    so.getWarehouseId(), saved.getLocationId(), saved.getProductId(), saved.getLotNumber(), picked);
         }
 
         return pickingItemMapper.toResponse(saved);
@@ -177,8 +178,11 @@ public class PickingItemService {
         int oldQtyToPick = existing.getQtyToPick();
         String oldLot = normalizeLot(existing.getLotNumber());
 
-        SalesOrderItem line = salesOrderItemRepository.findByIdWithSalesOrder(request.soItemId())
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn xuất"));
+        if (!existing.getSoItem().getId().equals(request.soItemId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không được chuyển picking sang dòng đơn xuất khác");
+        }
+
+        SalesOrderItem line = existing.getSoItem();
         if (!line.getProductId().equals(request.productId())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "productId không khớp với dòng đơn xuất");
         }
@@ -189,6 +193,7 @@ public class PickingItemService {
         existing.setStatus(newStatus);
 
         validateQuantities(existing.getQtyToPick(), existing.getQtyPicked(), newStatus);
+        validateAllocationAgainstOrderedQty(line, existing.getQtyToPick(), existing.getQtyPicked(), existing.getId());
 
         String newLot = normalizeLot(existing.getLotNumber());
         boolean allocChanged = !oldLoc.equals(existing.getLocationId())
@@ -196,18 +201,18 @@ public class PickingItemService {
                 || oldQtyToPick != existing.getQtyToPick()
                 || !oldLot.equals(newLot);
 
+        if (existing.getStatus() == PickingItemStatus.PICKED) {
+            int picked = existing.getQtyPicked() == null ? 0 : existing.getQtyPicked();
+            warehouseStockGateway.requireOnHandAtLeast(
+                    so.getWarehouseId(), existing.getLocationId(), existing.getProductId(), newLot, picked);
+        }
+
         if (allocChanged) {
             warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
                     so.getWarehouseId(), oldLoc, oldProd, oldLot, -oldQtyToPick));
             warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
                     so.getWarehouseId(), existing.getLocationId(), existing.getProductId(), newLot,
                     existing.getQtyToPick()));
-        }
-
-        if (existing.getStatus() == PickingItemStatus.PICKED) {
-            int picked = existing.getQtyPicked() == null ? 0 : existing.getQtyPicked();
-            warehouseStockGateway.requireOnHandAtLeast(
-                    so.getWarehouseId(), existing.getLocationId(), existing.getProductId(), newLot, picked);
         }
 
         return pickingItemMapper.toResponse(pickingItemRepository.save(existing));
@@ -263,6 +268,38 @@ public class PickingItemService {
         }
         if (status == PickingItemStatus.PICKED && picked != qtyToPick) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Trạng thái PICKED yêu cầu qtyPicked bằng qtyToPick");
+        }
+    }
+
+    private void validateAllocationAgainstOrderedQty(SalesOrderItem line,
+            Integer requestedQtyToPick, Integer requestedQtyPicked, UUID currentPickingId) {
+        int orderedQty = line.getOrderedQty() == null ? 0 : line.getOrderedQty();
+        int qtyToPick = requestedQtyToPick == null ? 0 : requestedQtyToPick;
+        int qtyPicked = requestedQtyPicked == null ? 0 : requestedQtyPicked;
+
+        int allocatedByOtherPicks = 0;
+        int pickedByOtherPicks = 0;
+        for (PickingItem pick : pickingItemRepository.findBySoItem_Id(line.getId())) {
+            if (currentPickingId != null && currentPickingId.equals(pick.getId())) {
+                continue;
+            }
+
+            allocatedByOtherPicks += pick.getQtyToPick() == null ? 0 : pick.getQtyToPick();
+            pickedByOtherPicks += pick.getQtyPicked() == null ? 0 : pick.getQtyPicked();
+        }
+
+        int totalAllocated = allocatedByOtherPicks + qtyToPick;
+        if (totalAllocated > orderedQty) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Tổng qtyToPick cho line " + line.getLineNumber()
+                            + " vượt orderedQty (" + totalAllocated + "/" + orderedQty + ")");
+        }
+
+        int totalPicked = pickedByOtherPicks + qtyPicked;
+        if (totalPicked > orderedQty) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Tổng qtyPicked cho line " + line.getLineNumber()
+                            + " vượt orderedQty (" + totalPicked + "/" + orderedQty + ")");
         }
     }
 

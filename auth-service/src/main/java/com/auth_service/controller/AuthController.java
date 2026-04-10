@@ -16,6 +16,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,6 +35,12 @@ public class AuthController {
     private static final String REFRESH_COOKIE_PATH = "/";
 
     private final AuthService authService;
+
+    @Value("${auth.cookie.secure:false}")
+    private boolean refreshCookieSecure;
+
+    @Value("${auth.cookie.same-site:Lax}")
+    private String refreshCookieSameSite;
 
     @PostMapping("/register")
     @Operation(summary = "Đăng ký tài khoản")
@@ -94,8 +101,8 @@ public class AuthController {
     private void addRefreshCookie(HttpServletResponse response, String refreshToken) {
         ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, refreshToken)
                 .httpOnly(true)
-                .secure(true)
-                .sameSite("Strict")
+                .secure(refreshCookieSecure)
+                .sameSite(refreshCookieSameSite)
                 .path(REFRESH_COOKIE_PATH)
                 .maxAge(authService.getRefreshTokenExpirationSeconds())
                 .build();
@@ -105,8 +112,8 @@ public class AuthController {
     private void clearRefreshCookie(HttpServletResponse response) {
         ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, "")
                 .httpOnly(true)
-                .secure(true)
-                .sameSite("Strict")
+                .secure(refreshCookieSecure)
+                .sameSite(refreshCookieSameSite)
                 .path(REFRESH_COOKIE_PATH)
                 .maxAge(0)
                 .build();

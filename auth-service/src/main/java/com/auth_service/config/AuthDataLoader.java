@@ -7,6 +7,7 @@ import com.auth_service.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,11 +24,18 @@ public class AuthDataLoader {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
+    @Value("${auth.bootstrap.default-users-enabled:false}")
+    private boolean defaultUsersEnabled;
+
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void loadInitData() {
         Map<String, RoleSeed> roleSeeds = roleSeeds();
         roleSeeds.forEach((code, seed) -> ensureRole(seed));
+
+        if (!defaultUsersEnabled) {
+            return;
+        }
 
         ensureUser("admin", "admin@warehouse.local", "Admin@12345", roleRepository.findByCode("ADMIN").orElseThrow());
         ensureUser("manager", "manager@warehouse.local", "Manager@12345", roleRepository.findByCode("WAREHOUSE_MANAGER").orElseThrow());
