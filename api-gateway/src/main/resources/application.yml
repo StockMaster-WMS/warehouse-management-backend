@@ -163,6 +163,6 @@ logging:
 app:
   gateway:
     security:
-      # Mặc định tắt: toàn bộ route public (dev/DATN). Production: GATEWAY_SECURITY_ENABLED=true
-      enabled: ${GATEWAY_SECURITY_ENABLED:false}
-      jwt-secret: ${GATEWAY_JWT_SECRET:dev-auth-jwt-secret-change-this-before-staging-or-production-2026}
+      # Mặc định bật tại gateway; có thể tắt cục bộ bằng GATEWAY_SECURITY_ENABLED=false
+      enabled: ${GATEWAY_SECURITY_ENABLED:true}
+      jwt-secret: ${AUTH_JWT_SECRET:${GATEWAY_JWT_SECRET:change-me-to-a-very-long-secret-key-at-least-32-bytes}}

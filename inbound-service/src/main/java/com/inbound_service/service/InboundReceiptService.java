@@ -69,27 +69,42 @@ public class InboundReceiptService {
             poItemMap.put(item.getId(), item);
         }
 
-        // 3. Kiểm tra số lượng từng dòng
-        List<InboundReceiptItem> receiptItems = new ArrayList<>();
+        // 3. Kiểm tra số lượng từng dòng, kể cả khi request chứa nhiều dòng cho cùng một poItem
+        Map<UUID, Integer> requestedQtyByPoItem = new HashMap<>();
         for (ReceiveLineRequest line : request.items()) {
             if (line.receivedQty() == null || line.receivedQty() <= 0) {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng nhận phải lớn hơn 0");
             }
 
-            PoItem poItem = poItemMap.get(line.poItemId());
+            requestedQtyByPoItem.merge(line.poItemId(), line.receivedQty(), Integer::sum);
+        }
+
+        for (Map.Entry<UUID, Integer> entry : requestedQtyByPoItem.entrySet()) {
+            PoItem poItem = poItemMap.get(entry.getKey());
             if (poItem == null) {
                 throw new AppException(ErrorCode.BAD_REQUEST,
-                        "Dòng PO " + line.poItemId() + " không thuộc đơn nhập này");
+                        "Dòng PO " + entry.getKey() + " không thuộc đơn nhập này");
             }
 
             int currentReceived = poItem.getReceivedQty() == null ? 0 : poItem.getReceivedQty();
             int remaining = poItem.getOrderedQty() - currentReceived;
+            int requestedQty = entry.getValue();
 
-            if (line.receivedQty() > remaining) {
+            if (requestedQty > remaining) {
                 throw new AppException(ErrorCode.BAD_REQUEST,
-                        "SKU " + poItem.getProductSku() + ": số lượng nhận (" + line.receivedQty()
+                        "SKU " + poItem.getProductSku() + ": tổng số lượng nhận (" + requestedQty
                                 + ") vượt quá số còn lại (" + remaining
                                 + "), đã nhận " + currentReceived + "/" + poItem.getOrderedQty());
+            }
+        }
+
+        List<InboundReceiptItem> receiptItems = new ArrayList<>();
+        for (ReceiveLineRequest line : request.items()) {
+            PoItem poItem = poItemMap.get(line.poItemId());
+
+            if (poItem == null) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Dòng PO " + line.poItemId() + " không thuộc đơn nhập này");
             }
 
             receiptItems.add(InboundReceiptItem.builder()
@@ -119,11 +134,15 @@ public class InboundReceiptService {
         receiptRepository.save(receipt);
 
         // 5. Cập nhật số lượng đã nhận trên dòng PO
+        Set<PoItem> updatedPoItems = new LinkedHashSet<>();
         for (InboundReceiptItem receiptItem : receiptItems) {
             PoItem poItem = receiptItem.getPoItem();
             int current = poItem.getReceivedQty() == null ? 0 : poItem.getReceivedQty();
             poItem.setReceivedQty(current + receiptItem.getReceivedQty());
-            poItemRepository.save(poItem);
+            updatedPoItems.add(poItem);
+        }
+        if (!updatedPoItems.isEmpty()) {
+            poItemRepository.saveAll(updatedPoItems);
         }
 
         // 6. Cập nhật tồn kho (gọi warehouse-service)

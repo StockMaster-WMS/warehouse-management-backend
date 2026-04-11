@@ -274,21 +274,32 @@ public class SalesOrderService {
     // Đảm bảo toàn bộ picking của đơn đã hoàn tất.
     private void ensurePickingCompleted(UUID salesOrderId) {
         List<PickingItem> picks = pickingItemRepository.findBySalesOrderIdWithSoItem(salesOrderId);
-        if (!isPickingCompleted(salesOrderId, picks)) {
-            throw new AppException(ErrorCode.BAD_REQUEST,
-                    "Chưa lấy đủ hàng từ kệ: Bạn cần xác nhận đã lấy xong tất cả các sản phẩm trước khi thực hiện đóng gói đơn hàng này.");
-        }
+        validatePickingCompleted(salesOrderId, picks);
     }
 
     // Kiểm tra điều kiện complete của tất cả picking và từng dòng đơn.
     private boolean isPickingCompleted(UUID salesOrderId, List<PickingItem> picks) {
-        if (picks.isEmpty()) {
+        try {
+            validatePickingCompleted(salesOrderId, picks);
+            return true;
+        } catch (AppException ex) {
             return false;
+        }
+    }
+
+    private void validatePickingCompleted(UUID salesOrderId, List<PickingItem> picks) {
+        if (picks.isEmpty()) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Chưa pick đủ: chưa có picking item nào cho đơn xuất này");
         }
         for (PickingItem p : picks) {
             int picked = p.getQtyPicked() == null ? 0 : p.getQtyPicked();
-            if (p.getStatus() != PickingItemStatus.PICKED || picked < p.getQtyToPick()) {
-                return false;
+            int qtyToPick = p.getQtyToPick() == null ? 0 : p.getQtyToPick();
+            if (p.getStatus() != PickingItemStatus.PICKED || picked != qtyToPick) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Chưa pick đủ cho line " + p.getSoItem().getLineNumber()
+                                + ": picking " + p.getId() + " đang ở trạng thái " + p.getStatus()
+                                + " với số lượng " + picked + "/" + qtyToPick);
             }
         }
 
@@ -298,12 +309,19 @@ public class SalesOrderService {
                         Collectors.summingInt(p -> p.getQtyPicked() == null ? 0 : p.getQtyPicked())));
         List<SalesOrderItem> lines = salesOrderItemRepository.findBySalesOrder_Id(salesOrderId);
         for (SalesOrderItem line : lines) {
+            int orderedQty = line.getOrderedQty() == null ? 0 : line.getOrderedQty();
             int sum = pickedBySoItem.getOrDefault(line.getId(), 0);
-            if (sum < line.getOrderedQty()) {
-                return false;
+            if (sum < orderedQty) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Chưa pick đủ cho line " + line.getLineNumber()
+                                + ": đã pick " + sum + "/" + orderedQty);
+            }
+            if (sum > orderedQty) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Số lượng pick vượt orderedQty ở line " + line.getLineNumber()
+                                + ": đã pick " + sum + "/" + orderedQty);
             }
         }
-        return true;
     }
 
     // Giải phóng reserved cho toàn bộ picking thuộc đơn xuất.
