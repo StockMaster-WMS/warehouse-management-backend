@@ -116,7 +116,12 @@ OUTBOUND_DB_URL=jdbc:postgresql://localhost:5432/db_outbound
 OUTBOUND_DB_USERNAME=postgres
 OUTBOUND_DB_PASSWORD=postgres
 
+GATEWAY_SECURITY_ENABLED=true
+INTERNAL_SECURITY_ENABLED=true
+INTERNAL_SERVICE_TOKEN=change-me-internal-service-token
+AUTH_MODE=secure
 AUTH_JWT_SECRET=change-me-to-a-strong-secret
+AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED=false
 GATEWAY_URL=http://localhost:9000
 ```
 
@@ -145,22 +150,24 @@ Docker Compose hiện tại khởi chạy:
 - `outbound-service`
 - 5 container PostgreSQL riêng cho từng service nghiệp vụ
 
-Các cổng mặc định:
+Các cổng mặc định được publish ra máy host:
 
 | Thành phần | Cổng |
 |-----------|------|
 | Eureka Server | `8761` |
 | API Gateway | `9000` |
-| Auth Service | `9011` |
-| Product Service | `9002` |
-| Warehouse Service | `9003` |
-| Inbound Service | `9004` |
-| Outbound Service | `9005` |
 | PostgreSQL Auth | `5433` |
 | PostgreSQL Product | `5434` |
 | PostgreSQL Warehouse | `5435` |
 | PostgreSQL Inbound | `5436` |
 | PostgreSQL Outbound | `5437` |
+
+Trong Docker Compose, các service `auth-service`, `product-service`, `warehouse-service`,
+`inbound-service` và `outbound-service` chỉ `expose` port trong Docker network. Client nên gọi
+qua `http://localhost:9000` để đi qua lớp xác thực của API Gateway.
+
+`INTERNAL_SERVICE_TOKEN` là token nội bộ giữa gateway và các service. Khi deploy thật, cần đổi
+giá trị này cùng với `AUTH_JWT_SECRET`; không dùng các giá trị `change-me-*`.
 
 ## Chạy local bằng Maven
 

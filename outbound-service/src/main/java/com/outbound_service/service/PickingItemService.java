@@ -153,9 +153,11 @@ public class PickingItemService {
         }
 
         try {
-            warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
-                    so.getWarehouseId(), request.locationId(), request.productId(), normalizeLot(request.lotNumber()),
-                    request.qtyToPick()));
+            warehouseStockGateway.adjustReservedOrThrow(reserveCommand(
+                    so, request.locationId(), request.productId(), normalizeLot(request.lotNumber()),
+                    request.qtyToPick(), saved.getId(), reserveMutationKey(saved.getId(), "CREATE",
+                            request.locationId(), request.productId(), normalizeLot(request.lotNumber()),
+                            request.qtyToPick())));
         } catch (Exception e) {
             log.error("Failed to reserve stock via Gateway: {}", e.getMessage());
             throw new AppException(ErrorCode.BAD_REQUEST, "Không thể giữ chỗ tồn kho (Reserved) tại Warehouse Service. Lỗi: " + e.getMessage());
@@ -208,11 +210,15 @@ public class PickingItemService {
         }
 
         if (allocChanged) {
-            warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
-                    so.getWarehouseId(), oldLoc, oldProd, oldLot, -oldQtyToPick));
-            warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
-                    so.getWarehouseId(), existing.getLocationId(), existing.getProductId(), newLot,
-                    existing.getQtyToPick()));
+            warehouseStockGateway.adjustReservedOrThrow(reserveCommand(
+                    so, oldLoc, oldProd, oldLot, -oldQtyToPick,
+                    existing.getId(),
+                    reserveMutationKey(existing.getId(), "UPDATE_RELEASE", oldLoc, oldProd, oldLot, oldQtyToPick)));
+            warehouseStockGateway.adjustReservedOrThrow(reserveCommand(
+                    so, existing.getLocationId(), existing.getProductId(), newLot, existing.getQtyToPick(),
+                    existing.getId(),
+                    reserveMutationKey(existing.getId(), "UPDATE_RESERVE",
+                            existing.getLocationId(), existing.getProductId(), newLot, existing.getQtyToPick())));
         }
 
         return pickingItemMapper.toResponse(pickingItemRepository.save(existing));
@@ -227,9 +233,12 @@ public class PickingItemService {
         SalesOrder so = item.getSoItem().getSalesOrder();
         assertSalesOrderAllowsPickingMutation(so);
 
-        warehouseStockGateway.adjustReservedOrThrow(new StockReserveCommand(
-                so.getWarehouseId(), item.getLocationId(), item.getProductId(), normalizeLot(item.getLotNumber()),
-                -item.getQtyToPick()));
+        warehouseStockGateway.adjustReservedOrThrow(reserveCommand(
+                so, item.getLocationId(), item.getProductId(), normalizeLot(item.getLotNumber()),
+                -item.getQtyToPick(),
+                item.getId(),
+                reserveMutationKey(item.getId(), "DELETE", item.getLocationId(), item.getProductId(),
+                        normalizeLot(item.getLotNumber()), item.getQtyToPick())));
 
         pickingItemRepository.delete(item);
     }
@@ -316,6 +325,25 @@ public class PickingItemService {
     // Chuẩn hóa lot number về chuỗi không null.
     private static String normalizeLot(String lotNumber) {
         return lotNumber == null ? "" : lotNumber.trim();
+    }
+
+    private static StockReserveCommand reserveCommand(SalesOrder so, UUID locationId, UUID productId,
+            String lotNumber, int reservedDelta, UUID pickingItemId, String idempotencyKey) {
+        return new StockReserveCommand(
+                so.getWarehouseId(),
+                locationId,
+                productId,
+                lotNumber,
+                reservedDelta,
+                idempotencyKey,
+                "PICKING_ITEM",
+                pickingItemId);
+    }
+
+    private static String reserveMutationKey(UUID pickingItemId, String action,
+            UUID locationId, UUID productId, String lotNumber, int qty) {
+        return "PICKING_ITEM:" + pickingItemId + ":" + action
+                + ":" + locationId + ":" + productId + ":" + normalizeLot(lotNumber) + ":" + qty;
     }
 
     // Lấy chi tiết picking item đầy đủ dữ liệu cho giao diện picker.

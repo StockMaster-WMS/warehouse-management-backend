@@ -33,6 +33,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -194,6 +195,12 @@ public class StockLevelService {
         }
 
         String lot = normalizeLot(cmd.lotNumber());
+        Optional<StockLevelResponse> idempotentResponse = findIdempotentStockResponse(
+                cmd.idempotencyKey(), cmd.locationId(), cmd.productId(), lot);
+        if (idempotentResponse.isPresent()) {
+            return idempotentResponse.get();
+        }
+
         Warehouse warehouse = getWarehouse(cmd.warehouseId());
         Location location = getLocation(cmd.locationId());
         ensureLocationInWarehouse(location, cmd.warehouseId());
@@ -202,8 +209,8 @@ public class StockLevelService {
             try {
                 return stockLevelRepository
                         .findByLocationIdAndProductIdAndLotNumber(cmd.locationId(), cmd.productId(), lot)
-                        .map(existing -> applyDelta(existing, cmd.qtyDelta()))
-                        .orElseGet(() -> createFromPositiveDelta(warehouse, location, cmd.productId(), lot, cmd.qtyDelta()));
+                        .map(existing -> applyDelta(existing, cmd.qtyDelta(), cmd))
+                        .orElseGet(() -> createFromPositiveDelta(warehouse, location, cmd.productId(), lot, cmd));
             } catch (ObjectOptimisticLockingFailureException e) {
                 if (attempt == MAX_RETRY - 1) {
                     throw new AppException(ErrorCode.BAD_REQUEST,
@@ -222,6 +229,12 @@ public class StockLevelService {
         }
 
         String lot = normalizeLot(cmd.lotNumber());
+        Optional<StockLevelResponse> idempotentResponse = findIdempotentStockResponse(
+                cmd.idempotencyKey(), cmd.locationId(), cmd.productId(), lot);
+        if (idempotentResponse.isPresent()) {
+            return idempotentResponse.get();
+        }
+
         getWarehouse(cmd.warehouseId());
         Location location = getLocation(cmd.locationId());
         ensureLocationInWarehouse(location, cmd.warehouseId());
@@ -260,7 +273,8 @@ public class StockLevelService {
                 StockLevel saved = stockLevelRepository.save(stock);
 
                 recordMovement(saved, 0, cmd.reservedDelta(),
-                        cmd.reservedDelta() > 0 ? "RESERVE" : "RELEASE");
+                        cmd.reservedDelta() > 0 ? "RESERVE" : "RELEASE",
+                        cmd.idempotencyKey(), cmd.referenceType(), cmd.referenceId());
 
                 return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
             } catch (ObjectOptimisticLockingFailureException e) {
@@ -275,30 +289,31 @@ public class StockLevelService {
 
     // Tạo bản ghi tồn mới khi điều chỉnh dương trên khóa chưa tồn tại.
     private StockLevelResponse createFromPositiveDelta(Warehouse warehouse, Location location, UUID productId,
-            String lot, int qtyDelta) {
-        if (qtyDelta < 0) {
+            String lot, StockAdjustCommand cmd) {
+        if (cmd.qtyDelta() < 0) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không có tồn kho để trừ tại vị trí/sản phẩm/lô đã chọn");
         }
-        validateQuantities(qtyDelta, 0);
+        validateQuantities(cmd.qtyDelta(), 0);
 
         StockLevel stockLevel = StockLevel.builder()
                 .warehouse(warehouse)
                 .location(location)
                 .productId(productId)
                 .lotNumber(lot)
-                .qtyOnHand(qtyDelta)
+                .qtyOnHand(cmd.qtyDelta())
                 .qtyReserved(0)
                 .build();
 
         StockLevel saved = stockLevelRepository.save(stockLevel);
 
-        recordMovement(saved, qtyDelta, 0, "INBOUND");
+        recordMovement(saved, cmd.qtyDelta(), 0, "INBOUND",
+                cmd.idempotencyKey(), cmd.referenceType(), cmd.referenceId());
 
         return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
     }
 
     // Áp dụng biến động tồn lên bản ghi hiện có.
-    private StockLevelResponse applyDelta(StockLevel stockLevel, int qtyDelta) {
+    private StockLevelResponse applyDelta(StockLevel stockLevel, int qtyDelta, StockAdjustCommand cmd) {
         int newOnHand = stockLevel.getQtyOnHand() + qtyDelta;
         if (newOnHand < 0) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng trừ vượt quá tồn khả dụng");
@@ -310,7 +325,8 @@ public class StockLevelService {
         StockLevel saved = stockLevelRepository.save(stockLevel);
 
         recordMovement(saved, qtyDelta, 0,
-                qtyDelta > 0 ? "INBOUND" : "OUTBOUND");
+                qtyDelta > 0 ? "INBOUND" : "OUTBOUND",
+                cmd.idempotencyKey(), cmd.referenceType(), cmd.referenceId());
 
         return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
     }
@@ -462,7 +478,8 @@ public class StockLevelService {
     }
 
     // Ghi log biến động tồn kho.
-    private void recordMovement(StockLevel stock, int qtyChange, int reservedChange, String movementType) {
+    private void recordMovement(StockLevel stock, int qtyChange, int reservedChange, String movementType,
+            String idempotencyKey, String referenceType, UUID referenceId) {
         StockMovement movement = StockMovement.builder()
                 .warehouse(stock.getWarehouse())
                 .location(stock.getLocation())
@@ -473,8 +490,37 @@ public class StockLevelService {
                 .qtyAfter(stock.getQtyOnHand())
                 .reservedChange(reservedChange)
                 .reservedAfter(stock.getQtyReserved() == null ? 0 : stock.getQtyReserved())
+                .idempotencyKey(normalizeIdempotencyKey(idempotencyKey))
+                .referenceType(referenceType)
+                .referenceId(referenceId)
                 .build();
         stockMovementRepository.save(movement);
+    }
+
+    private Optional<StockLevelResponse> findIdempotentStockResponse(String idempotencyKey,
+            UUID locationId, UUID productId, String lot) {
+        if (!StringUtils.hasText(idempotencyKey)) {
+            return Optional.empty();
+        }
+        Optional<StockMovement> movement = stockMovementRepository.findByIdempotencyKey(
+                normalizeIdempotencyKey(idempotencyKey));
+        if (movement.isEmpty()) {
+            return Optional.empty();
+        }
+
+        StockLevel stock = stockLevelRepository
+                .findByLocationIdAndProductIdAndLotNumber(locationId, productId, lot)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
+                        "Không tìm thấy tồn kho cho lệnh đã xử lý trước đó"));
+        return Optional.of(fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock)));
+    }
+
+    private String normalizeIdempotencyKey(String idempotencyKey) {
+        if (!StringUtils.hasText(idempotencyKey)) {
+            return null;
+        }
+        String normalized = idempotencyKey.trim();
+        return normalized.length() <= 512 ? normalized : normalized.substring(0, 512);
     }
 
     // Lấy số liệu tổng quan tồn kho phục vụ dashboard.
@@ -498,34 +544,44 @@ public class StockLevelService {
 
     // Lấy danh sách sản phẩm tồn kho thấp (qtyAvailable < minQty).
     public List<StockLevelExpandedResponse> findLowStock() {
-        // Lấy tất cả stock, group theo productId, so với minQty từ product-service
-        List<StockLevel> allStocks = stockLevelRepository.findAll();
-        if (allStocks.isEmpty()) return List.of();
+        List<StockLevelRepository.StockQuantityView> stockViews = stockLevelRepository.findQuantityViews();
+        if (stockViews.isEmpty()) return List.of();
 
-        Set<UUID> productIds = extractProductIds(allStocks);
-        Map<UUID, ProductSummary> productMap = loadProductsSummary(productIds);
-        Map<UUID, WarehouseSummary> warehouseMap = loadWarehousesSummary(extractWarehouseIds(allStocks));
-        Map<UUID, LocationSummary> locationMap = loadLocationsSummary(extractLocationIds(allStocks));
+        Map<UUID, ProductSummary> productMap = loadProductsSummary(extractProductIdsFromQuantityViews(stockViews));
+        if (productMap.isEmpty()) return List.of();
+
+        List<UUID> lowStockIds = new ArrayList<>();
+        for (StockLevelRepository.StockQuantityView stock : stockViews) {
+            if (isLowStock(stock, productMap)) {
+                lowStockIds.add(stock.getId());
+            }
+        }
+        if (lowStockIds.isEmpty()) return List.of();
+
+        List<StockLevel> lowStocks = stockLevelRepository.findByIdInWithWarehouseAndLocation(lowStockIds);
+        Map<UUID, StockLevel> stockById = new HashMap<>(lowStocks.size());
+        for (StockLevel stock : lowStocks) {
+            stockById.put(stock.getId(), stock);
+        }
+
+        Map<UUID, WarehouseSummary> warehouseMap = loadWarehousesSummary(extractWarehouseIds(lowStocks));
+        Map<UUID, LocationSummary> locationMap = loadLocationsSummary(extractLocationIds(lowStocks));
 
         List<StockLevelExpandedResponse> result = new ArrayList<>();
-        for (StockLevel stock : allStocks) {
+        for (UUID stockId : lowStockIds) {
+            StockLevel stock = stockById.get(stockId);
+            if (stock == null) continue;
             ProductSummary product = productMap.get(stock.getProductId());
-            if (product == null || product.minQty() == null) continue;
+            if (product == null) continue;
 
-            int onHand = stock.getQtyOnHand() == null ? 0 : stock.getQtyOnHand();
-            int reserved = stock.getQtyReserved() == null ? 0 : stock.getQtyReserved();
-            int available = onHand - reserved;
-
-            if (available < product.minQty()) {
-                StockLevelResponse base = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock));
-                result.add(new StockLevelExpandedResponse(
-                        base.id(), base.warehouseId(), base.locationId(), base.productId(),
-                        base.lotNumber(), base.expiryDate(),
-                        base.qtyOnHand(), base.qtyReserved(), base.qtyAvailable(), base.updatedAt(),
-                        warehouseMap.get(base.warehouseId()),
-                        locationMap.get(base.locationId()),
-                        product));
-            }
+            StockLevelResponse base = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock));
+            result.add(new StockLevelExpandedResponse(
+                    base.id(), base.warehouseId(), base.locationId(), base.productId(),
+                    base.lotNumber(), base.expiryDate(),
+                    base.qtyOnHand(), base.qtyReserved(), base.qtyAvailable(), base.updatedAt(),
+                    warehouseMap.get(base.warehouseId()),
+                    locationMap.get(base.locationId()),
+                    product));
         }
         return result;
     }
@@ -534,12 +590,9 @@ public class StockLevelService {
     public List<NearExpiryStockResponse> findNearExpiry(int days,
             UUID warehouseId, UUID locationId, UUID productId) {
         LocalDate threshold = LocalDate.now().plusDays(days);
-        List<StockLevel> stocks = stockLevelRepository.findNearExpiry(threshold);
+        List<StockLevel> stocks = stockLevelRepository.findNearExpiry(threshold, warehouseId, locationId, productId);
 
         return stocks.stream()
-                .filter(s -> warehouseId == null || s.getWarehouse().getId().equals(warehouseId))
-                .filter(s -> locationId == null || s.getLocation().getId().equals(locationId))
-                .filter(s -> productId == null || s.getProductId().equals(productId))
                 .map(s -> {
                     long daysLeft = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), s.getExpiryDate());
                     int onHand = s.getQtyOnHand() == null ? 0 : s.getQtyOnHand();
@@ -563,20 +616,35 @@ public class StockLevelService {
 
     // Đếm số stock record có qtyAvailable < minQty.
     private long countLowStock() {
-        List<StockLevel> allStocks = stockLevelRepository.findAll();
-        if (allStocks.isEmpty()) return 0;
+        List<StockLevelRepository.StockQuantityView> stockViews = stockLevelRepository.findQuantityViews();
+        if (stockViews.isEmpty()) return 0;
 
-        Set<UUID> productIds = extractProductIds(allStocks);
-        Map<UUID, ProductSummary> productMap = loadProductsSummary(productIds);
+        Map<UUID, ProductSummary> productMap = loadProductsSummary(extractProductIdsFromQuantityViews(stockViews));
 
         long count = 0;
-        for (StockLevel stock : allStocks) {
-            ProductSummary product = productMap.get(stock.getProductId());
-            if (product == null || product.minQty() == null) continue;
-            int onHand = stock.getQtyOnHand() == null ? 0 : stock.getQtyOnHand();
-            int reserved = stock.getQtyReserved() == null ? 0 : stock.getQtyReserved();
-            if ((onHand - reserved) < product.minQty()) count++;
+        for (StockLevelRepository.StockQuantityView stock : stockViews) {
+            if (isLowStock(stock, productMap)) count++;
         }
         return count;
+    }
+
+    private Set<UUID> extractProductIdsFromQuantityViews(Collection<StockLevelRepository.StockQuantityView> stocks) {
+        Set<UUID> ids = new HashSet<>();
+        for (StockLevelRepository.StockQuantityView stock : stocks) {
+            if (stock.getProductId() != null) {
+                ids.add(stock.getProductId());
+            }
+        }
+        return ids;
+    }
+
+    private boolean isLowStock(StockLevelRepository.StockQuantityView stock, Map<UUID, ProductSummary> productMap) {
+        ProductSummary product = productMap.get(stock.getProductId());
+        if (product == null || product.minQty() == null) {
+            return false;
+        }
+        int onHand = stock.getQtyOnHand() == null ? 0 : stock.getQtyOnHand();
+        int reserved = stock.getQtyReserved() == null ? 0 : stock.getQtyReserved();
+        return onHand - reserved < product.minQty();
     }
 }

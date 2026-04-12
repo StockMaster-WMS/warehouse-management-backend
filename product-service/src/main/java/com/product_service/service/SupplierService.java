@@ -11,7 +11,6 @@ import com.product_service.entity.Supplier;
 import com.product_service.mapper.SupplierMapper;
 import com.product_service.repository.SupplierRepository;
 import com.product_service.repository.SupplierSpecification;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -31,7 +30,6 @@ public class SupplierService {
     private final SupplierMapper supplierMapper;
     private final InboundClient inboundClient;
 
-    @Autowired
     public SupplierService(SupplierRepository supplierRepository,
                            SupplierMapper supplierMapper,
                            InboundClient inboundClient) {

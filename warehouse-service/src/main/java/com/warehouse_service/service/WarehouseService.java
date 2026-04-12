@@ -113,11 +113,11 @@ public class WarehouseService {
     public void delete(UUID id) {
         Warehouse warehouse = getWarehouse(id);
 
-        if (!stockLevelRepository.findByWarehouseId(id).isEmpty()) {
+        if (stockLevelRepository.existsByWarehouseId(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Không thể xóa kho đang có tồn kho. Vui lòng chuyển hoặc xóa tồn kho trước");
         }
-        if (!locationRepository.findByWarehouseId(id).isEmpty()) {
+        if (locationRepository.existsByWarehouseId(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Không thể xóa kho đang có vị trí. Vui lòng xóa vị trí trước");
         }

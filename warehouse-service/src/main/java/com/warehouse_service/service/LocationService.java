@@ -12,6 +12,7 @@ import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.mapper.LocationMapper;
 import com.warehouse_service.repository.LocationRepository;
 import com.warehouse_service.repository.LocationSpecification;
+import com.warehouse_service.repository.StockLevelRepository;
 import com.warehouse_service.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -31,6 +32,7 @@ public class LocationService {
 
     private final LocationRepository locationRepository;
     private final WarehouseRepository warehouseRepository;
+    private final StockLevelRepository stockLevelRepository;
     private final LocationMapper locationMapper;
 
     // Lấy danh sách vị trí có phân trang và bộ lọc.
@@ -149,6 +151,10 @@ public class LocationService {
     @Transactional
     public void delete(UUID id) {
         Location location = getLocation(id);
+        if (stockLevelRepository.existsByLocationId(id)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Không thể xóa vị trí đang có tồn kho. Vui lòng chuyển hoặc xóa tồn kho trước");
+        }
         locationRepository.delete(location);
     }
 

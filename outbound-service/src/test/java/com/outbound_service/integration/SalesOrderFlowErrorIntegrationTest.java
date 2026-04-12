@@ -51,6 +51,7 @@ class SalesOrderFlowErrorIntegrationTest {
         @Autowired
         private PickingItemRepository pickingItemRepository;
 
+        @SuppressWarnings("removal")
         @MockBean
         private WarehouseStockGateway warehouseStockGateway;
 

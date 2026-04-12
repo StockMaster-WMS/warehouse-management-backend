@@ -12,6 +12,13 @@ public record StockAdjustCommand(
         @NotNull UUID locationId,
         @NotNull UUID productId,
         String lotNumber,
-        int qtyDelta
+        int qtyDelta,
+        String idempotencyKey,
+        String referenceType,
+        UUID referenceId
 ) {
+
+    public StockAdjustCommand(UUID warehouseId, UUID locationId, UUID productId, String lotNumber, int qtyDelta) {
+        this(warehouseId, locationId, productId, lotNumber, qtyDelta, null, null, null);
+    }
 }

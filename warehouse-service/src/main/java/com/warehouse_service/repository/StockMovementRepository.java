@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
+import java.util.Optional;
 import java.util.UUID;
 
 public interface StockMovementRepository extends JpaRepository<StockMovement, UUID>,
@@ -16,4 +17,6 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, UU
     @Override
     @EntityGraph(attributePaths = {"warehouse", "location"})
     Page<StockMovement> findAll(Specification<StockMovement> spec, Pageable pageable);
+
+    Optional<StockMovement> findByIdempotencyKey(String idempotencyKey);
 }

@@ -145,7 +145,7 @@ public class PurchaseOrderService {
     public void delete(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
         requirePoNotFinished(purchaseOrder);
-        if (!poItemRepository.findByPurchaseOrderId(id).isEmpty()) {
+        if (poItemRepository.existsByPurchaseOrderId(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không thể xóa PO đã có dòng hàng");
         }
         purchaseOrderRepository.delete(purchaseOrder);
@@ -163,7 +163,7 @@ public class PurchaseOrderService {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Chỉ duyệt đơn nhập ở trạng thái DRAFT");
         }
-        if (poItemRepository.findByPurchaseOrderId(id).isEmpty()) {
+        if (!poItemRepository.existsByPurchaseOrderId(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Cần ít nhất một dòng hàng trước khi duyệt đơn nhập");
         }

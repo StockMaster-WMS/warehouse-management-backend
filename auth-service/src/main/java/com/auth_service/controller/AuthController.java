@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -64,6 +65,15 @@ public class AuthController {
         return ApiResponse.success("Kiểm tra token thành công", authService.introspect(request));
     }
 
+    @GetMapping("/me")
+    @Operation(summary = "Lấy thông tin người dùng hiện tại", security = {@SecurityRequirement(name = "bearerAuth")})
+    public ApiResponse<LoginResponse.UserInfo> me(
+            HttpServletRequest request) {
+        return ApiResponse.success(
+                "Lấy thông tin người dùng hiện tại thành công",
+                authService.me(extractToken(request.getHeader(HttpHeaders.AUTHORIZATION))));
+    }
+
     @PostMapping("/refresh")
     @Operation(summary = "Lấy token mới bằng refresh token")
     public ApiResponse<LoginResponse> refresh(
@@ -76,7 +86,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    @Operation(summary = "Đăng xuất", security = {@SecurityRequirement(name = "BearerAuth")})
+    @Operation(summary = "Đăng xuất", security = {@SecurityRequirement(name = "bearerAuth")})
     public ApiResponse<String> logout(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader,
             HttpServletRequest request,
