@@ -84,6 +84,9 @@ services:
       - eureka-server
     environment:
       API_GATEWAY_PORT: 9000
+      GATEWAY_SECURITY_ENABLED: ${GATEWAY_SECURITY_ENABLED:-true}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-change-me-to-a-very-long-secret-key-at-least-32-bytes}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
       EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
 
   auth-service:
@@ -93,13 +96,22 @@ services:
       args:
         SERVICE: auth-service
     container_name: auth-service
-    ports:
-      - "9011:9011"
+    expose:
+      - "9011"
     depends_on:
       - eureka-server
       - postgres-auth
     environment:
       AUTH_SERVICE_PORT: 9011
+      AUTH_MODE: ${AUTH_MODE:-secure}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-change-me-to-a-very-long-secret-key-at-least-32-bytes}
+      AUTH_JWT_ISSUER: ${AUTH_JWT_ISSUER:-auth-service}
+      AUTH_JWT_ACCESS_EXPIRATION_SECONDS: ${AUTH_JWT_ACCESS_EXPIRATION_SECONDS:-3600}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_COOKIE_SAME_SITE: ${AUTH_COOKIE_SAME_SITE:-Lax}
+      AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED: ${AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED:-false}
+      INTERNAL_SECURITY_ENABLED: ${INTERNAL_SECURITY_ENABLED:-true}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
       EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_HOSTNAME: auth-service
       AUTH_DB_URL: jdbc:postgresql://postgres-auth:5432/auth_db
@@ -114,13 +126,15 @@ services:
       args:
         SERVICE: product-service
     container_name: product-service
-    ports:
-      - "9002:9002"
+    expose:
+      - "9002"
     depends_on:
       - eureka-server
       - postgres-product
     environment:
       PRODUCT_SERVICE_PORT: 9002
+      INTERNAL_SECURITY_ENABLED: ${INTERNAL_SECURITY_ENABLED:-true}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
       EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_HOSTNAME: product-service
       PRODUCT_DB_URL: jdbc:postgresql://postgres-product:5432/db_product
@@ -135,13 +149,15 @@ services:
       args:
         SERVICE: warehouse-service
     container_name: warehouse-service
-    ports:
-      - "9003:9003"
+    expose:
+      - "9003"
     depends_on:
       - eureka-server
       - postgres-warehouse
     environment:
       WAREHOUSE_SERVICE_PORT: 9003
+      INTERNAL_SECURITY_ENABLED: ${INTERNAL_SECURITY_ENABLED:-true}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
       EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_HOSTNAME: warehouse-service
       WAREHOUSE_DB_URL: jdbc:postgresql://postgres-warehouse:5432/db_warehouse
@@ -156,13 +172,15 @@ services:
       args:
         SERVICE: inbound-service
     container_name: inbound-service
-    ports:
-      - "9004:9004"
+    expose:
+      - "9004"
     depends_on:
       - eureka-server
       - postgres-inbound
     environment:
       INBOUND_SERVICE_PORT: 9004
+      INTERNAL_SECURITY_ENABLED: ${INTERNAL_SECURITY_ENABLED:-true}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
       EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_HOSTNAME: inbound-service
       INBOUND_DB_URL: jdbc:postgresql://postgres-inbound:5432/db_inbound
@@ -177,13 +195,15 @@ services:
       args:
         SERVICE: outbound-service
     container_name: outbound-service
-    ports:
-      - "9005:9005"
+    expose:
+      - "9005"
     depends_on:
       - eureka-server
       - postgres-outbound
     environment:
       OUTBOUND_SERVICE_PORT: 9005
+      INTERNAL_SECURITY_ENABLED: ${INTERNAL_SECURITY_ENABLED:-true}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
       EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
       EUREKA_INSTANCE_HOSTNAME: outbound-service
       OUTBOUND_DB_URL: jdbc:postgresql://postgres-outbound:5432/db_outbound

@@ -38,6 +38,7 @@ spring:
 
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+        - SetRequestHeader=X-Internal-Service-Token, ${INTERNAL_SERVICE_TOKEN:change-me-internal-service-token}
 
       routes:
         # === AUTH SERVICE DOCS ===

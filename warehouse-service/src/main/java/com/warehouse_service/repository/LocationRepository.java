@@ -20,5 +20,7 @@ public interface LocationRepository extends JpaRepository<Location, UUID>, JpaSp
 
 	List<Location> findByWarehouseId(UUID warehouseId);
 
+	boolean existsByWarehouseId(UUID warehouseId);
+
 	Optional<Location> findByWarehouseIdAndCode(UUID warehouseId, String code);
 }

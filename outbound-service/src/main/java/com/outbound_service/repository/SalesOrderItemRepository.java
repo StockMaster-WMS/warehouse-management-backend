@@ -22,6 +22,8 @@ public interface SalesOrderItemRepository extends JpaRepository<SalesOrderItem, 
 
     List<SalesOrderItem> findBySalesOrder_Id(UUID salesOrderId);
 
+    boolean existsBySalesOrder_Id(UUID salesOrderId);
+
     Optional<SalesOrderItem> findBySalesOrder_IdAndLineNumber(UUID salesOrderId, Short lineNumber);
 
     @Query("SELECT s FROM SalesOrderItem s JOIN FETCH s.salesOrder WHERE s.id = :id")

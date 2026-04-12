@@ -118,7 +118,7 @@ public class SalesOrderService {
         SalesOrder so = getSalesOrder(id);
         requireStatus(so, SalesOrderStatus.PENDING, "Chỉ chuyển sang PICKING khi đơn đang PENDING");
 
-        if (salesOrderItemRepository.findBySalesOrder_Id(id).isEmpty()) {
+        if (!salesOrderItemRepository.existsBySalesOrder_Id(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Cần ít nhất một dòng đơn (so-item) trước khi picking");
         }
         so.setStatus(SalesOrderStatus.PICKING);
@@ -246,13 +246,21 @@ public class SalesOrderService {
                     p.getLocationId(),
                     p.getProductId(),
                     p.getLotNumber(),
-                    -picked));
+                    -picked,
+                    stockMutationKey(so.getId(), p.getId(), "SHIP_RELEASE",
+                            p.getLocationId(), p.getProductId(), p.getLotNumber(), picked),
+                    "SALES_ORDER",
+                    so.getId()));
             StockAdjustCommand cmd = new StockAdjustCommand(
                     so.getWarehouseId(),
                     p.getLocationId(),
                     p.getProductId(),
                     p.getLotNumber(),
-                    -picked);
+                    -picked,
+                    stockMutationKey(so.getId(), p.getId(), "SHIP_ADJUST",
+                            p.getLocationId(), p.getProductId(), p.getLotNumber(), picked),
+                    "SALES_ORDER",
+                    so.getId());
             warehouseStockGateway.adjustOrThrow(cmd);
         }
     }
@@ -337,7 +345,11 @@ public class SalesOrderService {
                     p.getLocationId(),
                     p.getProductId(),
                     p.getLotNumber(),
-                    -qtyToRelease));
+                    -qtyToRelease,
+                    stockMutationKey(so.getId(), p.getId(), "CANCEL_RELEASE",
+                            p.getLocationId(), p.getProductId(), p.getLotNumber(), qtyToRelease),
+                    "SALES_ORDER",
+                    so.getId()));
         }
     }
 
@@ -345,5 +357,12 @@ public class SalesOrderService {
     private SalesOrder getSalesOrder(UUID id) {
         return salesOrderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất"));
+    }
+
+    private static String stockMutationKey(UUID salesOrderId, UUID pickingItemId, String action,
+            UUID locationId, UUID productId, String lotNumber, int qty) {
+        String lot = lotNumber == null ? "" : lotNumber.trim();
+        return "SALES_ORDER:" + salesOrderId + ":PICKING_ITEM:" + pickingItemId + ":" + action
+                + ":" + locationId + ":" + productId + ":" + lot + ":" + qty;
     }
 }

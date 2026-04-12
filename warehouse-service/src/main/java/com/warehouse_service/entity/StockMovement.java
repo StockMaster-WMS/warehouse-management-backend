@@ -61,6 +61,9 @@ public class StockMovement {
     @Column(name = "reference_id")
     private UUID referenceId;
 
+    @Column(name = "idempotency_key", length = 512)
+    private String idempotencyKey;
+
     @Column(name = "created_by", length = 120)
     private String createdBy;
 

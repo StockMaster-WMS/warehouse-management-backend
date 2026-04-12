@@ -146,7 +146,10 @@ public class InboundReceiptService {
                     request.locationId(),
                     receiptItem.getProductId(),
                     null,
-                    receiptItem.getReceivedQty());
+                    receiptItem.getReceivedQty(),
+                    "INBOUND_RECEIPT_ITEM:" + receiptItem.getId() + ":ADJUST",
+                    "INBOUND_RECEIPT",
+                    receipt.getId());
             warehouseStockGateway.adjustOrThrow(cmd);
         }
 

@@ -11,11 +11,22 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, JpaSpecificationExecutor<StockLevel> {
+
+	interface StockQuantityView {
+		UUID getId();
+
+		UUID getProductId();
+
+		Integer getQtyOnHand();
+
+		Integer getQtyReserved();
+	}
 
 	@Override
 	@EntityGraph(attributePaths = {"warehouse", "location"})
@@ -28,6 +39,10 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 	List<StockLevel> findByProductId(UUID productId);
 
 	List<StockLevel> findByWarehouseIdAndProductId(UUID warehouseId, UUID productId);
+
+	boolean existsByWarehouseId(UUID warehouseId);
+
+	boolean existsByLocationId(UUID locationId);
 
 	Optional<StockLevel> findByLocationIdAndProductIdAndLotNumber(UUID locationId, UUID productId, String lotNumber);
 
@@ -47,6 +62,32 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 	long countNearExpiry(@Param("threshold") LocalDate threshold);
 
 	@EntityGraph(attributePaths = {"warehouse", "location"})
-	@Query("select s from StockLevel s where s.expiryDate is not null and s.expiryDate <= :threshold and s.qtyOnHand > 0 order by s.expiryDate asc")
-	List<StockLevel> findNearExpiry(@Param("threshold") LocalDate threshold);
+	@Query("""
+			select s from StockLevel s
+			where s.expiryDate is not null
+			  and s.expiryDate <= :threshold
+			  and s.qtyOnHand > 0
+			  and (:warehouseId is null or s.warehouse.id = :warehouseId)
+			  and (:locationId is null or s.location.id = :locationId)
+			  and (:productId is null or s.productId = :productId)
+			order by s.expiryDate asc
+			""")
+	List<StockLevel> findNearExpiry(
+			@Param("threshold") LocalDate threshold,
+			@Param("warehouseId") UUID warehouseId,
+			@Param("locationId") UUID locationId,
+			@Param("productId") UUID productId);
+
+	@Query("""
+			select s.id as id,
+			       s.productId as productId,
+			       s.qtyOnHand as qtyOnHand,
+			       s.qtyReserved as qtyReserved
+			from StockLevel s
+			""")
+	List<StockQuantityView> findQuantityViews();
+
+	@EntityGraph(attributePaths = {"warehouse", "location"})
+	@Query("select s from StockLevel s where s.id in :ids")
+	List<StockLevel> findByIdInWithWarehouseAndLocation(@Param("ids") Collection<UUID> ids);
 }

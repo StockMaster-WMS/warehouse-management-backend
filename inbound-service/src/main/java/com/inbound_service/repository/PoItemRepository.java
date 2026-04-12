@@ -24,6 +24,8 @@ public interface PoItemRepository extends JpaRepository<PoItem, UUID>, JpaSpecif
 
 	List<PoItem> findByPurchaseOrderId(UUID purchaseOrderId);
 
+	boolean existsByPurchaseOrderId(UUID purchaseOrderId);
+
 	Optional<PoItem> findByPurchaseOrderIdAndLineNumber(UUID purchaseOrderId, Short lineNumber);
 
 	@Query("SELECT p FROM PoItem p JOIN FETCH p.purchaseOrder WHERE p.id = :id")

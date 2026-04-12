@@ -12,6 +12,13 @@ public record StockReserveCommand(
         @NotNull UUID locationId,
         @NotNull UUID productId,
         String lotNumber,
-        int reservedDelta
+        int reservedDelta,
+        String idempotencyKey,
+        String referenceType,
+        UUID referenceId
 ) {
+
+    public StockReserveCommand(UUID warehouseId, UUID locationId, UUID productId, String lotNumber, int reservedDelta) {
+        this(warehouseId, locationId, productId, lotNumber, reservedDelta, null, null, null);
+    }
 }
