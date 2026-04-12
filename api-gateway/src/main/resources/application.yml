@@ -107,7 +107,7 @@ spring:
           uri: lb://outbound-service
           order: 100
           predicates:
-            - Path=/api/outbound/**, /api/outbounds/**, /api/sales-orders/**, /api/picking-items/**, /api/so-items/**
+            - Path=/api/outbound/**, /api/outbounds/**, /api/customers/**, /api/sales-orders/**, /api/picking-items/**, /api/so-items/**
 
 # === Cau hinh Discovery (Eureka) ===
 eureka:
