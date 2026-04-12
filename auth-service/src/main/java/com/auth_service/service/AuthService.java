@@ -4,6 +4,7 @@ import com.auth_service.dto.request.IntrospectRequest;
 import com.auth_service.dto.request.LoginRequest;
 import com.auth_service.dto.request.RegisterRequest;
 import com.auth_service.dto.response.IntrospectResponse;
+import com.auth_service.dto.response.LoginResponse;
 import com.auth_service.dto.response.RegisterResponse;
 import com.auth_service.entity.TokenBlacklist;
 import com.auth_service.entity.UserAccount;
@@ -108,6 +109,41 @@ public class AuthService {
                     claims.getExpiration().toInstant());
         } catch (JwtException | IllegalArgumentException ex) {
             return IntrospectResponse.invalid();
+        }
+    }
+
+    // Trả thông tin người dùng hiện tại từ access token hợp lệ.
+    @Transactional(readOnly = true)
+    public LoginResponse.UserInfo me(String accessToken) {
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Thiếu access token");
+        }
+
+        try {
+            if (!"ACCESS".equals(jwtTokenProvider.getTokenType(accessToken))) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Token không phải access token");
+            }
+
+            String jti = jwtTokenProvider.getJti(accessToken);
+            if (tokenBlacklistRepository.existsByTokenJti(jti)) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Access token không còn hiệu lực");
+            }
+
+            var userId = jwtTokenProvider.getUserId(accessToken);
+            UserAccount user = userAccountRepository.findById(userId)
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Người dùng không tồn tại"));
+
+            if (!Boolean.TRUE.equals(user.getIsActive())) {
+                throw new AppException(ErrorCode.FORBIDDEN, "Tài khoản đã bị khóa");
+            }
+
+            return new LoginResponse.UserInfo(
+                    user.getId(),
+                    user.getUsername(),
+                    user.getEmail(),
+                    user.getRoleCodesCsv());
+        } catch (JwtException | IllegalArgumentException ex) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Access token không hợp lệ");
         }
     }
 

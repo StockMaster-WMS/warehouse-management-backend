@@ -85,6 +85,7 @@ services:
     environment:
       API_GATEWAY_PORT: 9000
       GATEWAY_SECURITY_ENABLED: ${GATEWAY_SECURITY_ENABLED:-true}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-change-me-to-a-very-long-secret-key-at-least-32-bytes}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
       EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka

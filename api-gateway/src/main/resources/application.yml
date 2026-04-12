@@ -21,23 +21,10 @@ spring:
 
   cloud:
     gateway:
-      globalcors:
-        add-to-simple-url-handler-mapping: true # FIX: Cho phép OPTIONS đi qua handler
-        corsConfigurations:
-          "[/**]":
-            allowedOriginPatterns: "*" # FIX: Dùng Pattern thay vì Origins
-            allowedMethods:
-              - GET
-              - POST
-              - PUT
-              - DELETE
-              - OPTIONS
-              - PATCH
-            allowedHeaders: "*"
-            maxAge: 3600
-
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+        # Gateway là lớp CORS duy nhất cho browser; không chuyển Origin xuống service để tránh header CORS bị nhân đôi.
+        - RemoveRequestHeader=Origin
         - SetRequestHeader=X-Internal-Service-Token, ${INTERNAL_SERVICE_TOKEN:change-me-internal-service-token}
 
       routes:
