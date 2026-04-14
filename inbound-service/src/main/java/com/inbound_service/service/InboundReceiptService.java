@@ -2,6 +2,7 @@ package com.inbound_service.service;
 
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
+import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.common.util.CodeGenerator;
@@ -42,6 +43,7 @@ public class InboundReceiptService {
     private final SupplierClient supplierClient;
     private final ProductClient productClient;
     private final InboundReceiptMapper receiptMapper;
+    private final AuditLogService auditLogService;
 
     private static final EnumSet<PurchaseOrderStatus> RECEIVABLE_STATUSES =
             EnumSet.of(PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.PARTIAL);
@@ -175,7 +177,18 @@ public class InboundReceiptService {
             putawayTaskRepository.save(task);
         }
 
-        return receiptMapper.toResponse(receipt);
+        InboundReceiptResponse response = receiptMapper.toResponse(receipt);
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("receiptNumber", receipt.getReceiptNumber());
+        metadata.put("purchaseOrderId", po.getId());
+        metadata.put("poNumber", po.getPoNumber());
+        metadata.put("warehouseId", po.getWarehouseId());
+        metadata.put("locationId", request.locationId());
+        metadata.put("lineCount", receiptItems.size());
+        auditLogService.record("INBOUND_RECEIPT", "CREATE", "Tạo phiếu nhập kho",
+                "INBOUND_RECEIPT", receipt.getId(), receipt.getReceiptNumber(), null, response,
+                request.note(), metadata);
+        return response;
     }
 
     // Lấy danh sách phiếu nhập có phân trang và bộ lọc.

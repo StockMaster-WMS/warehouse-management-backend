@@ -1,6 +1,7 @@
 package com.product_service.service;
 
 import com.common.api.PagedResponse;
+import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.common.util.CodeGenerator;
@@ -26,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -40,6 +42,7 @@ public class ProductService {
     private final CategoryRepository categoryRepository;
     private final SupplierRepository supplierRepository;
     private final ProductMapper productMapper;
+    private final AuditLogService auditLogService;
 
     // Lấy danh sách sản phẩm có phân trang và bộ lọc.
     public PagedResponse<ProductResponse> findAll(Pageable pageable, String keyword, UUID categoryId,
@@ -112,13 +115,19 @@ public class ProductService {
         product.setCategory(category);
         product.setPrimarySupplier(supplier);
 
-        return productMapper.toResponse(productRepository.save(product));
+        Product saved = productRepository.save(product);
+        ProductResponse response = productMapper.toResponse(saved);
+        auditLogService.record("PRODUCT", "CREATE", "Tạo sản phẩm",
+                "PRODUCT", saved.getId(), saved.getSku(), null, response,
+                null, Map.of("sku", saved.getSku(), "categoryId", category.getId()));
+        return response;
     }
 
     // Cập nhật thông tin sản phẩm theo id.
     @Transactional
     public ProductResponse update(UUID id, UpdateProductRequest request) {
         Product product = getProduct(id);
+        ProductResponse before = productMapper.toResponse(product);
         validateUpdateRequest(id, request.sku(), request.barcodeEan13());
 
         Category category = categoryRepository.findById(request.categoryId())
@@ -130,14 +139,23 @@ public class ProductService {
         product.setCategory(category);
         product.setPrimarySupplier(supplier);
 
-        return productMapper.toResponse(productRepository.save(product));
+        Product saved = productRepository.save(product);
+        ProductResponse after = productMapper.toResponse(saved);
+        auditLogService.record("PRODUCT", "UPDATE", "Cập nhật sản phẩm",
+                "PRODUCT", saved.getId(), saved.getSku(), before, after,
+                null, Map.of("sku", saved.getSku(), "categoryId", category.getId()));
+        return after;
     }
 
     // Xóa sản phẩm theo id.
     @Transactional
     public void delete(UUID id) {
         Product product = getProduct(id);
+        ProductResponse before = productMapper.toResponse(product);
         productRepository.delete(product);
+        auditLogService.record("PRODUCT", "DELETE", "Xóa sản phẩm",
+                "PRODUCT", id, before.sku(), before, null,
+                null, Map.of("sku", before.sku()));
     }
 
     // Tìm thực thể sản phẩm, ném lỗi nếu không tồn tại.

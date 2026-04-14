@@ -3,6 +3,7 @@ package com.warehouse_service.service;
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.api.stock.StockReserveCommand;
+import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.warehouse_service.client.ProductBatchClient;
@@ -40,6 +41,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -58,6 +60,7 @@ public class StockLevelService {
     private final StockLevelMapper stockLevelMapper;
     private final ProductBatchClient productBatchClient;
     private final StockMovementRepository stockMovementRepository;
+    private final AuditLogService auditLogService;
 
     // Lấy danh sách tồn kho có phân trang và bộ lọc cơ bản.
     public PagedResponse<StockLevelResponse> findAll(Pageable pageable, UUID warehouseId, UUID locationId, UUID productId) {
@@ -153,7 +156,11 @@ public class StockLevelService {
         stockLevel.setLotNumber(lotNumber);
 
         StockLevel saved = stockLevelRepository.save(stockLevel);
-        return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
+        StockLevelResponse response = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
+        auditLogService.record("STOCK", "CREATE", "Tạo tồn kho",
+                "STOCK_LEVEL", saved.getId(), stockEntityName(saved), null, response,
+                null, stockMetadata(saved, null, null, null, null));
+        return response;
     }
 
     // Cập nhật bản ghi tồn kho theo id.
@@ -168,6 +175,7 @@ public class StockLevelService {
 
         String lotNumber = normalizeLot(request.lotNumber());
         ensureUniqueStock(location.getId(), request.productId(), lotNumber, id);
+        StockLevelResponse before = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stockLevel));
 
         stockLevelMapper.updateEntity(request, stockLevel);
         stockLevel.setWarehouse(warehouse);
@@ -175,14 +183,22 @@ public class StockLevelService {
         stockLevel.setLotNumber(lotNumber);
 
         StockLevel saved = stockLevelRepository.save(stockLevel);
-        return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
+        StockLevelResponse after = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
+        auditLogService.record("STOCK", "UPDATE", "Cập nhật tồn kho",
+                "STOCK_LEVEL", saved.getId(), stockEntityName(saved), before, after,
+                null, stockMetadata(saved, null, null, null, null));
+        return after;
     }
 
     // Xóa bản ghi tồn kho theo id.
     @Transactional
     public void delete(UUID id) {
         StockLevel stockLevel = getStockLevel(id);
+        StockLevelResponse before = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stockLevel));
         stockLevelRepository.delete(stockLevel);
+        auditLogService.record("STOCK", "DELETE", "Xóa tồn kho",
+                "STOCK_LEVEL", id, stockEntityName(stockLevel), before, null,
+                null, stockMetadata(stockLevel, null, null, null, null));
     }
 
     private static final int MAX_RETRY = 3;
@@ -252,6 +268,7 @@ public class StockLevelService {
                             "Không có tồn kho để nhả chỗ tại vị trí/sản phẩm/lô đã chọn");
                 }
                 StockLevel stock = opt.get();
+                StockLevelResponse before = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock));
                 int onHand = stock.getQtyOnHand();
                 int reserved = stock.getQtyReserved() == null ? 0 : stock.getQtyReserved();
                 int newReserved = reserved + cmd.reservedDelta();
@@ -276,7 +293,12 @@ public class StockLevelService {
                         cmd.reservedDelta() > 0 ? "RESERVE" : "RELEASE",
                         cmd.idempotencyKey(), cmd.referenceType(), cmd.referenceId());
 
-                return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
+                StockLevelResponse after = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
+                auditLogService.record("STOCK", "STOCK_RESERVE", "Điều chỉnh giữ chỗ tồn kho",
+                        "STOCK_LEVEL", saved.getId(), stockEntityName(saved), before, after,
+                        cmd.referenceType(), stockMetadata(saved, 0, cmd.reservedDelta(),
+                                cmd.referenceType(), cmd.referenceId()));
+                return after;
             } catch (ObjectOptimisticLockingFailureException e) {
                 if (attempt == MAX_RETRY - 1) {
                     throw new AppException(ErrorCode.BAD_REQUEST,
@@ -309,11 +331,16 @@ public class StockLevelService {
         recordMovement(saved, cmd.qtyDelta(), 0, "INBOUND",
                 cmd.idempotencyKey(), cmd.referenceType(), cmd.referenceId());
 
-        return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
+        StockLevelResponse after = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
+        auditLogService.record("STOCK", "STOCK_ADJUST", "Điều chỉnh tồn kho",
+                "STOCK_LEVEL", saved.getId(), stockEntityName(saved), null, after,
+                cmd.referenceType(), stockMetadata(saved, cmd.qtyDelta(), 0, cmd.referenceType(), cmd.referenceId()));
+        return after;
     }
 
     // Áp dụng biến động tồn lên bản ghi hiện có.
     private StockLevelResponse applyDelta(StockLevel stockLevel, int qtyDelta, StockAdjustCommand cmd) {
+        StockLevelResponse before = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stockLevel));
         int newOnHand = stockLevel.getQtyOnHand() + qtyDelta;
         if (newOnHand < 0) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng trừ vượt quá tồn khả dụng");
@@ -328,7 +355,11 @@ public class StockLevelService {
                 qtyDelta > 0 ? "INBOUND" : "OUTBOUND",
                 cmd.idempotencyKey(), cmd.referenceType(), cmd.referenceId());
 
-        return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
+        StockLevelResponse after = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(saved));
+        auditLogService.record("STOCK", "STOCK_ADJUST", "Điều chỉnh tồn kho",
+                "STOCK_LEVEL", saved.getId(), stockEntityName(saved), before, after,
+                cmd.referenceType(), stockMetadata(saved, qtyDelta, 0, cmd.referenceType(), cmd.referenceId()));
+        return after;
     }
 
     // Tìm thực thể tồn kho theo id.
@@ -521,6 +552,36 @@ public class StockLevelService {
         }
         String normalized = idempotencyKey.trim();
         return normalized.length() <= 512 ? normalized : normalized.substring(0, 512);
+    }
+
+    private String stockEntityName(StockLevel stock) {
+        String locationCode = stock.getLocation() == null ? null : stock.getLocation().getCode();
+        String lot = normalizeLot(stock.getLotNumber());
+        return "product=" + stock.getProductId()
+                + (locationCode == null ? "" : ", location=" + locationCode)
+                + (lot.isBlank() ? "" : ", lot=" + lot);
+    }
+
+    private Map<String, Object> stockMetadata(StockLevel stock, Integer qtyDelta, Integer reservedDelta,
+            String referenceType, UUID referenceId) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("warehouseId", stock.getWarehouse() == null ? null : stock.getWarehouse().getId());
+        metadata.put("locationId", stock.getLocation() == null ? null : stock.getLocation().getId());
+        metadata.put("productId", stock.getProductId());
+        metadata.put("lotNumber", normalizeLot(stock.getLotNumber()));
+        if (qtyDelta != null) {
+            metadata.put("qtyDelta", qtyDelta);
+        }
+        if (reservedDelta != null) {
+            metadata.put("reservedDelta", reservedDelta);
+        }
+        if (StringUtils.hasText(referenceType)) {
+            metadata.put("referenceType", referenceType);
+        }
+        if (referenceId != null) {
+            metadata.put("referenceId", referenceId);
+        }
+        return metadata;
     }
 
     // Lấy số liệu tổng quan tồn kho phục vụ dashboard.
