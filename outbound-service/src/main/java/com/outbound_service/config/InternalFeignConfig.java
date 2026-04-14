@@ -1,10 +1,13 @@
 package com.outbound_service.config;
 
 import feign.RequestInterceptor;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Configuration
 public class InternalFeignConfig {
@@ -20,6 +23,13 @@ public class InternalFeignConfig {
         return template -> {
             if (StringUtils.hasText(token)) {
                 template.header(headerName, token);
+            }
+            if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attrs) {
+                HttpServletRequest request = attrs.getRequest();
+                String authorization = request.getHeader("Authorization");
+                if (StringUtils.hasText(authorization)) {
+                    template.header("Authorization", authorization);
+                }
             }
         };
     }

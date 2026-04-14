@@ -3,6 +3,7 @@ package com.outbound_service.service;
 import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockReserveCommand;
+import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.outbound_service.client.LocationClient;
@@ -33,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.UUID;
 
 @Service
@@ -47,6 +49,7 @@ public class PickingItemService {
     private final WarehouseStockGateway warehouseStockGateway;
     private final ProductClient productClient;
     private final LocationClient locationClient;
+    private final AuditLogService auditLogService;
 
     // Lấy danh sách picking item có phân trang và bộ lọc.
     public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId,
@@ -163,7 +166,11 @@ public class PickingItemService {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không thể giữ chỗ tồn kho (Reserved) tại Warehouse Service. Lỗi: " + e.getMessage());
         }
 
-        return pickingItemMapper.toResponse(saved);
+        PickingItemResponse response = pickingItemMapper.toResponse(saved);
+        auditLogService.record("PICKING", "CREATE", "Tạo nhiệm vụ picking",
+                "PICKING_ITEM", saved.getId(), pickingEntityName(saved), null, response,
+                null, pickingMetadata(saved));
+        return response;
     }
 
     // Cập nhật picking item và điều chỉnh lại reserved khi allocation thay đổi.
@@ -171,6 +178,7 @@ public class PickingItemService {
     public PickingItemResponse update(UUID id, UpdatePickingItemRequest request) {
         PickingItem existing = pickingItemRepository.findByIdWithSoAndOrder(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy picking item"));
+        PickingItemResponse before = pickingItemMapper.toResponse(existing);
 
         SalesOrder so = existing.getSoItem().getSalesOrder();
         assertSalesOrderAllowsPickingMutation(so);
@@ -221,7 +229,14 @@ public class PickingItemService {
                             existing.getLocationId(), existing.getProductId(), newLot, existing.getQtyToPick())));
         }
 
-        return pickingItemMapper.toResponse(pickingItemRepository.save(existing));
+        PickingItem saved = pickingItemRepository.save(existing);
+        PickingItemResponse after = pickingItemMapper.toResponse(saved);
+        String actionType = saved.getStatus() == PickingItemStatus.PICKED ? "PICK" : "UPDATE";
+        String action = saved.getStatus() == PickingItemStatus.PICKED ? "Hoàn tất picking" : "Cập nhật picking";
+        auditLogService.record("PICKING", actionType, action,
+                "PICKING_ITEM", saved.getId(), pickingEntityName(saved), before, after,
+                null, pickingMetadata(saved));
+        return after;
     }
 
     // Xóa picking item và hoàn trả lượng reserved đã giữ.
@@ -229,6 +244,7 @@ public class PickingItemService {
     public void delete(UUID id) {
         PickingItem item = pickingItemRepository.findByIdWithSoAndOrder(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy picking item"));
+        PickingItemResponse before = pickingItemMapper.toResponse(item);
 
         SalesOrder so = item.getSoItem().getSalesOrder();
         assertSalesOrderAllowsPickingMutation(so);
@@ -241,6 +257,9 @@ public class PickingItemService {
                         normalizeLot(item.getLotNumber()), item.getQtyToPick())));
 
         pickingItemRepository.delete(item);
+        auditLogService.record("PICKING", "DELETE", "Xóa nhiệm vụ picking",
+                "PICKING_ITEM", id, pickingEntityName(item), before, null,
+                null, pickingMetadata(item));
     }
 
 
@@ -344,6 +363,29 @@ public class PickingItemService {
             UUID locationId, UUID productId, String lotNumber, int qty) {
         return "PICKING_ITEM:" + pickingItemId + ":" + action
                 + ":" + locationId + ":" + productId + ":" + normalizeLot(lotNumber) + ":" + qty;
+    }
+
+    private String pickingEntityName(PickingItem item) {
+        String salesOrderNumber = item.getSoItem() == null || item.getSoItem().getSalesOrder() == null
+                ? null
+                : item.getSoItem().getSalesOrder().getSoNumber();
+        return (salesOrderNumber == null ? "SO" : salesOrderNumber)
+                + " / product=" + item.getProductId();
+    }
+
+    private Map<String, Object> pickingMetadata(PickingItem item) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("soItemId", item.getSoItem() == null ? null : item.getSoItem().getId());
+        metadata.put("salesOrderId", item.getSoItem() == null || item.getSoItem().getSalesOrder() == null
+                ? null
+                : item.getSoItem().getSalesOrder().getId());
+        metadata.put("productId", item.getProductId());
+        metadata.put("locationId", item.getLocationId());
+        metadata.put("lotNumber", normalizeLot(item.getLotNumber()));
+        metadata.put("qtyToPick", item.getQtyToPick());
+        metadata.put("qtyPicked", item.getQtyPicked());
+        metadata.put("status", item.getStatus() == null ? null : item.getStatus().name());
+        return metadata;
     }
 
     // Lấy chi tiết picking item đầy đủ dữ liệu cho giao diện picker.

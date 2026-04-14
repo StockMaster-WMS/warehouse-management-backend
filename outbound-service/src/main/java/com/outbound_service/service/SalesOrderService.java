@@ -4,6 +4,7 @@ import com.outbound_service.dto.request.SalesOrderActionRequest;
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.api.stock.StockReserveCommand;
+import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.common.util.CodeGenerator;
@@ -29,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -46,6 +48,7 @@ public class SalesOrderService {
     private final PickingItemRepository pickingItemRepository;
     private final WarehouseStockGateway warehouseStockGateway;
     private final SalesOrderMapper salesOrderMapper;
+    private final AuditLogService auditLogService;
 
     // Lấy danh sách đơn xuất có phân trang và bộ lọc.
     public PagedResponse<SalesOrderResponse> findAll(Pageable pageable, String keyword, String status,
@@ -80,7 +83,12 @@ public class SalesOrderService {
         SalesOrder salesOrder = salesOrderMapper.toEntity(request);
         salesOrder.setSoNumber(CodeGenerator.generate(SO_NUMBER_PREFIX));
 
-        return salesOrderMapper.toResponse(salesOrderRepository.save(salesOrder));
+        SalesOrder saved = salesOrderRepository.save(salesOrder);
+        SalesOrderResponse response = salesOrderMapper.toResponse(saved);
+        auditLogService.record("SALES_ORDER", "CREATE", "Tạo đơn xuất",
+                "SALES_ORDER", saved.getId(), saved.getSoNumber(), null, response,
+                null, orderMetadata(saved));
+        return response;
     }
 
     // Cập nhật thông tin đơn xuất khi đang ở trạng thái PENDING.
@@ -88,6 +96,7 @@ public class SalesOrderService {
     public SalesOrderResponse update(UUID id, UpdateSalesOrderRequest request) {
         SalesOrder salesOrder = getSalesOrder(id);
         requireStatus(salesOrder, SalesOrderStatus.DRAFT, "Chỉ cập nhật đơn xuất khi đang DRAFT");
+        SalesOrderResponse before = salesOrderMapper.toResponse(salesOrder);
 
         salesOrderRepository.findBySoNumber(request.soNumber())
                 .filter(existing -> !existing.getId().equals(id))
@@ -98,7 +107,12 @@ public class SalesOrderService {
         salesOrderMapper.updateEntity(request, salesOrder);
         salesOrder.setSoNumber(request.soNumber().trim());
 
-        return salesOrderMapper.toResponse(salesOrderRepository.save(salesOrder));
+        SalesOrder saved = salesOrderRepository.save(salesOrder);
+        SalesOrderResponse after = salesOrderMapper.toResponse(saved);
+        auditLogService.record("SALES_ORDER", "UPDATE", "Cập nhật đơn xuất",
+                "SALES_ORDER", saved.getId(), saved.getSoNumber(), before, after,
+                null, orderMetadata(saved));
+        return after;
     }
 
     // Xóa đơn xuất khi chưa phát sinh picking.
@@ -109,7 +123,11 @@ public class SalesOrderService {
         if (pickingItemRepository.existsBySoItem_SalesOrder_Id(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không xóa đơn đã có picking; xóa picking trước");
         }
+        SalesOrderResponse before = salesOrderMapper.toResponse(salesOrder);
         salesOrderRepository.delete(salesOrder);
+        auditLogService.record("SALES_ORDER", "DELETE", "Xóa đơn xuất",
+                "SALES_ORDER", id, before.soNumber(), before, null,
+                null, orderMetadata(salesOrder));
     }
 
     // Chuyển đơn từ PENDING sang PICKING.
@@ -117,12 +135,18 @@ public class SalesOrderService {
     public SalesOrderResponse startPicking(UUID id) {
         SalesOrder so = getSalesOrder(id);
         requireStatus(so, SalesOrderStatus.PENDING, "Chỉ chuyển sang PICKING khi đơn đang PENDING");
+        SalesOrderResponse before = salesOrderMapper.toResponse(so);
 
         if (!salesOrderItemRepository.existsBySalesOrder_Id(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Cần ít nhất một dòng đơn (so-item) trước khi picking");
         }
         so.setStatus(SalesOrderStatus.PICKING);
-        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+        SalesOrder saved = salesOrderRepository.save(so);
+        SalesOrderResponse after = salesOrderMapper.toResponse(saved);
+        auditLogService.record("SALES_ORDER", "START_PICKING", "Bắt đầu picking đơn xuất",
+                "SALES_ORDER", saved.getId(), saved.getSoNumber(), before, after,
+                null, orderMetadata(saved));
+        return after;
     }
 
     // Xác nhận đơn đã pick xong (PICKING -> PACKED)
@@ -130,23 +154,35 @@ public class SalesOrderService {
     public SalesOrderResponse markPacked(UUID id) {
         SalesOrder so = getSalesOrder(id);
         requireStatus(so, SalesOrderStatus.PICKING, "Chỉ đóng gói khi đơn đang PICKING");
+        SalesOrderResponse before = salesOrderMapper.toResponse(so);
 
         ensurePickingCompleted(id);
 
         so.setStatus(SalesOrderStatus.PACKED);
-        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+        SalesOrder saved = salesOrderRepository.save(so);
+        SalesOrderResponse after = salesOrderMapper.toResponse(saved);
+        auditLogService.record("SALES_ORDER", "PACK", "Đóng gói đơn xuất",
+                "SALES_ORDER", saved.getId(), saved.getSoNumber(), before, after,
+                null, orderMetadata(saved));
+        return after;
     }
 
     // Tạm dừng xử lý đơn xuất khi trạng thái cho phép.
     @Transactional
     public SalesOrderResponse hold(UUID id) {
         SalesOrder so = getSalesOrder(id);
+        SalesOrderResponse before = salesOrderMapper.toResponse(so);
         if (!Set.of(SalesOrderStatus.DRAFT, SalesOrderStatus.PENDING, SalesOrderStatus.PICKING, SalesOrderStatus.PACKED)
                 .contains(so.getStatus())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ tạm dừng đơn chưa giao hàng");
         }
         so.setStatus(SalesOrderStatus.ON_HOLD);
-        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+        SalesOrder saved = salesOrderRepository.save(so);
+        SalesOrderResponse after = salesOrderMapper.toResponse(saved);
+        auditLogService.record("SALES_ORDER", "HOLD", "Tạm dừng đơn xuất",
+                "SALES_ORDER", saved.getId(), saved.getSoNumber(), before, after,
+                null, orderMetadata(saved));
+        return after;
     }
 
     // Tiếp tục xử lý đơn từ trạng thái ON_HOLD.
@@ -154,6 +190,7 @@ public class SalesOrderService {
     public SalesOrderResponse resume(UUID id) {
         SalesOrder so = getSalesOrder(id);
         requireStatus(so, SalesOrderStatus.ON_HOLD, "Chỉ tiếp tục khi đơn đang ON_HOLD");
+        SalesOrderResponse before = salesOrderMapper.toResponse(so);
 
         List<PickingItem> picks = pickingItemRepository.findBySalesOrderIdWithSoItem(id);
         if (picks.isEmpty()) {
@@ -163,13 +200,19 @@ public class SalesOrderService {
         } else {
             so.setStatus(SalesOrderStatus.PICKING);
         }
-        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+        SalesOrder saved = salesOrderRepository.save(so);
+        SalesOrderResponse after = salesOrderMapper.toResponse(saved);
+        auditLogService.record("SALES_ORDER", "RESUME", "Tiếp tục đơn xuất",
+                "SALES_ORDER", saved.getId(), saved.getSoNumber(), before, after,
+                null, orderMetadata(saved));
+        return after;
     }
 
     // Hủy đơn xuất và giải phóng lượng reserved đã giữ.
     @Transactional
     public SalesOrderResponse cancel(UUID id) {
         SalesOrder so = getSalesOrder(id);
+        SalesOrderResponse before = salesOrderMapper.toResponse(so);
         if (so.getStatus() == SalesOrderStatus.SHIPPED) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không thể hủy đơn đã giao hàng");
         }
@@ -179,7 +222,12 @@ public class SalesOrderService {
 
         releaseReservedForOrder(so);
         so.setStatus(SalesOrderStatus.CANCELLED);
-        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+        SalesOrder saved = salesOrderRepository.save(so);
+        SalesOrderResponse after = salesOrderMapper.toResponse(saved);
+        auditLogService.record("SALES_ORDER", "CANCEL", "Hủy đơn xuất",
+                "SALES_ORDER", saved.getId(), saved.getSoNumber(), before, after,
+                null, orderMetadata(saved));
+        return after;
     }
 
     // Xác nhận giao hàng, trừ tồn kho và cập nhật shippedQty.
@@ -187,6 +235,7 @@ public class SalesOrderService {
     public SalesOrderResponse markShipped(UUID id) {
         SalesOrder so = getSalesOrder(id);
         requireStatus(so, SalesOrderStatus.PACKED, "Chỉ giao hàng khi đơn đang PACKED");
+        SalesOrderResponse before = salesOrderMapper.toResponse(so);
 
         List<PickingItem> picks = pickingItemRepository.findBySalesOrderIdWithSoItem(id);
         if (picks.isEmpty()) {
@@ -197,7 +246,12 @@ public class SalesOrderService {
         updateShippedQuantities(id, picks);
 
         so.setStatus(SalesOrderStatus.SHIPPED);
-        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+        SalesOrder saved = salesOrderRepository.save(so);
+        SalesOrderResponse after = salesOrderMapper.toResponse(saved);
+        auditLogService.record("SALES_ORDER", "SHIP", "Xuất kho đơn xuất",
+                "SALES_ORDER", saved.getId(), saved.getSoNumber(), before, after,
+                null, orderMetadata(saved));
+        return after;
     }
 
     // Xác nhận đơn nháp trước khi xử lý (DRAFT -> PENDING).
@@ -205,8 +259,14 @@ public class SalesOrderService {
     public SalesOrderResponse confirmOrder(UUID id) {
         SalesOrder so = getSalesOrder(id);
         requireStatus(so, SalesOrderStatus.DRAFT, "Chỉ xác nhận đơn khi đang DRAFT");
+        SalesOrderResponse before = salesOrderMapper.toResponse(so);
         so.setStatus(SalesOrderStatus.PENDING);
-        return salesOrderMapper.toResponse(salesOrderRepository.save(so));
+        SalesOrder saved = salesOrderRepository.save(so);
+        SalesOrderResponse after = salesOrderMapper.toResponse(saved);
+        auditLogService.record("SALES_ORDER", "APPROVE", "Duyệt đơn xuất",
+                "SALES_ORDER", saved.getId(), saved.getSoNumber(), before, after,
+                null, orderMetadata(saved));
+        return after;
     }
 
     // Thực thi hành động tập trung.
@@ -364,5 +424,14 @@ public class SalesOrderService {
         String lot = lotNumber == null ? "" : lotNumber.trim();
         return "SALES_ORDER:" + salesOrderId + ":PICKING_ITEM:" + pickingItemId + ":" + action
                 + ":" + locationId + ":" + productId + ":" + lot + ":" + qty;
+    }
+
+    private Map<String, Object> orderMetadata(SalesOrder order) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("soNumber", order.getSoNumber());
+        metadata.put("warehouseId", order.getWarehouseId());
+        metadata.put("customerName", order.getCustomerName());
+        metadata.put("status", order.getStatus() == null ? null : order.getStatus().name());
+        return metadata;
     }
 }

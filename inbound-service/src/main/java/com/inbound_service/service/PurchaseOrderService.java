@@ -1,6 +1,7 @@
 package com.inbound_service.service;
 
 import com.common.api.PagedResponse;
+import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.common.util.CodeGenerator;
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -48,6 +50,7 @@ public class PurchaseOrderService {
     private final PoItemMapper poItemMapper;
     private final PutawayTaskMapper putawayTaskMapper;
     private final InboundReceiptMapper receiptMapper;
+    private final AuditLogService auditLogService;
 
     // Lấy danh sách đơn nhập có phân trang và bộ lọc.
     public PagedResponse<PurchaseOrderResponse> findAll(Pageable pageable, String keyword, String status,
@@ -120,7 +123,12 @@ public class PurchaseOrderService {
         PurchaseOrder purchaseOrder = purchaseOrderMapper.toEntity(request);
         purchaseOrder.setPoNumber(generateUniquePoNumber());
 
-        return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
+        PurchaseOrder saved = purchaseOrderRepository.save(purchaseOrder);
+        PurchaseOrderResponse response = purchaseOrderMapper.toResponse(saved);
+        auditLogService.record("PURCHASE_ORDER", "CREATE", "Tạo đơn nhập",
+                "PURCHASE_ORDER", saved.getId(), saved.getPoNumber(), null, response,
+                null, Map.of("poNumber", saved.getPoNumber()));
+        return response;
     }
 
     // Cập nhật đơn nhập khi chưa kết thúc.
@@ -128,6 +136,7 @@ public class PurchaseOrderService {
     public PurchaseOrderResponse update(UUID id, UpdatePurchaseOrderRequest request) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
         requirePoNotFinished(purchaseOrder);
+        PurchaseOrderResponse before = purchaseOrderMapper.toResponse(purchaseOrder);
 
         purchaseOrderRepository.findByPoNumber(request.poNumber())
                 .filter(existing -> !existing.getId().equals(id))
@@ -137,7 +146,12 @@ public class PurchaseOrderService {
 
         purchaseOrderMapper.updateEntity(request, purchaseOrder);
 
-        return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
+        PurchaseOrder saved = purchaseOrderRepository.save(purchaseOrder);
+        PurchaseOrderResponse after = purchaseOrderMapper.toResponse(saved);
+        auditLogService.record("PURCHASE_ORDER", "UPDATE", "Cập nhật đơn nhập",
+                "PURCHASE_ORDER", saved.getId(), saved.getPoNumber(), before, after,
+                null, Map.of("poNumber", saved.getPoNumber()));
+        return after;
     }
 
     // Xóa đơn nhập khi chưa có dòng hàng và chưa kết thúc.
@@ -148,7 +162,11 @@ public class PurchaseOrderService {
         if (poItemRepository.existsByPurchaseOrderId(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không thể xóa PO đã có dòng hàng");
         }
+        PurchaseOrderResponse before = purchaseOrderMapper.toResponse(purchaseOrder);
         purchaseOrderRepository.delete(purchaseOrder);
+        auditLogService.record("PURCHASE_ORDER", "DELETE", "Xóa đơn nhập",
+                "PURCHASE_ORDER", id, before.poNumber(), before, null,
+                null, Map.of("poNumber", before.poNumber()));
     }
 
     public boolean existsBySupplierId(UUID supplierId) {
@@ -159,6 +177,7 @@ public class PurchaseOrderService {
     @Transactional
     public PurchaseOrderResponse approve(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
+        PurchaseOrderResponse before = purchaseOrderMapper.toResponse(purchaseOrder);
         if (purchaseOrder.getStatus() != PurchaseOrderStatus.DRAFT) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Chỉ duyệt đơn nhập ở trạng thái DRAFT");
@@ -168,13 +187,19 @@ public class PurchaseOrderService {
                     "Cần ít nhất một dòng hàng trước khi duyệt đơn nhập");
         }
         purchaseOrder.setStatus(PurchaseOrderStatus.APPROVED);
-        return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
+        PurchaseOrder saved = purchaseOrderRepository.save(purchaseOrder);
+        PurchaseOrderResponse after = purchaseOrderMapper.toResponse(saved);
+        auditLogService.record("PURCHASE_ORDER", "APPROVE", "Duyệt đơn nhập",
+                "PURCHASE_ORDER", saved.getId(), saved.getPoNumber(), before, after,
+                null, Map.of("poNumber", saved.getPoNumber()));
+        return after;
     }
 
     // Hủy đơn nhập khi chưa hoàn tất.
     @Transactional
     public PurchaseOrderResponse cancel(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
+        PurchaseOrderResponse before = purchaseOrderMapper.toResponse(purchaseOrder);
         if (purchaseOrder.getStatus() == PurchaseOrderStatus.COMPLETED) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Không thể hủy đơn nhập đã hoàn tất");
@@ -184,7 +209,12 @@ public class PurchaseOrderService {
                     "Đơn nhập đã hủy trước đó");
         }
         purchaseOrder.setStatus(PurchaseOrderStatus.CANCELLED);
-        return purchaseOrderMapper.toResponse(purchaseOrderRepository.save(purchaseOrder));
+        PurchaseOrder saved = purchaseOrderRepository.save(purchaseOrder);
+        PurchaseOrderResponse after = purchaseOrderMapper.toResponse(saved);
+        auditLogService.record("PURCHASE_ORDER", "CANCEL", "Hủy đơn nhập",
+                "PURCHASE_ORDER", saved.getId(), saved.getPoNumber(), before, after,
+                null, Map.of("poNumber", saved.getPoNumber()));
+        return after;
     }
 
     // Tìm thực thể đơn nhập theo id.

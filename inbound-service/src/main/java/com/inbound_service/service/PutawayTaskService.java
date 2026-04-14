@@ -1,6 +1,7 @@
 package com.inbound_service.service;
 
 import com.common.api.PagedResponse;
+import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.inbound_service.dto.request.CompletePutawayRequest;
@@ -23,7 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -34,6 +37,7 @@ public class PutawayTaskService {
     private final PutawayTaskRepository putawayTaskRepository;
     private final InboundReceiptRepository inboundReceiptRepository;
     private final PutawayTaskMapper putawayTaskMapper;
+    private final AuditLogService auditLogService;
 
     // Lấy danh sách putaway task có phân trang và lọc trạng thái.
     public PagedResponse<PutawayTaskResponse> findAll(Pageable pageable, UUID poItemId, String status) {
@@ -64,6 +68,7 @@ public class PutawayTaskService {
     @Transactional
     public PutawayTaskResponse update(UUID id, UpdatePutawayTaskRequest request) {
         PutawayTask task = getTask(id);
+        PutawayTaskResponse before = putawayTaskMapper.toResponse(task);
         if (TERMINAL_STATUSES.contains(task.getStatus())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không cập nhật putaway đã kết thúc");
         }
@@ -80,7 +85,12 @@ public class PutawayTaskService {
             }
             task.setStatus(newStatus);
         }
-        return putawayTaskMapper.toResponse(putawayTaskRepository.save(task));
+        PutawayTask saved = putawayTaskRepository.save(task);
+        PutawayTaskResponse after = putawayTaskMapper.toResponse(saved);
+        auditLogService.record("PUTAWAY", "UPDATE", "Cập nhật putaway",
+                "PUTAWAY_TASK", saved.getId(), putawayEntityName(saved), before, after,
+                null, putawayMetadata(saved));
+        return after;
     }
 
     // Parse chuỗi trạng thái putaway về enum tương ứng.
@@ -102,15 +112,21 @@ public class PutawayTaskService {
             throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ hoàn tất putaway ở trạng thái PENDING hoặc IN_PROGRESS");
         }
 
+        PutawayTaskResponse before = putawayTaskMapper.toResponse(task);
         task.setActualLocationId(request.actualLocationId());
         task.setStatus(PutawayStatus.COMPLETED);
         task.setCompletedAt(OffsetDateTime.now());
-        PutawayTaskResponse response = putawayTaskMapper.toResponse(putawayTaskRepository.save(task));
+        PutawayTask saved = putawayTaskRepository.save(task);
+        PutawayTaskResponse response = putawayTaskMapper.toResponse(saved);
 
         // Cập nhật trạng thái phiếu nhập kho nếu tất cả putaway hoàn tất
-        if (task.getInboundReceipt() != null) {
-            refreshReceiptStatus(task.getInboundReceipt().getId());
+        if (saved.getInboundReceipt() != null) {
+            refreshReceiptStatus(saved.getInboundReceipt().getId());
         }
+
+        auditLogService.record("PUTAWAY", "PUTAWAY", "Hoàn tất putaway",
+                "PUTAWAY_TASK", saved.getId(), putawayEntityName(saved), before, response,
+                null, putawayMetadata(saved));
 
         return response;
     }
@@ -143,5 +159,22 @@ public class PutawayTaskService {
     private PutawayTask getTask(UUID id) {
         return putawayTaskRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy putaway"));
+    }
+
+    private String putawayEntityName(PutawayTask task) {
+        return "product=" + task.getProductId() + ", qty=" + task.getQtyToPutaway();
+    }
+
+    private Map<String, Object> putawayMetadata(PutawayTask task) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("poItemId", task.getPoItem() == null ? null : task.getPoItem().getId());
+        metadata.put("inboundReceiptId", task.getInboundReceipt() == null ? null : task.getInboundReceipt().getId());
+        metadata.put("productId", task.getProductId());
+        metadata.put("qtyToPutaway", task.getQtyToPutaway());
+        metadata.put("suggestedLocationId", task.getSuggestedLocationId());
+        metadata.put("actualLocationId", task.getActualLocationId());
+        metadata.put("assignedTo", task.getAssignedTo());
+        metadata.put("status", task.getStatus() == null ? null : task.getStatus().name());
+        return metadata;
     }
 }
