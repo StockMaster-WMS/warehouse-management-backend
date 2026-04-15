@@ -33,6 +33,7 @@ public interface ProductMapper {
     @Mapping(target = "categoryId", source = "category.id")
     @Mapping(target = "categoryName", source = "category.name")
     @Mapping(target = "primarySupplierId", source = "primarySupplier.id")
+    @Mapping(target = "primarySupplierName", source = "primarySupplier.name")
     ProductResponse toResponse(Product product);
 
     @AfterMapping

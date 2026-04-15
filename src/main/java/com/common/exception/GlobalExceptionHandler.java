@@ -6,11 +6,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-
-import java.util.Objects;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -27,9 +27,23 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Object>> handleValidation(MethodArgumentNotValidException ex) {
-        String message = Objects.requireNonNull(ex.getBindingResult().getFieldError()).getDefaultMessage();
+        String message = validationMessage(ex);
         return ResponseEntity.badRequest()
                 .body(ApiResponse.error(message, "VALIDATION_ERROR"));
+    }
+
+    private String validationMessage(MethodArgumentNotValidException ex) {
+        FieldError fieldError = ex.getBindingResult().getFieldError();
+        if (fieldError != null && fieldError.getDefaultMessage() != null) {
+            return fieldError.getDefaultMessage();
+        }
+
+        ObjectError globalError = ex.getBindingResult().getGlobalError();
+        if (globalError != null && globalError.getDefaultMessage() != null) {
+            return globalError.getDefaultMessage();
+        }
+
+        return ErrorCode.VALIDATION_ERROR.getMessage();
     }
 
     @ExceptionHandler(ConstraintViolationException.class)

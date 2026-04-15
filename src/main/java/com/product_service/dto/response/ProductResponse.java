@@ -20,6 +20,8 @@ public record ProductResponse(
         String categoryName,
         @Schema(example = "1d9f9f8b-9a6c-4c3e-b3e5-9f7e7a9f1234")
         UUID primarySupplierId,
+        @Schema(example = "Công ty TNHH XYZ")
+        String primarySupplierName,
         @Schema(example = "goi")
         String baseUnit,
         @Schema(example = "0.45")

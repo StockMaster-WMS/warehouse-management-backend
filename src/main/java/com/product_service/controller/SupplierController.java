@@ -59,12 +59,6 @@ public class SupplierController {
         return ApiResponse.success("Lấy nhà cung cấp thành công", supplierService.findById(id));
     }
 
-    @GetMapping("/code/{code}")
-    @Operation(summary = "Lấy nhà cung cấp theo mã", description = "Tìm nhà cung cấp bằng mã code")
-    public ApiResponse<SupplierResponse> getByCode(@PathVariable String code) {
-        return ApiResponse.success("Lấy nhà cung cấp thành công", supplierService.findByCode(code));
-    }
-
     @PostMapping
     @Operation(summary = "Tạo nhà cung cấp", description = "Tạo mới một nhà cung cấp")
     public ApiResponse<SupplierResponse> create(@Valid @RequestBody CreateSupplierRequest request) {

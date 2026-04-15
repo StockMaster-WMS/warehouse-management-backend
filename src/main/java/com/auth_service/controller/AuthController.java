@@ -80,9 +80,14 @@ public class AuthController {
             HttpServletRequest request,
             HttpServletResponse response) {
         String refreshToken = extractCookieValue(request, REFRESH_COOKIE_NAME);
-        AuthService.AuthTokens tokens = authService.refresh(refreshToken);
-        addRefreshCookie(response, tokens.refreshToken());
-        return ApiResponse.success("Làm mới token thành công", toLoginResponse(tokens));
+        try {
+            AuthService.AuthTokens tokens = authService.refresh(refreshToken);
+            addRefreshCookie(response, tokens.refreshToken());
+            return ApiResponse.success("Làm mới token thành công", toLoginResponse(tokens));
+        } catch (RuntimeException ex) {
+            clearRefreshCookie(response);
+            throw ex;
+        }
     }
 
     @PostMapping("/logout")

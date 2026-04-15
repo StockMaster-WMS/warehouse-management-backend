@@ -1,8 +1,8 @@
 package com.common.audit;
 
 import com.common.api.PagedResponse;
+import com.auth_service.entity.UserAccount;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,15 +12,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -134,39 +135,32 @@ public class AuditLogService {
     }
 
     private Actor resolveActor() {
-        HttpServletRequest request = currentRequest();
-        if (request == null) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || isAnonymous(authentication)) {
             return Actor.system();
         }
 
-        UUID headerUserId = parseUuid(request.getHeader("X-User-Id"));
-        String headerUsername = firstText(request.getHeader("X-User-Name"), request.getHeader("X-Username"));
-        String headerEmail = request.getHeader("X-User-Email");
-        if (headerUserId != null || StringUtils.hasText(headerUsername) || StringUtils.hasText(headerEmail)) {
-            return new Actor(headerUserId, defaultActorName(headerUsername, headerEmail), headerEmail);
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof UserAccount user) {
+            return new Actor(user.getId(), defaultActorName(user.getUsername(), user.getEmail()), user.getEmail());
         }
-
-        String authHeader = request.getHeader("Authorization");
-        if (!StringUtils.hasText(authHeader) || !authHeader.regionMatches(true, 0, "Bearer ", 0, 7)) {
-            return Actor.system();
+        if (principal instanceof UserDetails userDetails) {
+            return new Actor(null, userDetails.getUsername(), null);
         }
-
-        try {
-            String token = authHeader.substring(7).trim();
-            String[] parts = token.split("\\.");
-            if (parts.length < 2) {
-                return Actor.system();
-            }
-            byte[] payloadBytes = Base64.getUrlDecoder().decode(parts[1]);
-            JsonNode payload = objectMapper.readTree(new String(payloadBytes, StandardCharsets.UTF_8));
-            UUID id = parseUuid(text(payload, "sub"));
-            String username = text(payload, "username");
-            String email = text(payload, "email");
+        if (principal instanceof Map<?, ?> claims) {
+            UUID id = parseUuid(mapText(claims, "sub"));
+            String username = mapText(claims, "username");
+            String email = mapText(claims, "email");
             return new Actor(id, defaultActorName(username, email), email);
-        } catch (Exception ex) {
-            log.debug("Cannot parse audit actor from Authorization header: {}", ex.getMessage());
-            return Actor.system();
         }
+
+        String name = authentication.getName();
+        return StringUtils.hasText(name) ? new Actor(null, name, null) : Actor.system();
+    }
+
+    private boolean isAnonymous(Authentication authentication) {
+        Object principal = authentication.getPrincipal();
+        return principal == null || "anonymousUser".equals(principal);
     }
 
     private HttpServletRequest currentRequest() {
@@ -192,10 +186,6 @@ public class AuditLogService {
         return StringUtils.hasText(value) ? value.trim() : fallback;
     }
 
-    private String firstText(String first, String second) {
-        return StringUtils.hasText(first) ? first : second;
-    }
-
     private String defaultActorName(String username, String email) {
         if (StringUtils.hasText(username)) {
             return username.trim();
@@ -206,12 +196,12 @@ public class AuditLogService {
         return "system";
     }
 
-    private String text(JsonNode node, String fieldName) {
-        JsonNode value = node.get(fieldName);
-        if (value == null || value.isNull()) {
+    private String mapText(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        if (value == null) {
             return null;
         }
-        String text = value.asText();
+        String text = value.toString();
         return StringUtils.hasText(text) ? text : null;
     }
 

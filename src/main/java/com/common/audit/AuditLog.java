@@ -1,5 +1,6 @@
 package com.common.audit;
 
+import com.common.util.UuidUtils;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -79,7 +80,7 @@ public class AuditLog {
     @PrePersist
     void prePersist() {
         if (id == null) {
-            id = UUID.randomUUID();
+            id = UuidUtils.uuidV7();
         }
         if (createdAt == null) {
             createdAt = OffsetDateTime.now();

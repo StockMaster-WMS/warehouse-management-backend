@@ -31,7 +31,6 @@ public class CategoryService {
     private final CategoryRepository repository;
     private final CategoryMapper mapper;
 
-    // ================= READ =================
 
     // Lấy danh sách danh mục có phân trang và bộ lọc.
     public PagedResponse<CategoryResponse> findAll(Pageable pageable, String keyword, Boolean isActive) {
@@ -58,7 +57,6 @@ public class CategoryService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy danh mục")));
     }
 
-    // ================= CREATE =================
 
     // Tạo mới danh mục và sinh mã danh mục duy nhất.
     @Transactional
@@ -68,9 +66,9 @@ public class CategoryService {
 
         for (int i = 0; i < 10; i++) {
             String code = CodeGenerator.generate(PREFIX);
-            String path = computePath(parent, code);
-
             Category entity = mapper.toEntity(request);
+            String path = computePath(parent, entity.getName());
+
             entity.setCode(code);
             entity.setLevel(level);
             entity.setPath(path);
@@ -94,18 +92,15 @@ public class CategoryService {
         return message != null && message.contains("code");
     }
 
-    // ================= UPDATE =================
 
     // Cập nhật thông tin danh mục theo id.
     @Transactional
     public CategoryResponse update(UUID id, UpdateCategoryRequest request) {
         Category entity = get(id);
 
-        String code = entity.getCode();
-
         Category parent = resolveParent(request.parentId());
         short level = computeLevel(parent);
-        String path = computePath(parent, code);
+        String path = computePath(parent, request.name());
 
         entity.setName(request.name());
         entity.setParent(parent);
@@ -142,13 +137,28 @@ public class CategoryService {
         return (short) (parent == null ? 0 : (parent.getLevel() == null ? 0 : parent.getLevel()) + 1);
     }
 
-    // Tính đường dẫn path của danh mục.
-    private String computePath(Category parent, String code) {
-        if (parent == null) return code;
+    // Tạo slug từ tên (không dấu, chữ thường, thay khoảng trắng bằng gạch ngang)
+    private String toSlug(String input) {
+        if (input == null) return "";
+        // Chuyển Đ/đ thành d
+        String temp = input.replace('Đ', 'D').replace('đ', 'd');
+        // Loại bỏ dấu tiếng Việt
+        String normalized = java.text.Normalizer.normalize(temp, java.text.Normalizer.Form.NFD)
+            .replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
+        // Chỉ giữ lại a-z, 0-9, dấu cách và gạch ngang, chuyển về thường, thay dấu cách bằng '-'
+        return normalized
+            .toLowerCase()
+            .replaceAll("[^a-z0-9\\s-]", "")
+            .replaceAll("[\\s]+", "-")
+            .replaceAll("-+", "-")
+            .replaceAll("^-|-$", "");
+    }
 
+    // Tính đường dẫn path của danh mục theo slug name
+    private String computePath(Category parent, String name) {
+        String slug = toSlug(name);
+        if (parent == null) return slug;
         String parentPath = parent.getPath();
-        return (parentPath == null || parentPath.isBlank())
-                ? code
-                : parentPath + "/" + code;
+        return (parentPath == null || parentPath.isBlank()) ? slug : parentPath + "/" + slug;
     }
 }
