@@ -1,0 +1,51 @@
+server:
+  port: ${WAREHOUSE_APP_PORT:8080}
+
+spring:
+  application:
+    name: warehouse-app
+  output:
+    ansi:
+      enabled: ALWAYS
+  datasource:
+    url: ${WAREHOUSE_DB_URL:jdbc:postgresql://localhost:5432/warehouse_management}
+    username: ${WAREHOUSE_DB_USERNAME:postgres}
+    password: ${WAREHOUSE_DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: ${WAREHOUSE_FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+app:
+  cors:
+    allowed-origin: ${FRONTEND_ORIGIN:http://localhost:3000}
+
+auth:
+  mode: ${AUTH_MODE:public}
+  jwt:
+    issuer: ${AUTH_JWT_ISSUER:warehouse-app}
+    secret: ${AUTH_JWT_SECRET:change-me-to-a-very-long-secret-key-at-least-32-bytes}
+    access-token-expiration-seconds: ${AUTH_JWT_ACCESS_EXPIRATION_SECONDS:3600}
+  cookie:
+    secure: ${AUTH_COOKIE_SECURE:false}
+    same-site: ${AUTH_COOKIE_SAME_SITE:Lax}
+  bootstrap:
+    default-users-enabled: ${AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED:false}
+
+
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    disable-swagger-default-url: true
+    display-query-params-without-oauth2: true
