@@ -110,7 +110,7 @@ public class PickingItemService {
         try {
             return productService.findById(productId);
         } catch (Exception e) {
-            // Keep list resilient when product-service is temporarily unavailable.
+            // Keep list resilient when product details cannot be loaded.
             log.warn("Failed to load product details for productId={}: {}", productId, e.getMessage());
             return null;
         }
@@ -392,7 +392,7 @@ public class PickingItemService {
                 throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy sản phẩm");
             }
         } catch (Exception e) {
-            log.warn("Failed to call product-service for productId={}", item.getProductId(), e);
+            log.warn("Failed to load product details for productId={}", item.getProductId(), e);
             throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Không thể lấy thông tin sản phẩm");
         }
 
@@ -404,7 +404,7 @@ public class PickingItemService {
                 throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy vị trí kho");
             }
         } catch (Exception e) {
-            log.warn("Failed to call warehouse-service location API for locationId={}", item.getLocationId(), e);
+            log.warn("Failed to load location details for locationId={}", item.getLocationId(), e);
             throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Không thể lấy thông tin vị trí kho");
         }
 

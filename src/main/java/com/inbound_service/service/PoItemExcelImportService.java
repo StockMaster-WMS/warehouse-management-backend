@@ -35,7 +35,7 @@ import java.util.UUID;
  * Import sản phẩm mới từ file Excel và tự động thêm dòng PO (PoItem).
  * <p>
  * Luồng mỗi dòng Excel:
- * 1. Tạo sản phẩm mới qua product-service (Feign)
+ * 1. Tạo sản phẩm mới qua product module
  * 2. Tạo PoItem với productId + SKU vừa tạo
  */
 @Service
@@ -202,7 +202,7 @@ public class PoItemExcelImportService {
                 barcode,
                 name,
                 categoryId,
-                null,  // primarySupplierId resolved by product-service from supplierCode
+                null,  // primarySupplierId resolved by product module from supplierCode
                 baseUnit,
                 ExcelRowReader.optionalBigDecimal(row, col, "weightKg", fmt),
                 null, // volumeCm3
@@ -233,19 +233,19 @@ public class PoItemExcelImportService {
                         "categoryId không phải UUID hợp lệ: " + idRaw.trim());
             }
         }
-        // Fallback: categoryCode → cần product-service resolve, truyền qua tên cột
+        // Fallback: categoryCode -> cần product module resolve, truyền qua tên cột
         if (!col.containsKey("categoryCode")) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Cần điền categoryId (UUID) hoặc categoryCode (mã danh mục)");
         }
-        // Khi dùng categoryCode, ta không thể resolve UUID ở đây (vì category thuộc product-service)
-        // Nên ta sẽ dùng categoryCode qua Feign → product-service import endpoint
+        // Khi dùng categoryCode, ta không thể resolve UUID ở đây (vì category thuộc product module).
+        // Nên giữ categoryCode trong dữ liệu import để product module xử lý.
         throw new AppException(ErrorCode.BAD_REQUEST,
                 "Cần dùng categoryId (UUID của danh mục) thay vì categoryCode. "
                         + "Lấy categoryId từ API GET /api/categories");
     }
 
-    // ---- Feign call ----
+    // ---- Direct module call ----
 
     private ProductResponse findOrCreateProduct(CreateProductRequest command, int excelRow) {
         try {

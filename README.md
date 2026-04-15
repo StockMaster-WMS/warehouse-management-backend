@@ -1,6 +1,6 @@
 # Warehouse Management Backend
 
-Backend hệ thống quản lý kho hiện được tổ chức theo hướng modular monolith: một Spring Boot application, một database PostgreSQL, nhiều module nghiệp vụ tách theo package.
+Backend hệ thống quản lý kho đang chạy theo hướng **modular monolith**: một Spring Boot application, một PostgreSQL database, nhiều module nghiệp vụ tách theo package.
 
 ## Công nghệ chính
 
@@ -9,7 +9,7 @@ Backend hệ thống quản lý kho hiện được tổ chức theo hướng mo
 - Spring Data JPA
 - Flyway
 - PostgreSQL
-- OpenFeign
+- Spring Security
 - Springdoc OpenAPI
 - MapStruct
 - Docker / Docker Compose
@@ -20,20 +20,20 @@ Backend hệ thống quản lý kho hiện được tổ chức theo hướng mo
 Client / Frontend
   |
   v
-warehouse-app :8080
+warehouse-management-backend :9000
   |
-  +-- auth module
-  +-- product module
-  +-- warehouse module
-  +-- inbound module
-  +-- outbound module
-  +-- common module
+  +-- auth_service
+  +-- product_service
+  +-- warehouse_service
+  +-- inbound_service
+  +-- outbound_service
+  +-- common
   |
   v
 PostgreSQL warehouse_management
 ```
 
-Các package nghiệp vụ vẫn tách rõ theo module, nhưng build/deploy chỉ còn một app. Các bảng `outbox_events`, Eureka Server và API Gateway đã được bỏ khỏi backend chính.
+Các package nghiệp vụ vẫn tách rõ theo module, nhưng build/deploy chỉ còn một app. Eureka, API Gateway, Feign client nội bộ, database riêng theo service và `outbox_events` không còn là một phần của runtime chính.
 
 ## Cấu trúc dự án
 
@@ -44,21 +44,21 @@ warehouse-management-backend/
 ├─ Dockerfile
 ├─ .env
 ├─ .env.example
-├─ load-env.ps1
-└─ warehouse-app/
-   ├─ pom.xml
-   └─ src/main/
-      ├─ java/com/
-      │  ├─ warehouse_app/
-      │  ├─ auth_service/
-      │  ├─ product_service/
-      │  ├─ warehouse_service/
-      │  ├─ inbound_service/
-      │  ├─ outbound_service/
-      │  └─ common/
-      └─ resources/
-         ├─ application.yaml
-         └─ db/migration/
+├─ mvnw
+├─ mvnw.cmd
+└─ src/main/
+   ├─ java/com/
+   │  ├─ WarehouseApplication.java
+   │  ├─ config/
+   │  ├─ auth_service/
+   │  ├─ product_service/
+   │  ├─ warehouse_service/
+   │  ├─ inbound_service/
+   │  ├─ outbound_service/
+   │  └─ common/
+   └─ resources/
+      ├─ application.yaml
+      └─ db/migration/
 ```
 
 ## Cấu hình môi trường
@@ -66,7 +66,7 @@ warehouse-management-backend/
 Tạo `.env` từ `.env.example` nếu cần:
 
 ```env
-WAREHOUSE_APP_PORT=8080
+WAREHOUSE_APP_PORT=9000
 FRONTEND_ORIGIN=http://localhost:3000
 
 WAREHOUSE_DB_URL=jdbc:postgresql://localhost:5432/warehouse_management
@@ -81,14 +81,6 @@ AUTH_JWT_ACCESS_EXPIRATION_SECONDS=3600
 AUTH_COOKIE_SECURE=false
 AUTH_COOKIE_SAME_SITE=Lax
 AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED=false
-
-WAREHOUSE_INTERNAL_BASE_URL=http://localhost:8080
-```
-
-Nạp biến môi trường bằng PowerShell:
-
-```powershell
-.\load-env.ps1
 ```
 
 ## Chạy local bằng Maven
@@ -108,13 +100,13 @@ Build:
 Chạy app:
 
 ```powershell
-.\mvnw.cmd -pl warehouse-app spring-boot:run
+.\mvnw.cmd spring-boot:run
 ```
 
 Swagger UI:
 
 ```text
-http://localhost:8080/swagger-ui.html
+http://localhost:9000/swagger-ui.html
 ```
 
 ## Chạy bằng Docker Compose
@@ -125,7 +117,7 @@ docker compose up --build
 
 Docker Compose khởi chạy:
 
-- `warehouse-app` tại `http://localhost:8080`
+- `warehouse-app` tại `http://localhost:9000`
 - `postgres` tại `localhost:5432`, database `warehouse_management`
 
 ## Endpoint chính
@@ -150,4 +142,4 @@ Docker Compose khởi chạy:
 
 File `.env` chỉ dùng local và không được đưa credentials thật vào source bundle. Nếu credentials thật đã từng bị chia sẻ, cần rotate trên nhà cung cấp database.
 
-`AUTH_MODE=public` giữ hành vi tương thích với các service cũ trong môi trường dev. Khi làm cứng bảo mật, cần thêm JWT verification filter/resource server cho toàn bộ API rồi chuyển sang `AUTH_MODE=secure`.
+`AUTH_MODE=public` giữ hành vi tương thích dev. Khi làm cứng bảo mật, cần thêm JWT verification filter/resource server cho toàn bộ API rồi chuyển sang `AUTH_MODE=secure`.

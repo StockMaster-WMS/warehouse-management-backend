@@ -19,7 +19,7 @@ INSERT INTO audit_logs (
     created_at
 ) VALUES (
     '33333333-3333-3333-3333-333333333301',
-    'inbound-service',
+    'warehouse-app',
     'INBOUND',
     'APPROVE',
     'Approve purchase order',

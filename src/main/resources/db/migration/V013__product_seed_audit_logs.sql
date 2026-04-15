@@ -20,7 +20,7 @@ INSERT INTO audit_logs (
 ) VALUES
 (
     '11111111-1111-1111-1111-111111111101',
-    'product-service',
+    'warehouse-app',
     'PRODUCT',
     'CREATE',
     'Create product',
@@ -40,7 +40,7 @@ INSERT INTO audit_logs (
 ),
 (
     '11111111-1111-1111-1111-111111111102',
-    'product-service',
+    'warehouse-app',
     'PRODUCT',
     'UPDATE',
     'Update product',

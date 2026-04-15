@@ -141,7 +141,7 @@ public class InboundReceiptService {
             poItemRepository.saveAll(updatedPoItems);
         }
 
-        // 6. Cập nhật tồn kho (gọi warehouse-service)
+        // 6. Cập nhật tồn kho qua warehouse module.
         for (InboundReceiptItem receiptItem : receiptItems) {
             StockAdjustCommand cmd = new StockAdjustCommand(
                     po.getWarehouseId(),

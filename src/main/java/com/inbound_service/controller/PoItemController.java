@@ -75,7 +75,7 @@ public class PoItemController {
 
     @PostMapping(value = "/import/{purchaseOrderId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Import sản phẩm mới từ Excel và thêm vào PO", description = "Upload file .xlsx chứa thông tin sản phẩm mới + số lượng đặt. "
-            + "Hệ thống sẽ tạo sản phẩm mới qua product-service rồi tự động thêm dòng PO. "
+            + "Hệ thống sẽ tạo sản phẩm mới qua product module rồi tự động thêm dòng PO. "
             + "Cột bắt buộc: name, baseUnit, categoryId, orderedQty. "
             + "Cột tùy chọn: unitPrice, barcodeEan13, weightKg, lengthCm, widthCm, heightCm, "
             + "minStockQty, isLotTracked, isExpiryTracked, status.")

@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Size;
 import java.util.Map;
 import java.util.UUID;
 
-@Schema(description = "Tạo đơn xuất. Mã đơn (soNumber) do hệ thống tự sinh (common-lib CodeGenerator), không gửi trong body.")
+@Schema(description = "Tạo đơn xuất. Mã đơn (soNumber) do hệ thống tự sinh bằng CodeGenerator, không gửi trong body.")
 public record CreateSalesOrderRequest(
         @NotBlank(message = "Tên khách hàng không được để trống")
         @Size(max = 200, message = "Tên khách hàng không được vượt quá 200 ký tự")

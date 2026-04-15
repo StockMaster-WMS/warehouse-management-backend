@@ -1,5 +1,5 @@
 server:
-  port: ${WAREHOUSE_APP_PORT:8080}
+  port: ${WAREHOUSE_APP_PORT:9000}
 
 spring:
   application:
@@ -50,4 +50,3 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     disable-swagger-default-url: true
-

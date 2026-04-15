@@ -19,7 +19,7 @@ INSERT INTO audit_logs (
     created_at
 ) VALUES (
     '22222222-2222-2222-2222-222222222201',
-    'warehouse-service',
+    'warehouse-app',
     'STOCK',
     'ADJUST',
     'Adjust stock level',

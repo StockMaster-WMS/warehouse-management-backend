@@ -19,7 +19,7 @@ INSERT INTO audit_logs (
     created_at
 ) VALUES (
     '44444444-4444-4444-4444-444444444401',
-    'outbound-service',
+    'warehouse-app',
     'OUTBOUND',
     'PICK',
     'Pick sales order item',

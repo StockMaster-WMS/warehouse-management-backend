@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
 /**
- * Lệnh điều chỉnh tồn kho (dùng nội bộ giữa warehouse-service và các service gọi Feign).
+ * Lệnh điều chỉnh tồn kho dùng nội bộ giữa các module trong monolith.
  */
 public record StockAdjustCommand(
         @NotNull UUID warehouseId,
