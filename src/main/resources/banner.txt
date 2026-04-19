@@ -1,0 +1,10 @@
+
+${AnsiColor.BRIGHT_BLUE} __      __                      .__                                
+${AnsiColor.BRIGHT_BLUE}/  \    /  \_____ _______   ____ |  |__   ____  __ __  ______ ____  
+${AnsiColor.BRIGHT_BLUE}\   \/\/   /\__  \\_  __ \_/ __ \|  |  \ /  _ \|  |  \/  ___// __ \ 
+${AnsiColor.BRIGHT_BLUE} \        /  / __ \|  | \/\  ___/|   Y  (  <_> )  |  /\___ \\  ___/ 
+${AnsiColor.BRIGHT_BLUE}  \__/\  /  (____  /__|    \___  >___|  /\____/|____//____  >\___  >
+${AnsiColor.BRIGHT_BLUE}       \/        \/            \/     \/                  \/     \/ 
+${AnsiColor.DEFAULT}
+${AnsiColor.BRIGHT_CYAN} :: Warehouse Management System :: ${AnsiStyle.ITALIC}(v0.0.1)${AnsiStyle.NORMAL}
+${AnsiColor.DEFAULT}

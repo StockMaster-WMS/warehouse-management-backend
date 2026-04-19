@@ -1,220 +1,45 @@
 services:
-  eureka-server:
+  postgres:
+    image: postgres:16-alpine
+    container_name: warehouse-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: warehouse_management
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pg_warehouse_management:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d warehouse_management"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  warehouse-app:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        SERVICE: eureka-server
-    container_name: eureka-server
-    ports:
-      - "8761:8761"
-    environment:
-      EUREKA_SERVER_PORT: 8761
-
-  postgres-auth:
-    image: postgres:16-alpine
-    container_name: postgres-auth
-    ports:
-      - "5433:5432"
-    environment:
-      POSTGRES_DB: auth_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - pg_auth_data:/var/lib/postgresql/data
-
-  postgres-product:
-    image: postgres:16-alpine
-    container_name: postgres-product
-    ports:
-      - "5434:5432"
-    environment:
-      POSTGRES_DB: db_product
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - pg_product_data:/var/lib/postgresql/data
-
-  postgres-warehouse:
-    image: postgres:16-alpine
-    container_name: postgres-warehouse
-    ports:
-      - "5435:5432"
-    environment:
-      POSTGRES_DB: db_warehouse
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - pg_warehouse_data:/var/lib/postgresql/data
-
-  postgres-inbound:
-    image: postgres:16-alpine
-    container_name: postgres-inbound
-    ports:
-      - "5436:5432"
-    environment:
-      POSTGRES_DB: db_inbound
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - pg_inbound_data:/var/lib/postgresql/data
-
-  postgres-outbound:
-    image: postgres:16-alpine
-    container_name: postgres-outbound
-    ports:
-      - "5437:5432"
-    environment:
-      POSTGRES_DB: db_outbound
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - pg_outbound_data:/var/lib/postgresql/data
-
-  api-gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SERVICE: api-gateway
-    container_name: api-gateway
+    container_name: warehouse-app
     ports:
       - "9000:9000"
     depends_on:
-      - eureka-server
+      postgres:
+        condition: service_healthy
     environment:
-      API_GATEWAY_PORT: 9000
-      GATEWAY_SECURITY_ENABLED: ${GATEWAY_SECURITY_ENABLED:-true}
+      WAREHOUSE_APP_PORT: 9000
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      WAREHOUSE_DB_URL: jdbc:postgresql://postgres:5432/warehouse_management
+      WAREHOUSE_DB_USERNAME: postgres
+      WAREHOUSE_DB_PASSWORD: postgres
+      WAREHOUSE_FLYWAY_ENABLED: "true"
+      AUTH_MODE: ${AUTH_MODE:-public}
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-change-me-to-a-very-long-secret-key-at-least-32-bytes}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
-      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
-
-  auth-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SERVICE: auth-service
-    container_name: auth-service
-    expose:
-      - "9011"
-    depends_on:
-      - eureka-server
-      - postgres-auth
-    environment:
-      AUTH_SERVICE_PORT: 9011
-      AUTH_MODE: ${AUTH_MODE:-secure}
-      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-change-me-to-a-very-long-secret-key-at-least-32-bytes}
-      AUTH_JWT_ISSUER: ${AUTH_JWT_ISSUER:-auth-service}
+      AUTH_JWT_ISSUER: ${AUTH_JWT_ISSUER:-warehouse-app}
       AUTH_JWT_ACCESS_EXPIRATION_SECONDS: ${AUTH_JWT_ACCESS_EXPIRATION_SECONDS:-3600}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       AUTH_COOKIE_SAME_SITE: ${AUTH_COOKIE_SAME_SITE:-Lax}
       AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED: ${AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED:-false}
-      INTERNAL_SECURITY_ENABLED: ${INTERNAL_SECURITY_ENABLED:-true}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
-      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
-      EUREKA_INSTANCE_HOSTNAME: auth-service
-      AUTH_DB_URL: jdbc:postgresql://postgres-auth:5432/auth_db
-      AUTH_DB_USERNAME: postgres
-      AUTH_DB_PASSWORD: postgres
-      GATEWAY_URL: http://api-gateway:9000
-
-  product-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SERVICE: product-service
-    container_name: product-service
-    expose:
-      - "9002"
-    depends_on:
-      - eureka-server
-      - postgres-product
-    environment:
-      PRODUCT_SERVICE_PORT: 9002
-      INTERNAL_SECURITY_ENABLED: ${INTERNAL_SECURITY_ENABLED:-true}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
-      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
-      EUREKA_INSTANCE_HOSTNAME: product-service
-      PRODUCT_DB_URL: jdbc:postgresql://postgres-product:5432/db_product
-      PRODUCT_DB_USERNAME: postgres
-      PRODUCT_DB_PASSWORD: postgres
-      GATEWAY_URL: http://api-gateway:9000
-
-  warehouse-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SERVICE: warehouse-service
-    container_name: warehouse-service
-    expose:
-      - "9003"
-    depends_on:
-      - eureka-server
-      - postgres-warehouse
-    environment:
-      WAREHOUSE_SERVICE_PORT: 9003
-      INTERNAL_SECURITY_ENABLED: ${INTERNAL_SECURITY_ENABLED:-true}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
-      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
-      EUREKA_INSTANCE_HOSTNAME: warehouse-service
-      WAREHOUSE_DB_URL: jdbc:postgresql://postgres-warehouse:5432/db_warehouse
-      WAREHOUSE_DB_USERNAME: postgres
-      WAREHOUSE_DB_PASSWORD: postgres
-      GATEWAY_URL: http://api-gateway:9000
-
-  inbound-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SERVICE: inbound-service
-    container_name: inbound-service
-    expose:
-      - "9004"
-    depends_on:
-      - eureka-server
-      - postgres-inbound
-    environment:
-      INBOUND_SERVICE_PORT: 9004
-      INTERNAL_SECURITY_ENABLED: ${INTERNAL_SECURITY_ENABLED:-true}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
-      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
-      EUREKA_INSTANCE_HOSTNAME: inbound-service
-      INBOUND_DB_URL: jdbc:postgresql://postgres-inbound:5432/db_inbound
-      INBOUND_DB_USERNAME: postgres
-      INBOUND_DB_PASSWORD: postgres
-      GATEWAY_URL: http://api-gateway:9000
-
-  outbound-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SERVICE: outbound-service
-    container_name: outbound-service
-    expose:
-      - "9005"
-    depends_on:
-      - eureka-server
-      - postgres-outbound
-    environment:
-      OUTBOUND_SERVICE_PORT: 9005
-      INTERNAL_SECURITY_ENABLED: ${INTERNAL_SECURITY_ENABLED:-true}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-change-me-internal-service-token}
-      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
-      EUREKA_INSTANCE_HOSTNAME: outbound-service
-      OUTBOUND_DB_URL: jdbc:postgresql://postgres-outbound:5432/db_outbound
-      OUTBOUND_DB_USERNAME: postgres
-      OUTBOUND_DB_PASSWORD: postgres
-      GATEWAY_URL: http://api-gateway:9000
 
 volumes:
-  pg_auth_data:
-  pg_product_data:
-  pg_warehouse_data:
-  pg_inbound_data:
-  pg_outbound_data:
+  pg_warehouse_management:
