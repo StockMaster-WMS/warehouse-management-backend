@@ -7,6 +7,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -48,6 +49,9 @@ public class SalesOrder {
 
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
+
+    @OneToMany(mappedBy = "salesOrder", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<SalesOrderItem> items;
 
     @PrePersist
     void prePersist() {

@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -50,6 +51,7 @@ public class ProductController {
     private final ProductExcelExportService productExcelExportService;
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy danh sách sản phẩm", description = "Trả về danh sách sản phẩm hỗ trợ phân trang và tìm kiếm")
     public ApiResponse<PagedResponse<ProductResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
@@ -65,6 +67,7 @@ public class ProductController {
     }
 
     @GetMapping(value = "/export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Xuất danh sách sản phẩm ra Excel (.xlsx)", description = "Cùng bộ lọc với danh sách; tối đa 10.000 dòng. Cột tương thích import (bỏ qua sku, id khi nhập mới).")
     public ResponseEntity<byte[]> exportXlsx(
             @RequestParam(required = false) String keyword,
@@ -83,36 +86,42 @@ public class ProductController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy sản phẩm theo ID", description = "Trả về chi tiết sản phẩm theo UUID")
     public ApiResponse<ProductResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy sản phẩm thành công", productService.findById(id));
     }
 
     @GetMapping("/sku/{sku}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy sản phẩm theo SKU", description = "Tìm sản phẩm bằng mã SKU")
     public ApiResponse<ProductResponse> getBySku(@PathVariable String sku) {
         return ApiResponse.success("Lấy sản phẩm thành công", productService.findBySku(sku));
     }
 
     @GetMapping("/find-by-name")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Tìm sản phẩm theo tên", description = "Tìm chính xác theo tên (không phân biệt hoa/thường)")
     public ApiResponse<ProductResponse> findByName(@RequestParam String name) {
         return ApiResponse.success("Lấy sản phẩm thành công", productService.findByName(name));
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo sản phẩm", description = "Tạo mới sản phẩm; mã SKU do hệ thống tự sinh (tiền tố SP)")
     public ApiResponse<ProductResponse> create(@Valid @RequestBody CreateProductRequest request) {
         return ApiResponse.success("Tạo sản phẩm thành công", productService.create(request));
     }
 
     @PostMapping("/batch")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy danh sách sản phẩm theo ID (batch)", description = "Dùng cho các service khác (vd tồn kho) lấy thông tin gọn theo nhiều productId trong 1 call.")
     public ApiResponse<List<ProductSummaryResponse>> getByIds(@RequestBody List<UUID> ids) {
         return ApiResponse.success("Lấy danh sách sản phẩm thành công", productService.findSummariesByIds(ids));
     }
 
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Import sản phẩm từ Excel (.xlsx)")
     public ApiResponse<ProductImportResponse> importXlsx(
             @RequestPart("file") MultipartFile file,
@@ -122,6 +131,7 @@ public class ProductController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật sản phẩm", description = "Cập nhật thông tin sản phẩm theo ID")
     public ApiResponse<ProductResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdateProductRequest request) {
@@ -129,6 +139,7 @@ public class ProductController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa sản phẩm", description = "Xóa sản phẩm theo ID")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         productService.delete(id);

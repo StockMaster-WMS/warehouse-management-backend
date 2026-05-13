@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.UUID;
 
@@ -34,6 +35,7 @@ public class CustomerController {
     private final CustomerService customerService;
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy danh sách khách hàng", description = "Phân trang và lọc theo keyword, trạng thái")
     public ApiResponse<PagedResponse<CustomerResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
@@ -48,24 +50,28 @@ public class CustomerController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy khách hàng theo ID")
     public ApiResponse<CustomerResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy khách hàng thành công", customerService.findById(id));
     }
 
     @GetMapping("/code/{code}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy khách hàng theo mã")
     public ApiResponse<CustomerResponse> getByCode(@PathVariable String code) {
         return ApiResponse.success("Lấy khách hàng thành công", customerService.findByCode(code));
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo khách hàng")
     public ApiResponse<CustomerResponse> create(@Valid @RequestBody CreateCustomerRequest request) {
         return ApiResponse.success("Tạo khách hàng thành công", customerService.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật khách hàng")
     public ApiResponse<CustomerResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdateCustomerRequest request) {
@@ -73,6 +79,7 @@ public class CustomerController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa khách hàng")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         customerService.delete(id);

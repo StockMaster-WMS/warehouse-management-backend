@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -28,6 +29,7 @@ public class StockMovementController {
         private final StockMovementService stockMovementService;
 
         @GetMapping
+        @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
         @Operation(summary = "Lịch sử biến động tồn kho", description = "Phân trang; lọc theo kho, vị trí, sản phẩm, loại biến động, khoảng thời gian")
         public ApiResponse<PagedResponse<StockMovementResponse>> getAll(
                         @RequestParam(defaultValue = "0") int page,

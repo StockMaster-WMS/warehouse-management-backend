@@ -11,6 +11,10 @@ import com.outbound_service.repository.SalesOrderRepository;
 import com.warehouse_service.dto.response.StockSummaryResponse;
 import com.warehouse_service.repository.StockMovementRepository;
 import com.warehouse_service.service.StockLevelService;
+import com.outbound_service.repository.CustomerRepository;
+import com.outbound_service.repository.SalesOrderItemRepository;
+import com.common.audit.AuditLogRepository;
+import com.common.dashboard.dto.DashboardActivityResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +42,8 @@ public class DashboardService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final SalesOrderRepository salesOrderRepository;
     private final StockMovementRepository stockMovementRepository;
+    private final CustomerRepository customerRepository;
+    private final AuditLogRepository auditLogRepository;
 
     public DashboardSummaryResponse getSummary() {
         StockSummaryResponse stock = stockLevelService.getSummary(DEFAULT_NEAR_EXPIRY_DAYS);
@@ -49,31 +55,35 @@ public class DashboardService {
         return new DashboardSummaryResponse(
                 buildMetrics(stock, openPurchaseOrders, openSalesOrders),
                 buildFlow(),
-                buildNotices(stock, openPurchaseOrders, openSalesOrders));
+                buildNotices(stock, openPurchaseOrders, openSalesOrders),
+                buildRecentActivities());
     }
 
     private List<DashboardMetricResponse> buildMetrics(
             StockSummaryResponse stock,
             long openPurchaseOrders,
             long openSalesOrders) {
+        java.math.BigDecimal totalRevenue = salesOrderRepository.sumTotalRevenue();
+        long customerCount = customerRepository.count();
+
         return List.of(
+                new DashboardMetricResponse(
+                        "revenue",
+                        "Tổng doanh thu",
+                        totalRevenue.longValue(),
+                        "Từ đơn đã giao",
+                        "indigo"),
+                new DashboardMetricResponse(
+                        "customers",
+                        "Khách hàng",
+                        customerCount,
+                        "Tổng số đối tác",
+                        "emerald"),
                 new DashboardMetricResponse(
                         "available-stock",
                         "Tồn khả dụng",
                         stock.totalQtyAvailable(),
                         stock.totalQtyReserved() > 0 ? stock.totalQtyReserved() + " đang giữ chỗ" : "Sẵn sàng xuất",
-                        "indigo"),
-                new DashboardMetricResponse(
-                        "open-sales-orders",
-                        "Đơn xuất mở",
-                        openSalesOrders,
-                        "Chưa giao hoặc hủy",
-                        "emerald"),
-                new DashboardMetricResponse(
-                        "open-purchase-orders",
-                        "Đơn nhập mở",
-                        openPurchaseOrders,
-                        "Chưa hoàn tất",
                         "amber"),
                 new DashboardMetricResponse(
                         "low-stock",
@@ -81,6 +91,19 @@ public class DashboardService {
                         stock.lowStockCount(),
                         stock.nearExpiryCount() > 0 ? stock.nearExpiryCount() + " lô sắp hết hạn" : "Trong ngưỡng an toàn",
                         stock.lowStockCount() > 0 ? "rose" : "emerald"));
+    }
+
+    private List<DashboardActivityResponse> buildRecentActivities() {
+        return auditLogRepository.findTop5ByOrderByCreatedAtDesc().stream()
+                .map(log -> new DashboardActivityResponse(
+                        log.getId(),
+                        log.getModule(),
+                        log.getActionType(),
+                        log.getAction(),
+                        log.getEntityName(),
+                        log.getActorName(),
+                        log.getCreatedAt()))
+                .toList();
     }
 
     private List<DashboardFlowPointResponse> buildFlow() {

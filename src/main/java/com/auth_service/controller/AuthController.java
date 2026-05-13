@@ -3,6 +3,8 @@ package com.auth_service.controller;
 import com.auth_service.dto.request.IntrospectRequest;
 import com.auth_service.dto.request.LoginRequest;
 import com.auth_service.dto.request.RegisterRequest;
+import com.auth_service.dto.request.UpdateProfileRequest;
+import com.auth_service.dto.request.ChangePasswordRequest;
 import com.auth_service.dto.response.IntrospectResponse;
 import com.auth_service.dto.response.LoginResponse;
 import com.auth_service.dto.response.RegisterResponse;
@@ -21,10 +23,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
@@ -103,6 +108,25 @@ public class AuthController {
         return ApiResponse.success("Đăng xuất thành công", "OK");
     }
 
+    @PutMapping("/profile")
+    @Operation(summary = "Cập nhật hồ sơ cá nhân", security = { @SecurityRequirement(name = "bearerAuth") })
+    public ApiResponse<LoginResponse.UserInfo> updateProfile(
+            @Valid @RequestBody UpdateProfileRequest request,
+            HttpServletRequest httpRequest) {
+        UUID userId = authService.introspect(new IntrospectRequest(extractToken(httpRequest.getHeader(HttpHeaders.AUTHORIZATION)))).userId();
+        return ApiResponse.success("Cập nhật hồ sơ thành công", authService.updateProfile(userId, request));
+    }
+
+    @PostMapping("/change-password")
+    @Operation(summary = "Đổi mật khẩu", security = { @SecurityRequirement(name = "bearerAuth") })
+    public ApiResponse<String> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request,
+            HttpServletRequest httpRequest) {
+        UUID userId = authService.introspect(new IntrospectRequest(extractToken(httpRequest.getHeader(HttpHeaders.AUTHORIZATION)))).userId();
+        authService.changePassword(userId, request);
+        return ApiResponse.success("Đổi mật khẩu thành công", "OK");
+    }
+
     private LoginResponse toLoginResponse(AuthService.AuthTokens tokens) {
         return new LoginResponse(
                 tokens.accessToken(),
@@ -110,6 +134,7 @@ public class AuthController {
                         tokens.userId(),
                         tokens.username(),
                         tokens.email(),
+                        tokens.fullName(),
                         tokens.roles()));
     }
 
