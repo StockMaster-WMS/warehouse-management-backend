@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.UUID;
 
@@ -35,6 +36,7 @@ public class PurchaseOrderController {
     private final PurchaseOrderService purchaseOrderService;
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy danh sách đơn nhập", description = "Phân trang; lọc keyword, status, supplierId, warehouseId")
     public ApiResponse<PagedResponse<PurchaseOrderResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
@@ -51,42 +53,49 @@ public class PurchaseOrderController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy đơn nhập theo ID", description = "Trả về chi tiết purchase order theo UUID")
     public ApiResponse<PurchaseOrderResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy đơn nhập thành công", purchaseOrderService.findById(id));
     }
 
     @GetMapping("/{id}/detail")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy chi tiết PO cho màn hình nhập hàng", description = "Trả về PO + danh sách dòng hàng + putaway tasks + tiến độ nhận")
     public ApiResponse<PurchaseOrderDetailResponse> getDetail(@PathVariable UUID id) {
         return ApiResponse.success("Lấy chi tiết đơn nhập thành công", purchaseOrderService.findDetail(id));
     }
 
     @GetMapping("/number/{poNumber}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy đơn nhập theo mã", description = "Tìm purchase order bằng poNumber")
     public ApiResponse<PurchaseOrderResponse> getByPoNumber(@PathVariable String poNumber) {
         return ApiResponse.success("Lấy đơn nhập thành công", purchaseOrderService.findByPoNumber(poNumber));
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo đơn nhập", description = "Tạo mới một purchase order")
     public ApiResponse<PurchaseOrderResponse> create(@Valid @RequestBody CreatePurchaseOrderRequest request) {
         return ApiResponse.success("Tạo đơn nhập thành công", purchaseOrderService.create(request));
     }
 
     @PostMapping("/{id}/approve")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Duyệt đơn nhập", description = "DRAFT -> APPROVED (cần có ít nhất 1 dòng hàng)")
     public ApiResponse<PurchaseOrderResponse> approve(@PathVariable UUID id) {
         return ApiResponse.success("Duyệt đơn nhập thành công", purchaseOrderService.approve(id));
     }
 
     @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Hủy đơn nhập", description = "Cho phép hủy khi đang DRAFT, APPROVED hoặc PARTIAL")
     public ApiResponse<PurchaseOrderResponse> cancel(@PathVariable UUID id) {
         return ApiResponse.success("Hủy đơn nhập thành công", purchaseOrderService.cancel(id));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật đơn nhập", description = "Cập nhật purchase order theo ID")
     public ApiResponse<PurchaseOrderResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdatePurchaseOrderRequest request) {
@@ -94,6 +103,7 @@ public class PurchaseOrderController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa đơn nhập", description = "Xóa purchase order theo ID")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         purchaseOrderService.delete(id);
@@ -101,6 +111,7 @@ public class PurchaseOrderController {
     }
 
     @GetMapping("/exists-by-supplier/{supplierId}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Kiểm tra NCC có đơn nhập", description = "Trả về true nếu supplier đã có ít nhất 1 PO")
     public ApiResponse<Boolean> existsBySupplierId(@PathVariable UUID supplierId) {
         return ApiResponse.success("Kiểm tra thành công",

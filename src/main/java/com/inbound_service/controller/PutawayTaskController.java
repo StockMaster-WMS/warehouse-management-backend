@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.UUID;
 
@@ -34,6 +35,7 @@ public class PutawayTaskController {
     private final PutawayTaskService putawayTaskService;
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Danh sách putaway", description = "Phân trang; lọc poItemId và/hoặc status")
     public ApiResponse<PagedResponse<PutawayTaskResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
@@ -48,12 +50,14 @@ public class PutawayTaskController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Chi tiết putaway")
     public ApiResponse<PutawayTaskResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy putaway thành công", putawayTaskService.findById(id));
     }
 
     @PatchMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật putaway", description = "Gợi ý vị trí, người nhận, trạng thái (PENDING/IN_PROGRESS/CANCELLED)")
     public ApiResponse<PutawayTaskResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdatePutawayTaskRequest request) {
@@ -61,6 +65,7 @@ public class PutawayTaskController {
     }
 
     @PostMapping("/{id}/complete")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Hoàn tất putaway", description = "Ghi nhận vị trí thực tế trong kho (tồn kho đã cập nhật khi tạo phiếu nhập)")
     public ApiResponse<PutawayTaskResponse> complete(@PathVariable UUID id,
             @Valid @RequestBody CompletePutawayRequest request) {

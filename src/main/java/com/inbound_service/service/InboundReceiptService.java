@@ -6,6 +6,9 @@ import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.common.util.CodeGenerator;
+import com.product_service.entity.Supplier;
+import com.product_service.repository.SupplierRepository;
+import com.product_service.repository.ProductRepository;
 import com.warehouse_service.service.StockLevelService;
 import com.inbound_service.dto.request.CreateInboundReceiptRequest;
 import com.inbound_service.dto.request.ReceiveLineRequest;
@@ -40,6 +43,8 @@ public class InboundReceiptService {
     private final StockLevelService stockLevelService;
     private final InboundReceiptMapper receiptMapper;
     private final AuditLogService auditLogService;
+    private final SupplierRepository supplierRepository;
+    private final ProductRepository productRepository;
 
     private static final EnumSet<PurchaseOrderStatus> RECEIVABLE_STATUSES =
             EnumSet.of(PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.PARTIAL);
@@ -226,11 +231,11 @@ public class InboundReceiptService {
         String supplierPhone = "";
 
         try {
-            var supplierResp = supplierClient.getById(po.getSupplierId());
-            if (supplierResp != null && supplierResp.getData() != null) {
-                supplierName = supplierResp.getData().name();
-                supplierAddress = supplierResp.getData().address();
-                supplierPhone = supplierResp.getData().contactPhone();
+            Supplier supplier = supplierRepository.findById(po.getSupplierId()).orElse(null);
+            if (supplier != null) {
+                supplierName = supplier.getName();
+                supplierAddress = supplier.getAddress();
+                supplierPhone = supplier.getContactPhone();
             }
         } catch (Exception e) {
             // fallback
@@ -242,10 +247,10 @@ public class InboundReceiptService {
             String productName = item.getProductSku();
             String unit = "";
             try {
-                var productResp = productClient.getById(item.getProductId());
-                if (productResp != null && productResp.getData() != null) {
-                    productName = productResp.getData().name();
-                    unit = productResp.getData().baseUnit();
+                var product = productRepository.findById(item.getProductId()).orElse(null);
+                if (product != null) {
+                    productName = product.getName();
+                    unit = product.getBaseUnit();
                 }
             } catch (Exception e) {
                 // fallback
@@ -300,10 +305,15 @@ public class InboundReceiptService {
         boolean allReceived = lines.stream()
                 .allMatch(l -> Objects.equals(l.getOrderedQty(), l.getReceivedQty()));
 
+        boolean anyReceived = lines.stream()
+                .anyMatch(l -> l.getReceivedQty() != null && l.getReceivedQty() > 0);
+
         if (allReceived) {
             po.setStatus(PurchaseOrderStatus.COMPLETED);
-        } else {
+        } else if (anyReceived) {
             po.setStatus(PurchaseOrderStatus.PARTIAL);
+        } else {
+            po.setStatus(PurchaseOrderStatus.APPROVED);
         }
         purchaseOrderRepository.save(po);
     }

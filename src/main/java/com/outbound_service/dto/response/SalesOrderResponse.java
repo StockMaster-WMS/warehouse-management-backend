@@ -12,6 +12,7 @@ public record SalesOrderResponse(
         UUID warehouseId,
         Short priority,
         String status,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        java.util.List<SalesOrderItemResponse> items
 ) {
 }

@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -42,6 +43,7 @@ public class SalesOrderController {
     private final SalesOrderExcelExportService salesOrderExcelExportService;
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy danh sách đơn xuất", description = "Phân trang; lọc keyword, status, warehouseId")
     public ApiResponse<PagedResponse<SalesOrderResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
@@ -57,18 +59,19 @@ public class SalesOrderController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy đơn xuất theo ID", description = "Trả về chi tiết sales order theo UUID")
     public ApiResponse<SalesOrderResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy đơn xuất thành công", salesOrderService.findById(id));
     }
 
-    @GetMapping("/number/{soNumber}")
-    @Operation(summary = "Lấy đơn xuất theo mã", description = "Tìm sales order bằng soNumber")
+    @GetMapping("/number/{soNumber}")    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")    @Operation(summary = "Lấy đơn xuất theo mã", description = "Tìm sales order bằng soNumber")
     public ApiResponse<SalesOrderResponse> getBySoNumber(@PathVariable String soNumber) {
         return ApiResponse.success("Lấy đơn xuất thành công", salesOrderService.findBySoNumber(soNumber));
     }
 
     @PostMapping("/{id}/actions")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Thực thi hành động trên đơn xuất", description = "Dùng một endpoint duy nhất để chuyển trạng thái đơn hàng (confirm, start-picking, mark-picked, mark-packed, hold, resume, cancel, mark-shipped, mark-delivered)")
     public ApiResponse<SalesOrderResponse> executeAction(@PathVariable UUID id,
             @Valid @RequestBody SalesOrderActionRequest request) {
@@ -76,12 +79,14 @@ public class SalesOrderController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo đơn xuất", description = "Tạo mới sales order; mã đơn (soNumber) tự sinh bởi hệ thống")
     public ApiResponse<SalesOrderResponse> create(@Valid @RequestBody CreateSalesOrderRequest request) {
         return ApiResponse.success("Tạo đơn xuất thành công", salesOrderService.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật đơn xuất", description = "Cập nhật sales order theo ID")
     public ApiResponse<SalesOrderResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdateSalesOrderRequest request) {
@@ -89,6 +94,7 @@ public class SalesOrderController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa đơn xuất", description = "Xóa sales order theo ID")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         salesOrderService.delete(id);
@@ -96,6 +102,7 @@ public class SalesOrderController {
     }
 
     @GetMapping(value = "/export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Xuất phiếu xuất kho ra Excel", description = "Xuất danh sách sales order cùng chi tiết hàng hóa")
     public ResponseEntity<byte[]> exportXlsx(
             @RequestParam(required = false) String keyword,

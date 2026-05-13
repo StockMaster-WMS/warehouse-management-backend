@@ -12,11 +12,15 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/audit-logs")
 @Tag(name = "Quản lý nhật ký hệ thống", description = "Quản lý nhật ký hệ thống")
+@SecurityRequirement(name = "bearerAuth")
+@PreAuthorize("hasAuthority('ADMIN')")
 public class AuditLogController {
 
     private final AuditLogService auditLogService;

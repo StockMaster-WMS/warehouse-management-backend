@@ -10,6 +10,7 @@ public record LoginResponse(
             UUID id,
             String username,
             String email,
+            String fullName,
             String roles
     ) {
     }

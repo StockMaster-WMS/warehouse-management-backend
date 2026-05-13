@@ -1,11 +1,13 @@
 package com.auth_service.service;
 
+import com.auth_service.dto.request.RegisterRequest;
 import com.auth_service.dto.request.IntrospectRequest;
 import com.auth_service.dto.request.LoginRequest;
-import com.auth_service.dto.request.RegisterRequest;
 import com.auth_service.dto.response.IntrospectResponse;
 import com.auth_service.dto.response.LoginResponse;
 import com.auth_service.dto.response.RegisterResponse;
+import com.auth_service.dto.request.UpdateProfileRequest;
+import com.auth_service.dto.request.ChangePasswordRequest;
 import com.auth_service.entity.TokenBlacklist;
 import com.auth_service.entity.UserAccount;
 import com.auth_service.repository.RoleRepository;
@@ -141,6 +143,7 @@ public class AuthService {
                     user.getId(),
                     user.getUsername(),
                     user.getEmail(),
+                    user.getFullName(),
                     user.getRoleCodesCsv());
         } catch (JwtException | IllegalArgumentException ex) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Access token không hợp lệ");
@@ -227,6 +230,40 @@ public class AuthService {
         }
     }
 
+    @Transactional
+    public LoginResponse.UserInfo updateProfile(UUID userId, UpdateProfileRequest request) {
+        UserAccount user = userAccountRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Người dùng không tồn tại"));
+
+        if (!user.getEmail().equalsIgnoreCase(request.email()) && userAccountRepository.existsByEmail(request.email())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Email đã tồn tại");
+        }
+
+        user.setEmail(request.email().trim().toLowerCase());
+        user.setFullName(request.name().trim());
+        
+        UserAccount saved = userAccountRepository.save(user);
+        return new LoginResponse.UserInfo(
+                saved.getId(),
+                saved.getUsername(),
+                saved.getEmail(),
+                saved.getFullName(),
+                saved.getRoleCodesCsv());
+    }
+
+    @Transactional
+    public void changePassword(UUID userId, ChangePasswordRequest request) {
+        UserAccount user = userAccountRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Người dùng không tồn tại"));
+
+        if (!passwordEncoder.matches(request.oldPassword(), user.getPasswordHash())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Mật khẩu cũ không chính xác");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userAccountRepository.save(user);
+    }
+
     private AuthTokens toAuthTokens(UserAccount user, String accessToken, String refreshToken) {
         return new AuthTokens(
                 accessToken,
@@ -234,6 +271,7 @@ public class AuthService {
                 user.getId(),
                 user.getUsername(),
                 user.getEmail(),
+                user.getFullName(),
                 user.getRoleCodesCsv());
     }
 
@@ -247,6 +285,7 @@ public class AuthService {
             UUID userId,
             String username,
             String email,
+            String fullName,
             String roles
     ) {
     }
