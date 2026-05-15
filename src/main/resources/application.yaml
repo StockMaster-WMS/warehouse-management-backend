@@ -42,6 +42,11 @@ auth:
   bootstrap:
     default-users-enabled: ${AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED:false}
 
+ai:
+  ollama:
+    api-url: ${AI_OLLAMA_API_URL:http://localhost:11434}
+    model: ${AI_OLLAMA_MODEL:stockmaster-ai}
+
 
 
 springdoc:
