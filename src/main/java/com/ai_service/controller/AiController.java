@@ -19,6 +19,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @RestController
 @RequestMapping("/api/v1/ai")
@@ -30,6 +31,7 @@ public class AiController {
     private final AiService aiService;
     private final Executor aiTaskExecutor;
 
+    // Xử lý câu hỏi AI dạng trả lời một lần.
     @PostMapping("/ask")
     @Operation(summary = "Chat với trợ lý AI", description = "Gửi câu hỏi tới model stockmaster-ai")
     public ResponseEntity<AiAskResponse> ask(@RequestBody AiAskRequest req) {
@@ -42,6 +44,7 @@ public class AiController {
         }
     }
 
+    // Xử lý câu hỏi AI dạng stream qua SSE.
     @GetMapping(value = "/ask/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @Operation(summary = "Hỏi đáp dữ liệu dạng Stream (SSE)", description = "Trả về câu trả lời theo thời gian thực (từng từ một)")
     public SseEmitter askStream(
@@ -49,6 +52,7 @@ public class AiController {
             @RequestParam(required = false) String sessionId) {
         
         SseEmitter emitter = new SseEmitter(300_000L); // 5 phút timeout
+        AtomicBoolean clientDisconnected = new AtomicBoolean(false);
         
         aiTaskExecutor.execute(() -> {
             try {
@@ -57,16 +61,32 @@ public class AiController {
                 req.setSessionId(sessionId);
 
                 aiService.askStream(req, fragment -> {
+                    if (clientDisconnected.get()) {
+                        return;
+                    }
                     try {
                         emitter.send(fragment);
                     } catch (IOException e) {
-                        log.error("SSE Send Error: {}", e.getMessage());
+                        clientDisconnected.set(true);
+                        log.debug("SSE client disconnected: {}", e.getMessage());
                     }
                 });
-                emitter.complete();
+                if (!clientDisconnected.get()) {
+                    emitter.complete();
+                }
             } catch (Exception e) {
                 log.error("Streaming Error: ", e);
-                emitter.completeWithError(e);
+                if (!clientDisconnected.get()) {
+                    try {
+                        emitter.send("Rất tiếc, hiện tại tôi chưa thể trả lời yêu cầu này.");
+                    } catch (IOException sendError) {
+                        clientDisconnected.set(true);
+                        log.debug("Cannot send SSE fallback: {}", sendError.getMessage());
+                    }
+                }
+                if (!clientDisconnected.get()) {
+                    emitter.complete();
+                }
             }
         });
 

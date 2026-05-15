@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.text.Normalizer;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -23,6 +24,7 @@ public class AiToolExecutorService {
 
     private final JdbcTemplate jdbcTemplate;
 
+    // Chọn tool tương ứng với intent và thực thi truy vấn.
     public AiToolResult execute(AiIntentResult route) {
         AiIntent intent = route == null || route.getIntent() == null ? AiIntent.UNSUPPORTED : route.getIntent();
         Map<String, Object> params = route == null ? Map.of() : route.safeParameters();
@@ -32,7 +34,7 @@ public class AiToolExecutorService {
             case WAREHOUSE_LIST -> AiToolResult.data("WarehouseTool.listWarehouses", listWarehouses());
             case WAREHOUSE_DETAIL -> AiToolResult.data("WarehouseTool.getWarehouseDetail", getWarehouseDetail(params));
             case LOCATION_SEARCH -> AiToolResult.data("LocationTool.searchLocations", searchLocations(params));
-            case STOCK_BY_PRODUCT -> AiToolResult.data("StockTool.getStockByProduct", getStockByProduct(params));
+            case STOCK_BY_PRODUCT -> getStockByProductResult(params);
             case LOW_STOCK -> AiToolResult.data("StockTool.getLowStock", getLowStock());
             case NEAR_EXPIRY -> AiToolResult.data("StockTool.getNearExpiry", getNearExpiry(params));
             case PENDING_PUTAWAY -> AiToolResult.data("InboundTool.getPendingPutaway", getPendingPutaway());
@@ -50,6 +52,7 @@ public class AiToolExecutorService {
         };
     }
 
+    // Ước lượng số dòng dữ liệu trả về để ghi audit.
     public int estimateRows(AiToolResult result) {
         if (result == null || result.data() == null) {
             return 0;
@@ -63,6 +66,7 @@ public class AiToolExecutorService {
         return 1;
     }
 
+    // Đếm tổng số kho theo trạng thái hoạt động.
     private Map<String, Object> countWarehouses() {
         return jdbcTemplate.queryForMap("""
                 SELECT
@@ -73,6 +77,7 @@ public class AiToolExecutorService {
                 """);
     }
 
+    // Lấy danh sách kho hiện có.
     private List<Map<String, Object>> listWarehouses() {
         return jdbcTemplate.queryForList("""
                 SELECT code, name, address, manager_name, timezone, is_active, created_at
@@ -82,6 +87,7 @@ public class AiToolExecutorService {
                 """);
     }
 
+    // Tìm chi tiết kho theo mã, tên hoặc địa chỉ.
     private List<Map<String, Object>> getWarehouseDetail(Map<String, Object> params) {
         String keyword = firstText(params, "warehouseCode", "warehouse", "code", "query");
         if (!StringUtils.hasText(keyword)) {
@@ -99,6 +105,7 @@ public class AiToolExecutorService {
                 """, keyword, like, like);
     }
 
+    // Tìm vị trí kho theo zone, kho hoặc mã vị trí.
     private List<Map<String, Object>> searchLocations(Map<String, Object> params) {
         String zone = text(params.get("zone"));
         String warehouse = firstText(params, "warehouseCode", "warehouse");
@@ -150,6 +157,36 @@ public class AiToolExecutorService {
         return jdbcTemplate.queryForList(sql.toString(), args.toArray());
     }
 
+    // Resolve sản phẩm/kho trước khi tra tồn kho để phân biệt sai kho và không có tồn.
+    private AiToolResult getStockByProductResult(Map<String, Object> params) {
+        Map<String, Object> resolvedParams = new LinkedHashMap<>(params);
+        String query = firstText(resolvedParams, "query", "product");
+
+        ResolvedWarehouse warehouse = resolveWarehouse(resolvedParams);
+        if (warehouse != null) {
+            resolvedParams.put("warehouseCode", warehouse.code());
+            resolvedParams.put("warehouse", warehouse.name());
+        } else if (hasWarehouseHint(resolvedParams)) {
+            return AiToolResult.message("StockTool.getStockByProduct",
+                    "Tôi chưa tìm thấy kho phù hợp với thông tin bạn nêu. Bạn vui lòng kiểm tra lại mã hoặc tên kho.");
+        }
+
+        if (!StringUtils.hasText(text(resolvedParams.get("sku")))) {
+            String resolvedSku = resolveProductSku(query);
+            if (StringUtils.hasText(resolvedSku)) {
+                resolvedParams.put("sku", resolvedSku);
+            }
+        }
+
+        List<Map<String, Object>> rows = getStockByProduct(resolvedParams);
+        if (rows.isEmpty() && warehouse != null) {
+            return AiToolResult.message("StockTool.getStockByProduct",
+                    "Kho " + warehouse.code() + " có tồn tại, nhưng tôi chưa tìm thấy tồn kho phù hợp với sản phẩm hoặc SKU bạn hỏi trong kho này.");
+        }
+        return AiToolResult.data("StockTool.getStockByProduct", rows);
+    }
+
+    // Tra cứu tồn kho theo SKU hoặc tên sản phẩm.
     private List<Map<String, Object>> getStockByProduct(Map<String, Object> params) {
         String sku = text(params.get("sku"));
         String product = firstText(params, "product", "query");
@@ -202,6 +239,7 @@ public class AiToolExecutorService {
         return jdbcTemplate.queryForList(sql.toString(), args.toArray());
     }
 
+    // Lấy danh sách SKU đang dưới mức tồn tối thiểu.
     private List<Map<String, Object>> getLowStock() {
         return jdbcTemplate.queryForList("""
                 SELECT
@@ -222,6 +260,7 @@ public class AiToolExecutorService {
                 """);
     }
 
+    // Lấy danh sách lô hàng sắp hết hạn trong số ngày yêu cầu.
     private List<Map<String, Object>> getNearExpiry(Map<String, Object> params) {
         int days = intValue(params.get("days"), 30);
         LocalDate threshold = LocalDate.now().plusDays(Math.max(days, 0));
@@ -250,6 +289,7 @@ public class AiToolExecutorService {
                 """, threshold);
     }
 
+    // Lấy các task putaway đang chờ xử lý.
     private List<Map<String, Object>> getPendingPutaway() {
         return jdbcTemplate.queryForList("""
                 SELECT
@@ -271,6 +311,7 @@ public class AiToolExecutorService {
                 """);
     }
 
+    // Tra cứu đơn nhập theo mã hoặc trạng thái chưa hoàn thành.
     private List<Map<String, Object>> getPurchaseOrders(Map<String, Object> params) {
         String code = firstText(params, "code", "query");
         List<Object> args = new ArrayList<>();
@@ -297,6 +338,7 @@ public class AiToolExecutorService {
         return jdbcTemplate.queryForList(sql.toString(), args.toArray());
     }
 
+    // Lấy các đơn xuất đang cần ưu tiên xử lý.
     private List<Map<String, Object>> getPrioritySalesOrders() {
         return jdbcTemplate.queryForList("""
                 SELECT
@@ -315,6 +357,7 @@ public class AiToolExecutorService {
                 """);
     }
 
+    // Lấy tình trạng các dòng picking chưa hoàn tất.
     private List<Map<String, Object>> getPickingStatus() {
         return jdbcTemplate.queryForList("""
                 SELECT
@@ -339,6 +382,7 @@ public class AiToolExecutorService {
                 """);
     }
 
+    // Lấy các dòng kiểm kê đang lệch hoặc chưa đếm xong.
     private List<Map<String, Object>> getCycleCountVariance() {
         return jdbcTemplate.queryForList("""
                 SELECT
@@ -366,6 +410,7 @@ public class AiToolExecutorService {
                 """);
     }
 
+    // Tổng hợp nhanh các chỉ số vận hành kho.
     private Map<String, Object> getOperationalSummary() {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("warehouses", countWarehouses());
@@ -397,6 +442,7 @@ public class AiToolExecutorService {
         return summary;
     }
 
+    // Lấy chuỗi đầu tiên có giá trị từ danh sách key.
     private String firstText(Map<String, Object> params, String... keys) {
         for (String key : keys) {
             String value = text(params.get(key));
@@ -407,6 +453,7 @@ public class AiToolExecutorService {
         return null;
     }
 
+    // Chuyển object thành text sạch hoặc null.
     private String text(Object value) {
         if (value == null) {
             return null;
@@ -418,6 +465,7 @@ public class AiToolExecutorService {
         return text;
     }
 
+    // Chuyển object thành số nguyên với fallback.
     private int intValue(Object value, int fallback) {
         if (value instanceof Number number) {
             return number.intValue();
@@ -432,15 +480,132 @@ public class AiToolExecutorService {
         return fallback;
     }
 
+    // Tạo pattern LIKE an toàn cho tìm kiếm không phân biệt hoa thường.
     private String like(String value) {
         return "%" + value.trim().toLowerCase(Locale.ROOT) + "%";
     }
 
+    // Loại bỏ từ khóa thừa để tìm tên sản phẩm chính xác hơn.
     private String cleanProductKeyword(String value) {
         if (value == null) {
             return "";
         }
         return value.replaceAll("(?i)tồn kho|ton kho|còn bao nhiêu|con bao nhieu|ở kho|o kho|sku|sản phẩm|san pham", "")
                 .trim();
+    }
+
+    // Tìm SKU phù hợp nhất từ câu hỏi tự nhiên.
+    private String resolveProductSku(String query) {
+        if (!StringUtils.hasText(query)) {
+            return null;
+        }
+        String normalizedQuery = normalize(query);
+        List<Map<String, Object>> products = jdbcTemplate.queryForList("""
+                SELECT sku, name
+                FROM products
+                WHERE status = 'ACTIVE'
+                ORDER BY name ASC
+                LIMIT 500
+                """);
+
+        String bestSku = null;
+        int bestScore = 0;
+        for (Map<String, Object> product : products) {
+            String sku = text(product.get("sku"));
+            String name = text(product.get("name"));
+            int score = scoreCandidate(normalizedQuery, sku, name);
+            if (score > bestScore) {
+                bestScore = score;
+                bestSku = sku;
+            }
+        }
+        return bestScore >= 2 ? bestSku : null;
+    }
+
+    // Tìm kho phù hợp nhất từ mã kho, tên kho hoặc địa chỉ trong câu hỏi.
+    private ResolvedWarehouse resolveWarehouse(Map<String, Object> params) {
+        String explicitWarehouse = firstText(params, "warehouseCode", "warehouse");
+        String query = firstText(params, "query");
+        String searchText = StringUtils.hasText(explicitWarehouse) ? explicitWarehouse : query;
+        if (!StringUtils.hasText(searchText)) {
+            return null;
+        }
+        String normalizedSearch = normalize(searchText);
+        List<Map<String, Object>> warehouses = jdbcTemplate.queryForList("""
+                SELECT code, name, address, is_active
+                FROM warehouses
+                ORDER BY is_active DESC, name ASC
+                LIMIT 200
+                """);
+
+        ResolvedWarehouse best = null;
+        int bestScore = 0;
+        for (Map<String, Object> warehouse : warehouses) {
+            String code = text(warehouse.get("code"));
+            String name = text(warehouse.get("name"));
+            String address = text(warehouse.get("address"));
+            int score = scoreCandidate(normalizedSearch, code, name, address);
+            if (StringUtils.hasText(explicitWarehouse) && normalize(explicitWarehouse).equals(normalize(code))) {
+                score += 10;
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                best = new ResolvedWarehouse(code, name, Boolean.TRUE.equals(warehouse.get("is_active")));
+            }
+        }
+        return bestScore >= 2 ? best : null;
+    }
+
+    // Kiểm tra câu hỏi có nhắc đến một kho cụ thể hay không.
+    private boolean hasWarehouseHint(Map<String, Object> params) {
+        if (StringUtils.hasText(firstText(params, "warehouseCode", "warehouse"))) {
+            return true;
+        }
+        String normalized = normalize(firstText(params, "query"));
+        return normalized.contains(" o ") || normalized.contains(" tai ") || normalized.contains(" trong kho ")
+                || normalized.contains(" kho wh-");
+    }
+
+    // Chấm điểm candidate theo token xuất hiện trong câu hỏi.
+    private int scoreCandidate(String normalizedQuery, String... values) {
+        int score = 0;
+        for (String value : values) {
+            if (!StringUtils.hasText(value)) {
+                continue;
+            }
+            String normalizedValue = normalize(value);
+            if (normalizedQuery.contains(normalizedValue)) {
+                score += 5;
+            }
+            for (String token : normalizedValue.split("[^a-z0-9]+")) {
+                if (isMeaningfulToken(token) && normalizedQuery.contains(token)) {
+                    score++;
+                }
+            }
+        }
+        return score;
+    }
+
+    // Bỏ các từ chung để tránh match sai khi resolve entity.
+    private boolean isMeaningfulToken(String token) {
+        return StringUtils.hasText(token)
+                && token.length() >= 2
+                && !List.of("kho", "ton", "hang", "san", "pham", "con", "bao", "nhieu", "tai", "the",
+                        "nao", "stock", "qty", "available", "reserved", "dc01").contains(token);
+    }
+
+    // Chuẩn hóa text về không dấu và chữ thường.
+    private String normalize(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD);
+        return normalized.replaceAll("\\p{M}", "")
+                .replace('đ', 'd')
+                .replace('Đ', 'D')
+                .toLowerCase(Locale.ROOT);
+    }
+
+    private record ResolvedWarehouse(String code, String name, boolean active) {
     }
 }

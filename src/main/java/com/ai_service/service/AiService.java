@@ -26,6 +26,7 @@ public class AiService {
     private final AiAuditService auditService;
     private final ObjectMapper objectMapper;
 
+    // Xử lý câu hỏi AI dạng đồng bộ và trả về một response.
     public AiAskResponse ask(AiAskRequest req) {
         String sessionId = req.getSessionId();
         String userMessage = getUserMessage(req);
@@ -60,6 +61,7 @@ public class AiService {
         }
     }
 
+    // Xử lý câu hỏi AI dạng stream và đẩy từng đoạn trả lời ra callback.
     public void askStream(AiAskRequest req, Consumer<String> fragmentConsumer) {
         String sessionId = req.getSessionId();
         String userMessage = getUserMessage(req);
@@ -97,6 +99,7 @@ public class AiService {
         }
     }
 
+    // Lấy nội dung người dùng từ message hoặc question.
     private String getUserMessage(AiAskRequest req) {
         String message = req.getMessage();
         if (StringUtils.hasText(message)) {
@@ -109,6 +112,7 @@ public class AiService {
         return "";
     }
 
+    // Tạo payload JSON để ghi audit route và tool đã dùng.
     private String toAuditPayload(AiIntentResult route, AiToolResult toolResult) {
         try {
             return objectMapper.writeValueAsString(Map.of(

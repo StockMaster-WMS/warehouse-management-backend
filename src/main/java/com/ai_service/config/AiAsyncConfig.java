@@ -9,6 +9,7 @@ import java.util.concurrent.Executor;
 @Configuration
 public class AiAsyncConfig {
 
+    // Tạo thread pool riêng cho luồng trả lời AI dạng stream.
     @Bean(name = "aiTaskExecutor")
     public Executor aiTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();

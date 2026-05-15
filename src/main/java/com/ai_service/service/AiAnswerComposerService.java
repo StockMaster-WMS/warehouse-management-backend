@@ -22,6 +22,7 @@ public class AiAnswerComposerService {
     private final OllamaClient ollamaClient;
     private final ObjectMapper objectMapper;
 
+    // Tạo câu trả lời AI dạng đồng bộ từ route và tool result.
     public String compose(String userMessage, AiIntentResult route, AiToolResult toolResult,
             List<Map<String, String>> history) {
         String deterministic = deterministicReply(route, toolResult);
@@ -31,6 +32,7 @@ public class AiAnswerComposerService {
         return ollamaClient.generateAnswer(buildAnswerPrompt(userMessage, route, toolResult, history));
     }
 
+    // Tạo câu trả lời AI dạng stream từ route và tool result.
     public void composeStream(String userMessage, AiIntentResult route, AiToolResult toolResult,
             List<Map<String, String>> history, Consumer<String> fragmentConsumer) {
         String deterministic = deterministicReply(route, toolResult);
@@ -41,6 +43,7 @@ public class AiAnswerComposerService {
         ollamaClient.generateAnswerStream(buildAnswerPrompt(userMessage, route, toolResult, history), fragmentConsumer);
     }
 
+    // Trả lời cố định cho các case đơn giản hoặc không có dữ liệu.
     private String deterministicReply(AiIntentResult route, AiToolResult toolResult) {
         if (toolResult == null) {
             return "Tôi chưa xử lý được yêu cầu này. Bạn vui lòng thử lại với câu hỏi cụ thể hơn.";
@@ -73,6 +76,7 @@ public class AiAnswerComposerService {
         return null;
     }
 
+    // Tạo prompt để model viết câu trả lời từ JSON của tool.
     private String buildAnswerPrompt(String userMessage, AiIntentResult route, AiToolResult toolResult,
             List<Map<String, String>> history) {
         return """
@@ -107,6 +111,7 @@ public class AiAnswerComposerService {
         );
     }
 
+    // Chuyển object sang JSON để đưa vào prompt.
     private String toJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);

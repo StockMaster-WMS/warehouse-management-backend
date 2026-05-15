@@ -13,6 +13,7 @@ public class AiAuditService {
 
     private final JdbcTemplate jdbcTemplate;
 
+    // Tạo bảng audit log nếu database chưa có.
     @PostConstruct
     void init() {
         jdbcTemplate.execute("""
@@ -32,6 +33,7 @@ public class AiAuditService {
         jdbcTemplate.execute("ALTER TABLE ai_audit_logs ADD COLUMN IF NOT EXISTS latency_ms BIGINT");
     }
 
+    // Ghi log cho mỗi lượt hỏi AI.
     public void log(String sessionId, String question, String sql, int rowsReturned, String error, long latencyMs) {
         try {
             jdbcTemplate.update("""

@@ -15,6 +15,7 @@ public class AiHistoryService {
     private final Map<String, Queue<Map<String, String>>> historyMap = new ConcurrentHashMap<>();
     private static final int MAX_HISTORY = 10;
 
+    // Thêm một lượt hỏi đáp vào lịch sử session.
     public void addHistory(String sessionId, String question, String answer) {
         if (sessionId == null || sessionId.isBlank()) return;
         
@@ -26,6 +27,7 @@ public class AiHistoryService {
         history.add(Map.of("role", "assistant", "content", answer));
     }
 
+    // Lấy lịch sử session dạng text đơn giản.
     public String getHistory(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) return null;
         Queue<Map<String, String>> history = historyMap.get(sessionId);
@@ -36,6 +38,7 @@ public class AiHistoryService {
                 .orElse(null);
     }
 
+    // Lấy lịch sử session dạng danh sách message.
     public List<Map<String, String>> getMessages(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) return List.of();
         Queue<Map<String, String>> history = historyMap.get(sessionId);
@@ -43,6 +46,7 @@ public class AiHistoryService {
         return new ArrayList<>(history);
     }
 
+    // Xóa lịch sử của một session.
     public void clearHistory(String sessionId) {
         if (sessionId != null) historyMap.remove(sessionId);
     }

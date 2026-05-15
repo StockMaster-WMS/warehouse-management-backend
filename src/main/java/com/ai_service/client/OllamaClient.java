@@ -39,34 +39,27 @@ public class OllamaClient {
         this.model = model;
     }
 
-    /**
-     * Gọi API chat (khuyến nghị cho Qwen2.5)
-     */
+    // Gọi API chat không stream với tham số mặc định.
     public String chat(List<Map<String, String>> messages) {
         return chat(messages, 0.7, 0.9);
     }
 
-    /**
-     * Gọi model ở chế độ ổn định hơn để sinh SQL.
-     */
+    // Gọi model ở chế độ ổn định hơn để sinh SQL.
     public String generateSql(String prompt) {
         return generate(prompt, 0.0, 0.1);
     }
 
-    /**
-     * Sinh JSON intent/tool-call ổn định để backend gọi tool cố định.
-     */
+    // Sinh JSON intent ổn định để backend gọi tool cố định.
     public String generateIntent(String prompt) {
         return generate(prompt, 0.0, 0.1);
     }
 
-    /**
-     * Sinh câu trả lời tự nhiên từ prompt đã format theo Qwen chat template.
-     */
+    // Sinh câu trả lời tự nhiên từ prompt đã format.
     public String generateAnswer(String prompt) {
         return generate(prompt, 0.2, 0.3);
     }
 
+    // Gửi prompt raw tới Ollama và lấy response dạng text.
     private String generate(String prompt, double temperature, double topP) {
         Map<String, Object> body = Map.of(
                 "model", model,
@@ -92,9 +85,7 @@ public class OllamaClient {
         return generatedText instanceof String text ? text : "";
     }
 
-    /**
-     * Stream câu trả lời từ /api/generate. Dùng cho prompt raw Qwen.
-     */
+    // Stream câu trả lời từ /api/generate cho prompt raw.
     public void generateAnswerStream(String prompt, java.util.function.Consumer<String> consumer) {
         Map<String, Object> body = Map.of(
                 "model", model,
@@ -129,6 +120,7 @@ public class OllamaClient {
                 });
     }
 
+    // Gọi API chat không stream với cấu hình sampling tùy chỉnh.
     private String chat(List<Map<String, String>> messages, double temperature, double topP) {
         Map<String, Object> body = Map.of(
                 "model", model,
@@ -152,9 +144,7 @@ public class OllamaClient {
         return message != null ? (String) message.get("content") : "";
     }
 
-    /**
-     * Stream version
-     */
+    // Gọi API chat dạng stream.
     public void chatStream(List<Map<String, String>> messages, java.util.function.Consumer<String> consumer) {
         Map<String, Object> body = Map.of(
                 "model", model,
@@ -187,6 +177,7 @@ public class OllamaClient {
                 });
     }
 
+    // Trích nội dung từ từng dòng JSON của /api/chat.
     private String extractContent(String jsonLine) {
         try {
             var node = objectMapper.readTree(jsonLine);
@@ -196,6 +187,7 @@ public class OllamaClient {
         }
     }
 
+    // Trích nội dung từ từng dòng JSON của /api/generate.
     private String extractGenerateContent(String jsonLine) {
         try {
             var node = objectMapper.readTree(jsonLine);
@@ -205,6 +197,7 @@ public class OllamaClient {
         }
     }
 
+    // Thử lại request Ollama khi lỗi tạm thời.
     private <T> T executeWithRetry(Supplier<T> supplier, int maxAttempts) {
         RuntimeException last = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {

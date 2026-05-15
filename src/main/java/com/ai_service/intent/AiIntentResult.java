@@ -16,10 +16,12 @@ public class AiIntentResult {
     private Double confidence = 0.0;
     private String reason;
 
+    // Trả về parameters rỗng nếu model không cung cấp.
     public Map<String, Object> safeParameters() {
         return parameters == null ? Map.of() : parameters;
     }
 
+    // Tạo kết quả intent với map parameters an toàn.
     public static AiIntentResult of(AiIntent intent, Map<String, Object> parameters, double confidence, String reason) {
         return new AiIntentResult(intent, parameters == null ? new LinkedHashMap<>() : new LinkedHashMap<>(parameters),
                 confidence, reason);

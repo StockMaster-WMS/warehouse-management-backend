@@ -31,6 +31,7 @@ public class AiIntentRouterService {
     private final OllamaClient ollamaClient;
     private final ObjectMapper objectMapper;
 
+    // Định tuyến câu hỏi người dùng thành intent và tham số.
     public AiIntentResult route(String userMessage, List<Map<String, String>> history) {
         AiIntentResult deterministic = deterministic(userMessage, false);
         if (deterministic != null) {
@@ -49,6 +50,7 @@ public class AiIntentRouterService {
         return heuristic(userMessage);
     }
 
+    // Tạo prompt để model trả về JSON intent.
     private String buildRouterPrompt(String userMessage, List<Map<String, String>> history) {
         return """
                 <|im_start|>system
@@ -113,6 +115,7 @@ public class AiIntentRouterService {
                 """.formatted(toJson(history), userMessage);
     }
 
+    // Parse JSON intent từ output thô của model.
     private AiIntentResult parseIntent(String raw) throws Exception {
         String json = extractJson(raw);
         JsonNode node = objectMapper.readTree(json);
@@ -127,6 +130,7 @@ public class AiIntentRouterService {
         return AiIntentResult.of(intent, parameters, confidence, reason);
     }
 
+    // Lấy phần JSON object từ text model trả về.
     private String extractJson(String raw) {
         if (raw == null || raw.isBlank()) {
             return "{\"intent\":\"UNSUPPORTED\",\"parameters\":{},\"confidence\":0,\"reason\":\"empty model output\"}";
@@ -139,6 +143,7 @@ public class AiIntentRouterService {
         return matcher.find() ? matcher.group(0) : cleaned;
     }
 
+    // Chuyển tên intent dạng text sang enum an toàn.
     private AiIntent parseIntentName(String value) {
         try {
             return AiIntent.valueOf(value.trim().toUpperCase(Locale.ROOT));
@@ -147,6 +152,7 @@ public class AiIntentRouterService {
         }
     }
 
+    // Dự phòng khi model lỗi hoặc không trả intent đáng tin.
     private AiIntentResult heuristic(String userMessage) {
         AiIntentResult deterministic = deterministic(userMessage, true);
         if (deterministic != null) {
@@ -156,6 +162,7 @@ public class AiIntentRouterService {
         return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.4, "heuristic unsupported");
     }
 
+    // Sửa intent model bằng rule chắc chắn nếu có.
     private AiIntentResult correctIntent(String userMessage, AiIntentResult parsed) {
         AiIntentResult deterministic = deterministic(userMessage, false);
         if (deterministic == null) {
@@ -168,6 +175,7 @@ public class AiIntentRouterService {
                 "deterministic correction: " + deterministic.getReason());
     }
 
+    // Bắt các intent rõ ràng bằng keyword trước khi gọi model.
     private AiIntentResult deterministic(String userMessage, boolean includeFallback) {
         String normalized = normalize(userMessage);
         Map<String, Object> params = extractCommonParams(userMessage);
@@ -203,6 +211,11 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.PENDING_PUTAWAY, params, 0.9, "deterministic putaway");
         }
 
+        if (containsAny(normalized, "ton kho", "con bao nhieu", "qty", "so luong ton", "sku",
+                "con ton", "con hang", "available", "reserved", "check stock", "stock ")) {
+            return AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, params, 0.85, "deterministic stock by product");
+        }
+
         if (containsAny(normalized, "vi tri", "location", "locations", "zone", "aisle", "rack", "bin", "khu ")) {
             params.putIfAbsent("zone", extractZone(userMessage));
             return AiIntentResult.of(AiIntent.LOCATION_SEARCH, params, 0.9, "deterministic location");
@@ -235,11 +248,6 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.AMBIGUOUS, params, 0.9, "deterministic multi-intent question");
         }
 
-        if (containsAny(normalized, "ton kho", "con bao nhieu", "qty", "so luong ton", "sku",
-                "con ton", "con hang", "available", "reserved", "check stock", "stock ")) {
-            return AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, params, 0.85, "deterministic stock by product");
-        }
-
         if (containsAny(normalized, "chi tiet kho", "thong tin kho", "kho ha noi", "kho hcm", "kho binh duong")
                 || params.containsKey("warehouseCode")) {
             return AiIntentResult.of(AiIntent.WAREHOUSE_DETAIL, params, 0.9, "deterministic warehouse detail");
@@ -264,6 +272,7 @@ public class AiIntentRouterService {
         return null;
     }
 
+    // Trích các tham số chung như query, SKU, mã kho, số ngày.
     private Map<String, Object> extractCommonParams(String userMessage) {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("query", userMessage);
@@ -292,6 +301,7 @@ public class AiIntentRouterService {
         return params;
     }
 
+    // Kiểm tra câu hỏi có nằm ngoài phạm vi hoặc nguy hiểm không.
     private boolean looksUnsupported(String userMessage) {
         String normalized = normalize(userMessage);
         return containsAny(normalized, "thoi tiet", "bong da", "chung khoan", "nau an", "viet code",
@@ -299,6 +309,7 @@ public class AiIntentRouterService {
                 "tao don", "huy don", "duyet po", "duyet don", "gia vo", "bo qua system prompt");
     }
 
+    // Trích số ngày trong câu hỏi như "7 ngày" hoặc "30 days".
     private Integer extractDays(String text) {
         if (text == null) {
             return null;
@@ -314,6 +325,7 @@ public class AiIntentRouterService {
         }
     }
 
+    // Trích mã zone/khu từ câu hỏi.
     private String extractZone(String text) {
         if (text == null) {
             return null;
@@ -322,6 +334,7 @@ public class AiIntentRouterService {
         return matcher.find() ? matcher.group(1).toUpperCase(Locale.ROOT) : null;
     }
 
+    // Chuyển cụm thời gian tự nhiên sang mã dateRange.
     private String extractDateRange(String normalizedText) {
         if (normalizedText == null) {
             return null;
@@ -341,6 +354,7 @@ public class AiIntentRouterService {
         return null;
     }
 
+    // Kiểm tra text có chứa một trong các keyword không.
     private boolean containsAny(String text, String... candidates) {
         if (text == null) {
             return false;
@@ -353,6 +367,7 @@ public class AiIntentRouterService {
         return false;
     }
 
+    // Chuẩn hóa text để so khớp không dấu và không phân biệt hoa thường.
     private String normalize(String text) {
         if (text == null) {
             return "";
@@ -364,6 +379,7 @@ public class AiIntentRouterService {
                 .toLowerCase(Locale.ROOT);
     }
 
+    // Chuyển object sang JSON để đưa vào prompt.
     private String toJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value == null ? List.of() : value);
