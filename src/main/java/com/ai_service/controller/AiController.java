@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,16 +18,17 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.concurrent.Executor;
 
 @RestController
 @RequestMapping("/api/v1/ai")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 @Slf4j
 @Tag(name = "AI Service", description = "Các API chat với trợ lý AI StockMaster")
 public class AiController {
 
     private final AiService aiService;
+    private final Executor aiTaskExecutor;
 
     @PostMapping("/ask")
     @Operation(summary = "Chat với trợ lý AI", description = "Gửi câu hỏi tới model stockmaster-ai")
@@ -50,8 +50,7 @@ public class AiController {
         
         SseEmitter emitter = new SseEmitter(300_000L); // 5 phút timeout
         
-        // Chạy trong một thread riêng để không block request
-        new Thread(() -> {
+        aiTaskExecutor.execute(() -> {
             try {
                 AiAskRequest req = new AiAskRequest();
                 req.setQuestion(question);
@@ -69,7 +68,7 @@ public class AiController {
                 log.error("Streaming Error: ", e);
                 emitter.completeWithError(e);
             }
-        }).start();
+        });
 
         return emitter;
     }

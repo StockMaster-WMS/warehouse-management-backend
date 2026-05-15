@@ -19,7 +19,7 @@ public class AiHistoryService {
         if (sessionId == null || sessionId.isBlank()) return;
         
         Queue<Map<String, String>> history = historyMap.computeIfAbsent(sessionId, k -> new LinkedList<>());
-        while (history.size() >= MAX_HISTORY - 1) {
+        while (history.size() > MAX_HISTORY - 2) {
             history.poll(); // Xóa lượt cũ nhất
         }
         history.add(Map.of("role", "user", "content", question));

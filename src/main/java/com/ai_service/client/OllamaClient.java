@@ -2,12 +2,15 @@ package com.ai_service.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 @Component
 public class OllamaClient {
@@ -20,9 +23,18 @@ public class OllamaClient {
             RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper,
             @Value("${ai.ollama.api-url:http://localhost:11434}") String apiUrl,
-            @Value("${ai.ollama.model:stockmaster-ai}") String model) {
+            @Value("${ai.ollama.model:stockmaster-ai}") String model,
+            @Value("${ai.ollama.connect-timeout-seconds:5}") long connectTimeoutSeconds,
+            @Value("${ai.ollama.read-timeout-seconds:120}") long readTimeoutSeconds) {
 
-        this.restClient = restClientBuilder.baseUrl(apiUrl).build();
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds));
+        requestFactory.setReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
+
+        this.restClient = restClientBuilder
+                .baseUrl(apiUrl)
+                .requestFactory(requestFactory)
+                .build();
         this.objectMapper = objectMapper;
         this.model = model;
     }
@@ -38,6 +50,13 @@ public class OllamaClient {
      * Gọi model ở chế độ ổn định hơn để sinh SQL.
      */
     public String generateSql(String prompt) {
+        return generate(prompt, 0.0, 0.1);
+    }
+
+    /**
+     * Sinh JSON intent/tool-call ổn định để backend gọi tool cố định.
+     */
+    public String generateIntent(String prompt) {
         return generate(prompt, 0.0, 0.1);
     }
 
@@ -62,12 +81,12 @@ public class OllamaClient {
                 )
         );
 
-        Map<?, ?> response = restClient.post()
+        Map<?, ?> response = executeWithRetry(() -> restClient.post()
                 .uri("/api/generate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(body)
                 .retrieve()
-                .body(Map.class);
+                .body(Map.class), 2);
 
         Object generatedText = response != null ? response.get("response") : null;
         return generatedText instanceof String text ? text : "";
@@ -184,5 +203,26 @@ public class OllamaClient {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    private <T> T executeWithRetry(Supplier<T> supplier, int maxAttempts) {
+        RuntimeException last = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return supplier.get();
+            } catch (RuntimeException e) {
+                last = e;
+                if (attempt == maxAttempts) {
+                    throw e;
+                }
+                try {
+                    Thread.sleep(200L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+            }
+        }
+        throw last == null ? new IllegalStateException("Ollama request failed") : last;
     }
 }

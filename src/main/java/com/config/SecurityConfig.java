@@ -44,8 +44,6 @@ public class SecurityConfig {
                                     "/api/auth/me",
                                     "/api/auth/refresh",
                                     "/api/auth/logout",
-                                    "/api/ai/**",
-                                    "/api/v1/ai/**",
                                     "/api/audit-logs/**",
                                     "/actuator/health/**",
                                     "/v3/api-docs/**",

@@ -40,6 +40,12 @@ services:
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       AUTH_COOKIE_SAME_SITE: ${AUTH_COOKIE_SAME_SITE:-Lax}
       AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED: ${AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED:-false}
+      AI_OLLAMA_API_URL: ${AI_OLLAMA_API_URL:-http://host.docker.internal:11434}
+      AI_OLLAMA_MODEL: ${AI_OLLAMA_MODEL:-stockmaster-ai}
+      AI_OLLAMA_CONNECT_TIMEOUT_SECONDS: ${AI_OLLAMA_CONNECT_TIMEOUT_SECONDS:-5}
+      AI_OLLAMA_READ_TIMEOUT_SECONDS: ${AI_OLLAMA_READ_TIMEOUT_SECONDS:-120}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   pg_warehouse_management:
