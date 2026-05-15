@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -48,6 +49,7 @@ public class StockLevelController {
     private final StockLevelExcelExportService stockLevelExcelExportService;
 
     @GetMapping("/summary")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'REPORT_VIEWER')")
     @Operation(summary = "Tổng quan tồn kho", description = "Trả về số liệu tổng quan: tổng SKU, tổng tồn, tồn thấp, sắp hết hạn")
     public ApiResponse<StockSummaryResponse> getSummary(
             @Parameter(description = "Số ngày tính sắp hết hạn") @RequestParam(defaultValue = "30") int nearExpiryDays) {
@@ -55,12 +57,14 @@ public class StockLevelController {
     }
 
     @GetMapping("/alerts/low-stock")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Cảnh báo tồn kho thấp", description = "Danh sách sản phẩm có tồn khả dụng < mức tối thiểu (minQty)")
     public ApiResponse<List<StockLevelExpandedResponse>> getLowStock() {
         return ApiResponse.success("Lấy danh sách tồn kho thấp thành công", stockLevelService.findLowStock());
     }
 
     @GetMapping("/alerts/near-expiry")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Cảnh báo hàng sắp hết hạn", description = "Danh sách stock có expiryDate trong khoảng N ngày tới")
     public ApiResponse<List<NearExpiryStockResponse>> getNearExpiry(
             @Parameter(description = "Số ngày") @RequestParam(defaultValue = "30") int days,
@@ -72,6 +76,7 @@ public class StockLevelController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Lấy danh sách tồn kho", description = "Phân trang; lọc theo kho, vị trí hoặc sản phẩm")
     public ApiResponse<PagedResponse<?>> getAll(
             @RequestParam(defaultValue = "0") int page,
@@ -102,30 +107,31 @@ public class StockLevelController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Lấy tồn kho theo ID")
     public ApiResponse<StockLevelResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy tồn kho thành công", stockLevelService.findById(id));
     }
 
-    @PostMapping("/adjust")
-    @Operation(summary = "Điều chỉnh tồn kho", description = "qtyDelta > 0 nhập thêm; < 0 trừ (xuất). Dùng cho luồng putaway / xuất hàng.")
+    @PostMapping("/adjust")    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")    @Operation(summary = "Điều chỉnh tồn kho", description = "qtyDelta > 0 nhập thêm; < 0 trừ (xuất). Dùng cho luồng putaway / xuất hàng.")
     public ApiResponse<StockLevelResponse> adjust(@Valid @RequestBody StockAdjustCommand command) {
         return ApiResponse.success("Điều chỉnh tồn kho thành công", stockLevelService.adjust(command));
     }
 
-    @PostMapping("/adjust-reserved")
-    @Operation(summary = "Điều chỉnh giữ chỗ", description = "reservedDelta > 0 giữ thêm; < 0 nhả chỗ (đơn xuất / hủy pick).")
+    @PostMapping("/adjust-reserved")    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")    @Operation(summary = "Điều chỉnh giữ chỗ", description = "reservedDelta > 0 giữ thêm; < 0 nhả chỗ (đơn xuất / hủy pick).")
     public ApiResponse<StockLevelResponse> adjustReserved(@Valid @RequestBody StockReserveCommand command) {
         return ApiResponse.success("Điều chỉnh giữ chỗ thành công", stockLevelService.adjustReserved(command));
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo tồn kho")
     public ApiResponse<StockLevelResponse> create(@Valid @RequestBody CreateStockLevelRequest request) {
         return ApiResponse.success("Tạo tồn kho thành công", stockLevelService.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật tồn kho")
     public ApiResponse<StockLevelResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdateStockLevelRequest request) {
@@ -133,6 +139,7 @@ public class StockLevelController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa tồn kho")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         stockLevelService.delete(id);
@@ -140,6 +147,7 @@ public class StockLevelController {
     }
 
     @GetMapping(value = "/export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Xuất báo cáo tồn kho ra Excel", description = "Xuất danh sách tồn kho theo kho / vị trí / sản phẩm")
     public ResponseEntity<byte[]> exportXlsx(
             @RequestParam(required = false) UUID warehouseId,
@@ -158,6 +166,7 @@ public class StockLevelController {
     }
 
     @GetMapping(value = "/reports/near-expiry-export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Xuất danh sách hàng sắp hết hạn", description = "Lọc các stock level có expiryDate trong khoảng ngày sắp tới")
     public ResponseEntity<byte[]> exportNearExpiryXlsx(
             @RequestParam(defaultValue = "30") Integer days,
@@ -177,6 +186,7 @@ public class StockLevelController {
     }
 
     @GetMapping(value = "/reports/low-stock-export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Xuất danh sách hàng tồn kho thấp", description = "Lọc các stock level có qtyAvailable < minQty")
     public ResponseEntity<byte[]> exportLowStockXlsx(
             @RequestParam(required = false) UUID warehouseId,

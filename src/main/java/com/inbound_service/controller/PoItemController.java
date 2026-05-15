@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.UUID;
 
@@ -41,6 +42,7 @@ public class PoItemController {
     private final PoItemExcelImportService poItemExcelImportService;
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy danh sách dòng đơn nhập", description = "Phân trang; lọc purchaseOrderId, keyword (SKU)")
     public ApiResponse<PagedResponse<PoItemResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
@@ -55,26 +57,28 @@ public class PoItemController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy dòng đơn nhập theo ID")
     public ApiResponse<PoItemResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy dòng đơn nhập thành công", poItemService.findById(id));
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo dòng đơn nhập")
     public ApiResponse<PoItemResponse> create(@Valid @RequestBody CreatePoItemRequest request) {
         return ApiResponse.success("Tạo dòng đơn nhập thành công", poItemService.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật dòng đơn nhập")
     public ApiResponse<PoItemResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdatePoItemRequest request) {
         return ApiResponse.success("Cập nhật dòng đơn nhập thành công", poItemService.update(id, request));
     }
 
-    @PostMapping(value = "/import/{purchaseOrderId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Import sản phẩm mới từ Excel và thêm vào PO", description = "Upload file .xlsx chứa thông tin sản phẩm mới + số lượng đặt. "
+    @PostMapping(value = "/import/{purchaseOrderId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")    @Operation(summary = "Import sản phẩm mới từ Excel và thêm vào PO", description = "Upload file .xlsx chứa thông tin sản phẩm mới + số lượng đặt. "
             + "Hệ thống sẽ tạo sản phẩm mới qua product module rồi tự động thêm dòng PO. "
             + "Cột bắt buộc: name, baseUnit, categoryId, orderedQty. "
             + "Cột tùy chọn: unitPrice, barcodeEan13, weightKg, lengthCm, widthCm, heightCm, "
@@ -88,6 +92,7 @@ public class PoItemController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa dòng đơn nhập")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         poItemService.delete(id);

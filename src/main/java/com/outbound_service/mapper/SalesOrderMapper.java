@@ -10,18 +10,20 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingTarget;
 
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "spring", uses = {SalesOrderItemMapper.class})
 public interface SalesOrderMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "soNumber", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "status", ignore = true)
+    @Mapping(target = "items", ignore = true)
     SalesOrder toEntity(CreateSalesOrderRequest request);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "status", ignore = true)
+    @Mapping(target = "items", ignore = true)
     void updateEntity(UpdateSalesOrderRequest request, @MappingTarget SalesOrder salesOrder);
 
     SalesOrderResponse toResponse(SalesOrder salesOrder);

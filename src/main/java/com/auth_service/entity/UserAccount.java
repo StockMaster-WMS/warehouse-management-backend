@@ -49,6 +49,9 @@ public class UserAccount {
     @Column(name = "email", nullable = false, unique = true, length = 120)
     private String email;
 
+    @Column(name = "full_name", length = 120)
+    private String fullName;
+
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 

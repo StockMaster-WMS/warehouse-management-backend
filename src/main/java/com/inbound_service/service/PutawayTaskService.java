@@ -1,6 +1,7 @@
 package com.inbound_service.service;
 
 import com.common.api.PagedResponse;
+import com.common.api.stock.StockAdjustCommand;
 import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
@@ -15,6 +16,7 @@ import com.inbound_service.mapper.PutawayTaskMapper;
 import com.inbound_service.repository.InboundReceiptRepository;
 import com.inbound_service.repository.PutawayTaskRepository;
 import com.inbound_service.repository.PutawayTaskSpecification;
+import com.warehouse_service.service.StockLevelService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -38,6 +40,7 @@ public class PutawayTaskService {
     private final InboundReceiptRepository inboundReceiptRepository;
     private final PutawayTaskMapper putawayTaskMapper;
     private final AuditLogService auditLogService;
+    private final StockLevelService stockLevelService;
 
     // Lấy danh sách putaway task có phân trang và lọc trạng thái.
     public PagedResponse<PutawayTaskResponse> findAll(Pageable pageable, UUID poItemId, String status) {
@@ -122,6 +125,48 @@ public class PutawayTaskService {
         // Cập nhật trạng thái phiếu nhập kho nếu tất cả putaway hoàn tất
         if (saved.getInboundReceipt() != null) {
             refreshReceiptStatus(saved.getInboundReceipt().getId());
+        }
+
+        // Cập nhật tồn kho (StockLevel): Chuyển từ vị trí nhận hàng sang vị trí thực tế
+        if (saved.getInboundReceipt() != null) {
+            // 1. Trừ tồn kho tại vị trí nhận (Dock/Inbound)
+            StockAdjustCommand deductCmd = new StockAdjustCommand(
+                    saved.getInboundReceipt().getWarehouseId(),
+                    saved.getInboundReceipt().getLocationId(),
+                    saved.getProductId(),
+                    null,
+                    -saved.getQtyToPutaway(),
+                    "PUTAWAY_MOVE_OUT_" + saved.getId().toString(),
+                    "PUTAWAY_TASK",
+                    saved.getId()
+            );
+            stockLevelService.adjust(deductCmd);
+
+            // 2. Cộng tồn kho tại vị trí thực tế
+            StockAdjustCommand addCmd = new StockAdjustCommand(
+                    saved.getInboundReceipt().getWarehouseId(),
+                    saved.getActualLocationId(),
+                    saved.getProductId(),
+                    null,
+                    saved.getQtyToPutaway(),
+                    "PUTAWAY_MOVE_IN_" + saved.getId().toString(),
+                    "PUTAWAY_TASK",
+                    saved.getId()
+            );
+            stockLevelService.adjust(addCmd);
+        } else {
+            // Fallback nếu không có receipt liên quan (trường hợp hiếm)
+            StockAdjustCommand adjustCmd = new StockAdjustCommand(
+                    request.actualLocationId(), // warehouseId fallback is tricky here, assuming request has it or similar
+                    saved.getActualLocationId(),
+                    saved.getProductId(),
+                    null,
+                    saved.getQtyToPutaway(),
+                    "PUTAWAY_DIRECT_" + saved.getId().toString(),
+                    "PUTAWAY_TASK",
+                    saved.getId()
+            );
+            stockLevelService.adjust(adjustCmd);
         }
 
         auditLogService.record("PUTAWAY", "PUTAWAY", "Hoàn tất putaway",

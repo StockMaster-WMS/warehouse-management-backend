@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.UUID;
 
@@ -36,6 +37,7 @@ public class LocationController {
     private final LocationService locationService;
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy danh sách vị trí", description = "Phân trang; lọc kho, zone, keyword (mã/zone/aisle)")
     public ApiResponse<PagedResponse<LocationResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
@@ -51,18 +53,21 @@ public class LocationController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy vị trí theo ID")
     public ApiResponse<LocationResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy vị trí thành công", locationService.findById(id));
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo vị trí")
     public ApiResponse<LocationResponse> create(@Valid @RequestBody CreateLocationRequest request) {
         return ApiResponse.success("Tạo vị trí thành công", locationService.create(request));
     }
 
     @PostMapping("/bulk-generate")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo hàng loạt vị trí theo quy luật")
     public ApiResponse<String> bulkGenerate(@Valid @RequestBody BulkLocationGeneratorRequest request) {
         locationService.generateBulk(request);
@@ -70,6 +75,7 @@ public class LocationController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật vị trí")
     public ApiResponse<LocationResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdateLocationRequest request) {
@@ -77,6 +83,7 @@ public class LocationController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa vị trí")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         locationService.delete(id);

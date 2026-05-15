@@ -6,9 +6,14 @@ import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.common.util.CodeGenerator;
+import com.product_service.entity.Supplier;
+import com.product_service.repository.SupplierRepository;
+import com.product_service.repository.ProductRepository;
 import com.warehouse_service.service.StockLevelService;
 import com.inbound_service.dto.request.CreateInboundReceiptRequest;
 import com.inbound_service.dto.request.ReceiveLineRequest;
+import com.inbound_service.dto.response.InboundPrintItemResponse;
+import com.inbound_service.dto.response.InboundPrintResponse;
 import com.inbound_service.dto.response.InboundReceiptResponse;
 import com.inbound_service.entity.*;
 import com.inbound_service.mapper.InboundReceiptMapper;
@@ -38,6 +43,8 @@ public class InboundReceiptService {
     private final StockLevelService stockLevelService;
     private final InboundReceiptMapper receiptMapper;
     private final AuditLogService auditLogService;
+    private final SupplierRepository supplierRepository;
+    private final ProductRepository productRepository;
 
     private static final EnumSet<PurchaseOrderStatus> RECEIVABLE_STATUSES =
             EnumSet.of(PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.PARTIAL);
@@ -211,6 +218,74 @@ public class InboundReceiptService {
         return receiptMapper.toResponse(receipt);
     }
 
+    // Lấy dữ liệu in phiếu nhập kho (Packing List/GRN) chuyên dụng
+    @Transactional(readOnly = true)
+    public InboundPrintResponse getPrintData(UUID receiptId) {
+        InboundReceipt receipt = receiptRepository.findById(receiptId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy phiếu nhập"));
+
+        PurchaseOrder po = receipt.getPurchaseOrder();
+
+        String supplierName = "";
+        String supplierAddress = "";
+        String supplierPhone = "";
+
+        try {
+            Supplier supplier = supplierRepository.findById(po.getSupplierId()).orElse(null);
+            if (supplier != null) {
+                supplierName = supplier.getName();
+                supplierAddress = supplier.getAddress();
+                supplierPhone = supplier.getContactPhone();
+            }
+        } catch (Exception e) {
+            // fallback
+        }
+
+        List<InboundPrintItemResponse> itemResponses = new ArrayList<>();
+        short stt = 1;
+        for (InboundReceiptItem item : receipt.getItems()) {
+            String productName = item.getProductSku();
+            String unit = "";
+            try {
+                var product = productRepository.findById(item.getProductId()).orElse(null);
+                if (product != null) {
+                    productName = product.getName();
+                    unit = product.getBaseUnit();
+                }
+            } catch (Exception e) {
+                // fallback
+            }
+
+            Integer orderedQty = item.getPoItem() != null ? item.getPoItem().getOrderedQty() : item.getReceivedQty();
+
+            itemResponses.add(new InboundPrintItemResponse(
+                    stt++,
+                    item.getProductId(),
+                    item.getProductSku(),
+                    productName,
+                    unit,
+                    orderedQty,
+                    item.getReceivedQty(),
+                    item.getNote()
+            ));
+        }
+
+        return new InboundPrintResponse(
+                receipt.getId(),
+                receipt.getReceiptNumber(),
+                po.getPoNumber(),
+                receipt.getWarehouseId(),
+                receipt.getLocationId(),
+                receipt.getReceivedDate(),
+                supplierName,
+                supplierAddress,
+                supplierPhone,
+                receipt.getReceivedBy(),
+                receipt.getNote(),
+                itemResponses
+        );
+    }
+
     // Lấy danh sách phiếu nhập theo đơn nhập.
     @Transactional(readOnly = true)
     public List<InboundReceiptResponse> findByPurchaseOrderId(UUID purchaseOrderId) {
@@ -230,10 +305,15 @@ public class InboundReceiptService {
         boolean allReceived = lines.stream()
                 .allMatch(l -> Objects.equals(l.getOrderedQty(), l.getReceivedQty()));
 
+        boolean anyReceived = lines.stream()
+                .anyMatch(l -> l.getReceivedQty() != null && l.getReceivedQty() > 0);
+
         if (allReceived) {
             po.setStatus(PurchaseOrderStatus.COMPLETED);
-        } else {
+        } else if (anyReceived) {
             po.setStatus(PurchaseOrderStatus.PARTIAL);
+        } else {
+            po.setStatus(PurchaseOrderStatus.APPROVED);
         }
         purchaseOrderRepository.save(po);
     }

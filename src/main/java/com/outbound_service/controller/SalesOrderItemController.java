@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.UUID;
 
@@ -35,6 +36,7 @@ public class SalesOrderItemController {
     private final SalesOrderItemService salesOrderItemService;
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Danh sách dòng đơn xuất", description = "Phân trang; lọc salesOrderId, keyword (SKU)")
     public ApiResponse<PagedResponse<SalesOrderItemResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
@@ -49,18 +51,21 @@ public class SalesOrderItemController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Chi tiết dòng đơn xuất")
     public ApiResponse<SalesOrderItemResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy dòng đơn xuất thành công", salesOrderItemService.findById(id));
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo dòng đơn xuất")
     public ApiResponse<SalesOrderItemResponse> create(@Valid @RequestBody CreateSalesOrderItemRequest request) {
         return ApiResponse.success("Tạo dòng đơn xuất thành công", salesOrderItemService.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật dòng đơn xuất")
     public ApiResponse<SalesOrderItemResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdateSalesOrderItemRequest request) {
@@ -68,6 +73,7 @@ public class SalesOrderItemController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa dòng đơn xuất")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         salesOrderItemService.delete(id);

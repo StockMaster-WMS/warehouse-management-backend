@@ -5,6 +5,7 @@ import java.util.List;
 public record DashboardSummaryResponse(
         List<DashboardMetricResponse> metrics,
         List<DashboardFlowPointResponse> flow,
-        List<DashboardNoticeResponse> notices
+        List<DashboardNoticeResponse> notices,
+        List<DashboardActivityResponse> recentActivities
 ) {
 }

@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.UUID;
 
@@ -40,6 +41,7 @@ public class SupplierController {
     private final SupplierExcelExportService supplierExcelExportService;
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy danh sách nhà cung cấp", description = "Phân trang; lọc theo keyword (mã, tên, MST, người liên hệ) và trạng thái")
     public ApiResponse<PagedResponse<SupplierResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
@@ -54,18 +56,21 @@ public class SupplierController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy nhà cung cấp theo ID", description = "Trả về chi tiết nhà cung cấp theo UUID")
     public ApiResponse<SupplierResponse> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy nhà cung cấp thành công", supplierService.findById(id));
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo nhà cung cấp", description = "Tạo mới một nhà cung cấp")
     public ApiResponse<SupplierResponse> create(@Valid @RequestBody CreateSupplierRequest request) {
         return ApiResponse.success("Tạo nhà cung cấp thành công", supplierService.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật nhà cung cấp", description = "Cập nhật thông tin nhà cung cấp theo ID")
     public ApiResponse<SupplierResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdateSupplierRequest request) {
@@ -73,6 +78,7 @@ public class SupplierController {
     }
 
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Thay đổi trạng thái nhà cung cấp", description = "Đổi trạng thái: ACTIVE, INACTIVE, SUSPENDED")
     public ApiResponse<SupplierResponse> changeStatus(@PathVariable UUID id,
             @RequestParam String status) {
@@ -80,6 +86,7 @@ public class SupplierController {
     }
 
     @GetMapping("/export")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Xuất Excel danh sách NCC", description = "Download file .xlsx theo bộ lọc hiện tại")
     public ResponseEntity<byte[]> exportExcel(
             @RequestParam(required = false) String keyword,
@@ -93,6 +100,7 @@ public class SupplierController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa nhà cung cấp", description = "Xóa nhà cung cấp theo ID")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         supplierService.delete(id);

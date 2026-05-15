@@ -28,4 +28,43 @@ public interface SalesOrderItemRepository extends JpaRepository<SalesOrderItem, 
 
     @Query("SELECT s FROM SalesOrderItem s JOIN FETCH s.salesOrder WHERE s.id = :id")
     Optional<SalesOrderItem> findByIdWithSalesOrder(@Param("id") UUID id);
+
+    interface TopSkuView {
+        UUID getProductId();
+        String getProductSku();
+        Long getTotalQty();
+        java.math.BigDecimal getTotalRevenue();
+    }
+
+    @Query(value = """
+            select product_id as "productId", 
+                   product_sku as "productSku", 
+                   sum(shipped_qty) as "totalQty",
+                   sum(unit_price * shipped_qty) as "totalRevenue"
+            from sales_order_items
+            group by product_id, product_sku
+            order by sum(shipped_qty) desc
+            limit :limit
+            """, nativeQuery = true)
+    List<TopSkuView> findTopSkus(@Param("limit") int limit);
+
+    interface DailyRevenueView {
+        java.time.LocalDate getOrderDate();
+        java.math.BigDecimal getRevenue();
+    }
+
+    @Query(value = """
+            select cast(o.created_at as date) as "orderDate",
+                   coalesce(sum(i.unit_price * i.shipped_qty), 0) as "revenue"
+            from sales_order_items i
+            join sales_orders o on i.sales_order_id = o.id
+            where o.status = 'SHIPPED'
+              and o.created_at >= :fromDate
+              and o.created_at < :toDate
+            group by cast(o.created_at as date)
+            order by cast(o.created_at as date)
+            """, nativeQuery = true)
+    List<DailyRevenueView> sumDailyRevenue(
+            @Param("fromDate") java.time.OffsetDateTime fromDate,
+            @Param("toDate") java.time.OffsetDateTime toDate);
 }

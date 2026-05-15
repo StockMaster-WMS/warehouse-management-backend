@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.UUID;
 
@@ -35,6 +36,7 @@ public class PickingItemController {
     private final PickingItemService pickingItemService;
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy danh sách picking items", description = "Phân trang; lọc soItemId, productId, locationId")
     public ApiResponse<PagedResponse<PickingItemResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
@@ -58,18 +60,21 @@ public class PickingItemController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy picking item theo ID")
     public ApiResponse<?> getById(@PathVariable UUID id) {
         return ApiResponse.success("Lấy chi tiết picking item thành công", pickingItemService.findDetailForPicker(id));
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo picking item")
     public ApiResponse<PickingItemResponse> create(@Valid @RequestBody CreatePickingItemRequest request) {
         return ApiResponse.success("Tạo picking item thành công", pickingItemService.create(request));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật picking item")
     public ApiResponse<PickingItemResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdatePickingItemRequest request) {
@@ -77,6 +82,7 @@ public class PickingItemController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa picking item")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         pickingItemService.delete(id);
