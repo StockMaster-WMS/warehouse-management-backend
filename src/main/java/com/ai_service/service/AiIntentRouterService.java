@@ -32,9 +32,14 @@ public class AiIntentRouterService {
     private final ObjectMapper objectMapper;
 
     public AiIntentResult route(String userMessage, List<Map<String, String>> history) {
+        AiIntentResult deterministic = deterministic(userMessage, false);
+        if (deterministic != null) {
+            return deterministic;
+        }
+
         try {
             String raw = ollamaClient.generateIntent(buildRouterPrompt(userMessage, history));
-            AiIntentResult parsed = parseIntent(raw);
+            AiIntentResult parsed = correctIntent(userMessage, parseIntent(raw));
             if (parsed.getIntent() != AiIntent.UNSUPPORTED || looksUnsupported(userMessage)) {
                 return parsed;
             }
@@ -143,80 +148,148 @@ public class AiIntentRouterService {
     }
 
     private AiIntentResult heuristic(String userMessage) {
+        AiIntentResult deterministic = deterministic(userMessage, true);
+        if (deterministic != null) {
+            return deterministic;
+        }
+        Map<String, Object> params = extractCommonParams(userMessage);
+        return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.4, "heuristic unsupported");
+    }
+
+    private AiIntentResult correctIntent(String userMessage, AiIntentResult parsed) {
+        AiIntentResult deterministic = deterministic(userMessage, false);
+        if (deterministic == null) {
+            return parsed;
+        }
+        Map<String, Object> merged = new LinkedHashMap<>(parsed.safeParameters());
+        merged.putAll(deterministic.safeParameters());
+        return AiIntentResult.of(deterministic.getIntent(), merged,
+                Math.max(deterministic.getConfidence(), parsed.getConfidence() == null ? 0.0 : parsed.getConfidence()),
+                "deterministic correction: " + deterministic.getReason());
+    }
+
+    private AiIntentResult deterministic(String userMessage, boolean includeFallback) {
         String normalized = normalize(userMessage);
+        Map<String, Object> params = extractCommonParams(userMessage);
+
+        if (containsAny(normalized, "thoi tiet", "bong da", "chung khoan", "nau an", "bai tho", "viet tho",
+                "cap nhat", "xoa ", "delete", "drop table", "update ", "insert ",
+                "alter table", "truncate", "sua so luong", "doi so luong", "thanh 999",
+                "tao don", "huy don", "duyet po", "duyet don", "gia vo", "bo qua system prompt",
+                "ignore system prompt", "sql update", "sql delete")) {
+            return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.95, "deterministic unsupported");
+        }
+
+        if (containsAny(normalized, "kho do", "san pham do", "don do", "cai nay", "mat hang do")) {
+            return AiIntentResult.of(AiIntent.AMBIGUOUS, params, 0.9, "deterministic ambiguous reference");
+        }
+
+        if (containsAny(normalized, "xin chao", "hello", "hi ", "ban co the giup gi", "ban lam duoc gi",
+                "tro ly kho", "tro ly lam duoc gi", "putaway la gi", "la gi", "duoc tinh the nao",
+                "nen xu ly ra sao", "huong dan", "giai thich")) {
+            return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.9, "deterministic guide");
+        }
+
+        if (containsAny(normalized, "bao nhieu kho", "co may kho", "tong so kho", "so luong kho",
+                "how many warehouses", "tong warehouse")) {
+            return AiIntentResult.of(AiIntent.WAREHOUSE_COUNT, params, 0.9, "deterministic warehouse count");
+        }
+
+        if (containsAny(normalized, "tom tat", "tong quan", "dashboard", "operation summary", "tinh hinh")) {
+            return AiIntentResult.of(AiIntent.REPORT_SUMMARY, params, 0.9, "deterministic report");
+        }
+
+        if (containsAny(normalized, "putaway", "cat hang", "cho cat vao vi tri", "cho dua vao vi tri", "cho putaway")) {
+            return AiIntentResult.of(AiIntent.PENDING_PUTAWAY, params, 0.9, "deterministic putaway");
+        }
+
+        if (containsAny(normalized, "vi tri", "location", "locations", "zone", "aisle", "rack", "bin", "khu ")) {
+            params.putIfAbsent("zone", extractZone(userMessage));
+            return AiIntentResult.of(AiIntent.LOCATION_SEARCH, params, 0.9, "deterministic location");
+        }
+
+        if (containsAny(normalized, "danh sach kho", "liet ke kho", "cac kho", "nhung kho",
+                "list all active warehouses", "warehouse code")) {
+            return AiIntentResult.of(AiIntent.WAREHOUSE_LIST, params, 0.9, "deterministic warehouse list");
+        }
+
+        if (containsAny(normalized, "ton thap", "gan het hang", "duoi dinh muc", "duoi muc an toan",
+                "can bo sung", "sap het hang", "low stock")) {
+            return AiIntentResult.of(AiIntent.LOW_STOCK, params, 0.9, "deterministic low stock");
+        }
+
+        if (containsAny(normalized, "sap het han", "gan het han", "het han ", "het han?", "expiry", "expired", "fefo")) {
+            params.putIfAbsent("days", params.get("days") == null ? 30 : params.get("days"));
+            return AiIntentResult.of(AiIntent.NEAR_EXPIRY, params, 0.9, "deterministic near expiry");
+        }
+
+        if (containsAny(normalized, "kiem ke", "lech ton", "chenh lech", "cycle count", "count lech")) {
+            return AiIntentResult.of(AiIntent.CYCLE_COUNT_VARIANCE, params, 0.9, "deterministic cycle count");
+        }
+
+        if (containsAny(normalized, "tom tat", "tong quan", "dashboard", "bao cao", "tinh hinh")) {
+            return AiIntentResult.of(AiIntent.REPORT_SUMMARY, params, 0.9, "deterministic report");
+        }
+
+        if (containsAny(normalized, "ton kho", "stock") && containsAny(normalized, "don xuat", "sales order", "outbound", "uu tien")) {
+            return AiIntentResult.of(AiIntent.AMBIGUOUS, params, 0.9, "deterministic multi-intent question");
+        }
+
+        if (containsAny(normalized, "ton kho", "con bao nhieu", "qty", "so luong ton", "sku",
+                "con ton", "con hang", "available", "reserved", "check stock", "stock ")) {
+            return AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, params, 0.85, "deterministic stock by product");
+        }
+
+        if (containsAny(normalized, "chi tiet kho", "thong tin kho", "kho ha noi", "kho hcm", "kho binh duong")
+                || params.containsKey("warehouseCode")) {
+            return AiIntentResult.of(AiIntent.WAREHOUSE_DETAIL, params, 0.9, "deterministic warehouse detail");
+        }
+
+        if (containsAny(normalized, "don nhap", "purchase order", " po ", "trang thai po", "po-", "po dang")) {
+            return AiIntentResult.of(AiIntent.PURCHASE_ORDER_STATUS, params, 0.9, "deterministic purchase order");
+        }
+
+        if (containsAny(normalized, "don xuat", "sales order", "priority outbound", "uu tien xu ly",
+                "uu tien cao", "xu ly gap", "can xu ly gap", "so nao nen pick truoc")) {
+            return AiIntentResult.of(AiIntent.OUTBOUND_PRIORITY, params, 0.9, "deterministic outbound");
+        }
+
+        if (containsAny(normalized, "picking", "pick", "lay hang", "cho pick", "task lay hang", "pick xong")) {
+            return AiIntentResult.of(AiIntent.PICKING_STATUS, params, 0.9, "deterministic picking");
+        }
+
+        if (includeFallback) {
+            return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.4, "heuristic unsupported");
+        }
+        return null;
+    }
+
+    private Map<String, Object> extractCommonParams(String userMessage) {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("query", userMessage);
-
-        if (containsAny(normalized, "cap nhat", "xoa ", "delete", "drop table", "update ", "insert ",
-                "alter table", "truncate", "sua so luong", "doi so luong", "thanh 999",
-                "tao don", "huy don", "duyet po", "duyet don", "gia vo", "bo qua system prompt")) {
-            return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.9, "heuristic unsafe mutation request");
-        }
-
-        Matcher skuMatcher = SKU_PATTERN.matcher(userMessage == null ? "" : userMessage.toUpperCase(Locale.ROOT));
-        if (skuMatcher.find()) {
-            params.put("sku", skuMatcher.group());
-        }
 
         Matcher whMatcher = WAREHOUSE_CODE_PATTERN.matcher(userMessage == null ? "" : userMessage);
         if (whMatcher.find()) {
             params.put("warehouseCode", whMatcher.group().toUpperCase(Locale.ROOT));
         }
 
+        Matcher skuMatcher = SKU_PATTERN.matcher(userMessage == null ? "" : userMessage.toUpperCase(Locale.ROOT));
+        if (skuMatcher.find()) {
+            String code = skuMatcher.group();
+            if (!code.startsWith("WH-") && !code.startsWith("PO-") && !code.startsWith("SO-")) {
+                params.put("sku", code);
+            }
+        }
+
         Integer days = extractDays(userMessage);
         if (days != null) {
             params.put("days", days);
         }
-        String dateRange = extractDateRange(normalized);
+        String dateRange = extractDateRange(normalize(userMessage));
         if (dateRange != null) {
             params.put("dateRange", dateRange);
         }
-
-        if (containsAny(normalized, "xin chao", "hello", "hi ", "ban lam duoc gi", "tro ly lam duoc gi")) {
-            return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.8, "heuristic greeting");
-        }
-        if (containsAny(normalized, "bao nhieu kho", "co may kho", "tong so kho", "so luong kho")) {
-            return AiIntentResult.of(AiIntent.WAREHOUSE_COUNT, params, 0.85, "heuristic warehouse count");
-        }
-        if (containsAny(normalized, "danh sach kho", "liet ke kho", "cac kho", "nhung kho")) {
-            return AiIntentResult.of(AiIntent.WAREHOUSE_LIST, params, 0.85, "heuristic warehouse list");
-        }
-        if (containsAny(normalized, "chi tiet kho", "thong tin kho") || params.containsKey("warehouseCode")) {
-            return AiIntentResult.of(AiIntent.WAREHOUSE_DETAIL, params, 0.75, "heuristic warehouse detail");
-        }
-        if (containsAny(normalized, "vi tri", "location", "zone", "aisle", "rack", "bin", "khu ")) {
-            params.putIfAbsent("zone", extractZone(userMessage));
-            return AiIntentResult.of(AiIntent.LOCATION_SEARCH, params, 0.75, "heuristic location");
-        }
-        if (containsAny(normalized, "sap het han", "gan het han", "het han")) {
-            params.putIfAbsent("days", days == null ? 30 : days);
-            return AiIntentResult.of(AiIntent.NEAR_EXPIRY, params, 0.85, "heuristic near expiry");
-        }
-        if (containsAny(normalized, "ton thap", "gan het hang", "duoi dinh muc", "can bo sung", "sap het hang")) {
-            return AiIntentResult.of(AiIntent.LOW_STOCK, params, 0.85, "heuristic low stock");
-        }
-        if (containsAny(normalized, "ton kho", "con bao nhieu", "qty", "so luong ton", "sku")) {
-            return AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, params, 0.75, "heuristic stock by product");
-        }
-        if (containsAny(normalized, "putaway", "cat hang", "cho dua vao vi tri", "cho putaway")) {
-            return AiIntentResult.of(AiIntent.PENDING_PUTAWAY, params, 0.8, "heuristic putaway");
-        }
-        if (containsAny(normalized, "don nhap", "purchase order", " po ", "trang thai po")) {
-            return AiIntentResult.of(AiIntent.PURCHASE_ORDER_STATUS, params, 0.75, "heuristic purchase order");
-        }
-        if (containsAny(normalized, "don xuat", "sales order", "uu tien xu ly", "xu ly gap")) {
-            return AiIntentResult.of(AiIntent.OUTBOUND_PRIORITY, params, 0.75, "heuristic outbound");
-        }
-        if (containsAny(normalized, "picking", "pick", "lay hang", "cho pick")) {
-            return AiIntentResult.of(AiIntent.PICKING_STATUS, params, 0.75, "heuristic picking");
-        }
-        if (containsAny(normalized, "kiem ke", "lech ton", "chenh lech", "cycle count")) {
-            return AiIntentResult.of(AiIntent.CYCLE_COUNT_VARIANCE, params, 0.75, "heuristic cycle count");
-        }
-        if (containsAny(normalized, "tom tat", "tong quan", "dashboard", "bao cao", "tinh hinh")) {
-            return AiIntentResult.of(AiIntent.REPORT_SUMMARY, params, 0.75, "heuristic report");
-        }
-        return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.4, "heuristic unsupported");
+        return params;
     }
 
     private boolean looksUnsupported(String userMessage) {
@@ -285,7 +358,10 @@ public class AiIntentRouterService {
             return "";
         }
         String normalized = Normalizer.normalize(text, Normalizer.Form.NFD);
-        return normalized.replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT);
+        return normalized.replaceAll("\\p{M}", "")
+                .replace('đ', 'd')
+                .replace('Đ', 'D')
+                .toLowerCase(Locale.ROOT);
     }
 
     private String toJson(Object value) {
