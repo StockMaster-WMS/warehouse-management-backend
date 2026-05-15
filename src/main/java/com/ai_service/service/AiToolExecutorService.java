@@ -15,6 +15,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -35,18 +37,22 @@ public class AiToolExecutorService {
             case WAREHOUSE_DETAIL -> AiToolResult.data("WarehouseTool.getWarehouseDetail", getWarehouseDetail(params));
             case LOCATION_SEARCH -> AiToolResult.data("LocationTool.searchLocations", searchLocations(params));
             case STOCK_BY_PRODUCT -> getStockByProductResult(params);
+            case STOCK_TOTAL -> AiToolResult.data("StockTool.getStockTotal", getStockTotal());
+            case STOCK_LOWEST -> AiToolResult.data("StockTool.getLowestStock", getLowestStock());
+            case WAREHOUSE_STOCK_SUMMARY -> AiToolResult.data("StockTool.getWarehouseStockSummary", getWarehouseStockSummary(params));
             case LOW_STOCK -> AiToolResult.data("StockTool.getLowStock", getLowStock());
             case NEAR_EXPIRY -> AiToolResult.data("StockTool.getNearExpiry", getNearExpiry(params));
             case PENDING_PUTAWAY -> AiToolResult.data("InboundTool.getPendingPutaway", getPendingPutaway());
+            case LATEST_INBOUND -> AiToolResult.data("InboundTool.getLatestInbound", getLatestInbound());
             case PURCHASE_ORDER_STATUS -> AiToolResult.data("InboundTool.getPurchaseOrderStatus", getPurchaseOrders(params));
             case OUTBOUND_PRIORITY -> AiToolResult.data("OutboundTool.getPrioritySalesOrders", getPrioritySalesOrders());
-            case PICKING_STATUS -> AiToolResult.data("OutboundTool.getPickingStatus", getPickingStatus());
+            case PICKING_STATUS -> AiToolResult.data("OutboundTool.getPickingStatus", getPickingStatus(params));
+            case ACTIVE_CYCLE_COUNTS -> AiToolResult.data("CycleCountTool.getActive", getActiveCycleCounts());
             case CYCLE_COUNT_VARIANCE -> AiToolResult.data("CycleCountTool.getVariance", getCycleCountVariance());
+            case RMA_PENDING -> AiToolResult.data("InboundTool.getPendingRma", getPendingRma());
+            case DAILY_TASKS -> AiToolResult.data("ReportTool.getDailyTasks", getDailyTasks());
             case REPORT_SUMMARY -> AiToolResult.data("ReportTool.getOperationalSummary", getOperationalSummary());
-            case GENERAL_GUIDE -> AiToolResult.message("GeneralGuide", """
-                    Tôi có thể hỗ trợ tra cứu kho, vị trí, tồn kho, hàng tồn thấp, hàng sắp hết hạn, putaway, đơn nhập, đơn xuất, picking, kiểm kê và tổng quan vận hành.
-                    Với yêu cầu cần số liệu, hãy nêu rõ mã SKU/tên sản phẩm, kho hoặc khoảng thời gian nếu có.
-                    """.trim());
+            case GENERAL_GUIDE -> AiToolResult.message("GeneralGuide", getGuide(params));
             case AMBIGUOUS -> AiToolResult.message("Clarification", "Bạn vui lòng nói rõ thêm mã kho, SKU, đơn hàng hoặc khoảng thời gian cần kiểm tra.");
             case UNSUPPORTED -> AiToolResult.message("Unsupported", "Tôi hiện chỉ hỗ trợ các câu hỏi liên quan đến vận hành kho StockMaster-WMS.");
         };
@@ -89,6 +95,16 @@ public class AiToolExecutorService {
 
     // Tìm chi tiết kho theo mã, tên hoặc địa chỉ.
     private List<Map<String, Object>> getWarehouseDetail(Map<String, Object> params) {
+        ResolvedWarehouse resolved = resolveWarehouse(params);
+        if (resolved != null) {
+            return jdbcTemplate.queryForList("""
+                    SELECT code, name, address, manager_name, timezone, is_active, created_at, updated_at
+                    FROM warehouses
+                    WHERE LOWER(code) = LOWER(?)
+                    LIMIT 1
+                    """, resolved.code());
+        }
+
         String keyword = firstText(params, "warehouseCode", "warehouse", "code", "query");
         if (!StringUtils.hasText(keyword)) {
             return listWarehouses();
@@ -155,6 +171,94 @@ public class AiToolExecutorService {
         sql.append(" ORDER BY w.code ASC, l.zone ASC, l.pick_sequence ASC NULLS LAST, l.code ASC LIMIT ")
                 .append(DEFAULT_LIMIT);
         return jdbcTemplate.queryForList(sql.toString(), args.toArray());
+    }
+
+    // Tổng hợp tồn kho toàn hệ thống.
+    private Map<String, Object> getStockTotal() {
+        return jdbcTemplate.queryForMap("""
+                SELECT
+                    COUNT(*) AS stock_lines,
+                    COUNT(DISTINCT product_id) AS stocked_skus,
+                    COALESCE(SUM(qty_on_hand), 0) AS qty_on_hand,
+                    COALESCE(SUM(qty_reserved), 0) AS qty_reserved,
+                    COALESCE(SUM(qty_available), 0) AS qty_available
+                FROM stock_levels
+                """);
+    }
+
+    // Lấy các sản phẩm có tồn khả dụng thấp nhất.
+    private List<Map<String, Object>> getLowestStock() {
+        return jdbcTemplate.queryForList("""
+                SELECT
+                    p.sku,
+                    p.name AS product_name,
+                    COALESCE(SUM(sl.qty_available), 0) AS qty_available,
+                    COALESCE(SUM(sl.qty_on_hand), 0) AS qty_on_hand,
+                    COALESCE(SUM(sl.qty_reserved), 0) AS qty_reserved,
+                    p.min_stock_qty
+                FROM products p
+                LEFT JOIN stock_levels sl ON sl.product_id = p.id
+                WHERE p.status = 'ACTIVE'
+                GROUP BY p.id, p.sku, p.name, p.min_stock_qty
+                ORDER BY qty_available ASC, p.name ASC
+                LIMIT 10
+                """);
+    }
+
+    // Tổng hợp tồn kho theo kho hoặc theo nhóm sản phẩm trong một kho.
+    private List<Map<String, Object>> getWarehouseStockSummary(Map<String, Object> params) {
+        ResolvedWarehouse warehouse = resolveWarehouse(params);
+        String query = normalize(firstText(params, "query"));
+        if (warehouse != null && (query.contains("iphone") || query.contains("laptop"))) {
+            List<Map<String, Object>> rows = new ArrayList<>();
+            if (query.contains("iphone")) {
+                rows.add(stockGroupInWarehouse("iPhone", warehouse.code(), "LOWER(p.name) LIKE '%iphone%'"));
+            }
+            if (query.contains("laptop")) {
+                rows.add(stockGroupInWarehouse("Laptop", warehouse.code(), """
+                        (LOWER(p.name) LIKE '%laptop%'
+                         OR LOWER(p.name) LIKE '%macbook%'
+                         OR LOWER(c.name) LIKE '%laptop%')
+                        """));
+            }
+            return rows;
+        }
+
+        return jdbcTemplate.queryForList("""
+                SELECT
+                    w.code AS warehouse_code,
+                    w.name AS warehouse_name,
+                    COALESCE(SUM(sl.qty_on_hand), 0) AS qty_on_hand,
+                    COALESCE(SUM(sl.qty_reserved), 0) AS qty_reserved,
+                    COALESCE(SUM(sl.qty_available), 0) AS qty_available,
+                    COUNT(DISTINCT sl.product_id) AS stocked_skus
+                FROM warehouses w
+                LEFT JOIN stock_levels sl ON sl.warehouse_id = w.id
+                WHERE w.is_active = TRUE
+                GROUP BY w.id, w.code, w.name
+                ORDER BY qty_on_hand DESC, w.code ASC
+                LIMIT 10
+                """);
+    }
+
+    private Map<String, Object> stockGroupInWarehouse(String label, String warehouseCode, String productCondition) {
+        return jdbcTemplate.queryForMap("""
+                SELECT
+                    ? AS product_group,
+                    w.code AS warehouse_code,
+                    w.name AS warehouse_name,
+                    COALESCE(SUM(sl.qty_on_hand), 0) AS qty_on_hand,
+                    COALESCE(SUM(sl.qty_reserved), 0) AS qty_reserved,
+                    COALESCE(SUM(sl.qty_available), 0) AS qty_available,
+                    COUNT(DISTINCT p.id) AS matched_products
+                FROM warehouses w
+                JOIN products p ON p.status = 'ACTIVE'
+                LEFT JOIN categories c ON c.id = p.category_id
+                LEFT JOIN stock_levels sl ON sl.product_id = p.id AND sl.warehouse_id = w.id
+                WHERE LOWER(w.code) = LOWER(?)
+                  AND %s
+                GROUP BY w.id, w.code, w.name
+                """.formatted(productCondition), label, warehouseCode);
     }
 
     // Resolve sản phẩm/kho trước khi tra tồn kho để phân biệt sai kho và không có tồn.
@@ -251,7 +355,7 @@ public class AiToolExecutorService {
                     p.min_stock_qty,
                     COUNT(DISTINCT sl.warehouse_id) AS warehouse_count
                 FROM products p
-                JOIN stock_levels sl ON sl.product_id = p.id
+                LEFT JOIN stock_levels sl ON sl.product_id = p.id
                 WHERE p.status = 'ACTIVE'
                 GROUP BY p.id, p.sku, p.name, p.min_stock_qty
                 HAVING COALESCE(SUM(sl.qty_available), 0) < COALESCE(p.min_stock_qty, 0)
@@ -296,6 +400,7 @@ public class AiToolExecutorService {
                     pt.id,
                     pt.status,
                     pt.qty_to_putaway,
+                    ir.receipt_number,
                     COALESCE(p.sku, pt.product_id::text) AS sku,
                     COALESCE(p.name, 'Sản phẩm ' || pt.product_id::text) AS product_name,
                     suggested.code AS suggested_location,
@@ -303,11 +408,38 @@ public class AiToolExecutorService {
                     pt.completed_at
                 FROM putaway_tasks pt
                 LEFT JOIN products p ON p.id = pt.product_id
+                LEFT JOIN inbound_receipts ir ON ir.id = pt.inbound_receipt_id
                 LEFT JOIN locations suggested ON suggested.id = pt.suggested_location_id
                 LEFT JOIN locations actual ON actual.id = pt.actual_location_id
                 WHERE pt.status IN ('PENDING', 'IN_PROGRESS', 'ASSIGNED')
                 ORDER BY pt.status ASC, pt.id ASC
                 LIMIT 50
+                """);
+    }
+
+    // Lấy phiếu nhập/dòng hàng nhập gần nhất cùng nhà cung cấp.
+    private List<Map<String, Object>> getLatestInbound() {
+        return jdbcTemplate.queryForList("""
+                SELECT
+                    ir.receipt_number,
+                    ir.status AS receipt_status,
+                    ir.received_date,
+                    po.po_number,
+                    po.status AS po_status,
+                    s.code AS supplier_code,
+                    s.name AS supplier_name,
+                    w.code AS warehouse_code,
+                    COALESCE(p.sku, iri.product_sku) AS sku,
+                    COALESCE(p.name, iri.product_sku) AS product_name,
+                    iri.received_qty
+                FROM inbound_receipts ir
+                JOIN purchase_orders po ON po.id = ir.po_id
+                LEFT JOIN suppliers s ON s.id = po.supplier_id
+                LEFT JOIN warehouses w ON w.id = ir.warehouse_id
+                LEFT JOIN inbound_receipt_items iri ON iri.receipt_id = ir.id
+                LEFT JOIN products p ON p.id = iri.product_id
+                ORDER BY ir.received_date DESC, ir.created_at DESC, ir.receipt_number DESC
+                LIMIT 10
                 """);
     }
 
@@ -322,9 +454,12 @@ public class AiToolExecutorService {
                     po.order_date,
                     po.expected_date,
                     po.total_amount,
+                    s.code AS supplier_code,
+                    s.name AS supplier_name,
                     w.code AS warehouse_code,
                     w.name AS warehouse_name
                 FROM purchase_orders po
+                LEFT JOIN suppliers s ON s.id = po.supplier_id
                 LEFT JOIN warehouses w ON w.id = po.warehouse_id
                 WHERE 1 = 1
                 """);
@@ -358,7 +493,11 @@ public class AiToolExecutorService {
     }
 
     // Lấy tình trạng các dòng picking chưa hoàn tất.
-    private List<Map<String, Object>> getPickingStatus() {
+    private List<Map<String, Object>> getPickingStatus(Map<String, Object> params) {
+        String query = normalize(firstText(params, "query"));
+        boolean pendingOnly = query.contains("pending") || query.contains("cho picking") || query.contains("cho pick")
+                || query.contains("dang cho");
+        String statusFilter = pendingOnly ? "pi.status = 'PENDING'" : "pi.status <> 'COMPLETED'";
         return jdbcTemplate.queryForList("""
                 SELECT
                     so.so_number,
@@ -376,8 +515,29 @@ public class AiToolExecutorService {
                 LEFT JOIN sales_orders so ON so.id = soi.sales_order_id
                 LEFT JOIN products p ON p.id = pi.product_id
                 LEFT JOIN locations l ON l.id = pi.location_id
-                WHERE pi.status <> 'COMPLETED'
+                WHERE %s
                 ORDER BY pi.status ASC, pi.pick_sequence ASC NULLS LAST
+                LIMIT 50
+                """.formatted(statusFilter));
+    }
+
+    // Lấy các cycle count đang mở.
+    private List<Map<String, Object>> getActiveCycleCounts() {
+        return jdbcTemplate.queryForList("""
+                SELECT
+                    cc.id AS cycle_count_id,
+                    cc.status,
+                    cc.description,
+                    cc.scheduled_at,
+                    w.code AS warehouse_code,
+                    w.name AS warehouse_name,
+                    COUNT(cci.id) AS item_count
+                FROM cycle_counts cc
+                LEFT JOIN warehouses w ON w.id = cc.warehouse_id
+                LEFT JOIN cycle_count_items cci ON cci.cycle_count_id = cc.id
+                WHERE cc.status IN ('PENDING', 'IN_PROGRESS')
+                GROUP BY cc.id, cc.status, cc.description, cc.scheduled_at, w.code, w.name
+                ORDER BY cc.scheduled_at ASC NULLS LAST, cc.created_at DESC
                 LIMIT 50
                 """);
     }
@@ -410,6 +570,58 @@ public class AiToolExecutorService {
                 """);
     }
 
+    // Lấy các yêu cầu trả hàng đang chờ xử lý.
+    private List<Map<String, Object>> getPendingRma() {
+        return jdbcTemplate.queryForList("""
+                SELECT
+                    r.rma_number,
+                    r.customer_name,
+                    r.status,
+                    r.reason,
+                    w.code AS warehouse_code,
+                    w.name AS warehouse_name,
+                    r.created_at
+                FROM rma_headers r
+                LEFT JOIN warehouses w ON w.id = r.warehouse_id
+                WHERE r.status IN ('REQUESTED', 'RECEIVED')
+                ORDER BY r.created_at ASC
+                LIMIT 50
+                """);
+    }
+
+    // Tổng hợp các việc vận hành cần chú ý trong ngày.
+    private Map<String, Object> getDailyTasks() {
+        Map<String, Object> tasks = new LinkedHashMap<>();
+        tasks.put("pending_putaway", jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total
+                FROM putaway_tasks
+                WHERE status IN ('PENDING', 'IN_PROGRESS', 'ASSIGNED')
+                """));
+        tasks.put("pending_picking", jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total
+                FROM picking_items
+                WHERE status = 'PENDING'
+                """));
+        tasks.put("active_cycle_counts", jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total
+                FROM cycle_counts
+                WHERE status IN ('PENDING', 'IN_PROGRESS')
+                """));
+        tasks.put("near_expiry_7_days", jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total
+                FROM stock_levels
+                WHERE expiry_date IS NOT NULL
+                  AND expiry_date <= ?
+                  AND qty_on_hand > 0
+                """, LocalDate.now().plusDays(7)));
+        tasks.put("pending_rma", jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS total
+                FROM rma_headers
+                WHERE status IN ('REQUESTED', 'RECEIVED')
+                """));
+        return tasks;
+    }
+
     // Tổng hợp nhanh các chỉ số vận hành kho.
     private Map<String, Object> getOperationalSummary() {
         Map<String, Object> summary = new LinkedHashMap<>();
@@ -440,6 +652,42 @@ public class AiToolExecutorService {
                 WHERE status IN ('PENDING', 'APPROVED', 'ALLOCATED', 'PICKING')
                 """));
         return summary;
+    }
+
+    // Trả lời hướng dẫn thao tác theo câu hỏi cụ thể.
+    private String getGuide(Map<String, Object> params) {
+        String query = normalize(firstText(params, "query"));
+        if (query.contains("nhap") && (query.contains("lo hang") || query.contains("hang moi"))) {
+            return """
+                    Cách nhập lô hàng mới:
+                    1. Tạo hoặc chọn Purchase Order đã được duyệt.
+                    2. Vào màn hình nhận hàng, chọn PO và nhập số lượng thực nhận cho từng dòng.
+                    3. Chọn kho/vị trí nhận tạm, nhập lot number và hạn dùng nếu sản phẩm có quản lý lô/hạn.
+                    4. Lưu phiếu nhập. Sau khi nhận hàng, hệ thống sẽ có dữ liệu để tạo hoặc theo dõi Putaway Task.
+                    """.trim();
+        }
+        if (query.contains("putaway")) {
+            return """
+                    Cách tạo Putaway Task:
+                    1. Hoàn tất phiếu nhập kho cho PO hoặc lô hàng cần cất.
+                    2. Chọn dòng hàng cần putaway, số lượng cần cất và vị trí gợi ý nếu có.
+                    3. Gán nhân viên thực hiện nếu quy trình yêu cầu.
+                    4. Khi hàng được đưa vào vị trí thực tế, cập nhật task sang hoàn tất để tồn kho được phản ánh đúng vị trí.
+                    """.trim();
+        }
+        if (query.contains("ton kho") && query.contains("vi tri")) {
+            return """
+                    Cách kiểm tra tồn kho theo vị trí:
+                    1. Vào màn hình tồn kho hoặc vị trí kho.
+                    2. Lọc theo mã kho, mã vị trí, zone/aisle/rack/bin hoặc SKU.
+                    3. Kiểm tra các cột tồn hiện có, tồn đã giữ chỗ và tồn khả dụng.
+                    4. Nếu cần chi tiết lô, mở dòng tồn để xem lot number và hạn dùng.
+                    """.trim();
+        }
+        return """
+                Tôi có thể hỗ trợ tra cứu kho, vị trí, tồn kho, hàng tồn thấp, hàng sắp hết hạn, putaway, đơn nhập, đơn xuất, picking, kiểm kê và tổng quan vận hành.
+                Với yêu cầu cần số liệu, hãy nêu rõ mã SKU/tên sản phẩm, kho hoặc khoảng thời gian nếu có.
+                """.trim();
     }
 
     // Lấy chuỗi đầu tiên có giá trị từ danh sách key.
@@ -574,6 +822,9 @@ public class AiToolExecutorService {
                 continue;
             }
             String normalizedValue = normalize(value);
+            if (!numbersCompatible(normalizedQuery, normalizedValue)) {
+                continue;
+            }
             if (normalizedQuery.contains(normalizedValue)) {
                 score += 5;
             }
@@ -584,6 +835,24 @@ public class AiToolExecutorService {
             }
         }
         return score;
+    }
+
+    // Tránh match nhầm model sản phẩm khác đời, ví dụ hỏi iPhone 16 nhưng chỉ có iPhone 15.
+    private boolean numbersCompatible(String normalizedQuery, String normalizedValue) {
+        List<String> queryNumbers = Pattern.compile("\\d+")
+                .matcher(normalizedQuery == null ? "" : normalizedQuery)
+                .results()
+                .map(MatchResult::group)
+                .toList();
+        if (queryNumbers.isEmpty()) {
+            return true;
+        }
+        List<String> valueNumbers = Pattern.compile("\\d+")
+                .matcher(normalizedValue == null ? "" : normalizedValue)
+                .results()
+                .map(MatchResult::group)
+                .toList();
+        return valueNumbers.containsAll(queryNumbers);
     }
 
     // Bỏ các từ chung để tránh match sai khi resolve entity.
