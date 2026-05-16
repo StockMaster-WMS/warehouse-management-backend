@@ -30,6 +30,7 @@ public class AiController {
 
     private final AiService aiService;
     private final Executor aiTaskExecutor;
+    private final com.ai_service.service.AiCancelService aiCancelService;
 
     // Xử lý câu hỏi AI dạng trả lời một lần.
     @PostMapping("/ask")
@@ -91,5 +92,17 @@ public class AiController {
         });
 
         return emitter;
+    }
+
+    @PostMapping("/cancel")
+    @Operation(summary = "Huỷ phiên AI đang chạy", description = "Huỷ một phiên streaming AI theo sessionId")
+    public ResponseEntity<?> cancel(@RequestParam String sessionId) {
+        try {
+            aiCancelService.cancel(sessionId);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            log.error("Cancel error: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(e.getMessage());
+        }
     }
 }

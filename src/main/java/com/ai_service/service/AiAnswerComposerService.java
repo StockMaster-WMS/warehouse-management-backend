@@ -36,14 +36,14 @@ public class AiAnswerComposerService {
     }
 
     // Tạo câu trả lời AI dạng stream từ route và tool result.
-    public void composeStream(String userMessage, AiIntentResult route, AiToolResult toolResult,
-            List<Map<String, String>> history, Consumer<String> fragmentConsumer) {
+        public void composeStream(String userMessage, AiIntentResult route, AiToolResult toolResult,
+            List<Map<String, String>> history, Consumer<String> fragmentConsumer, java.util.function.Supplier<Boolean> isCancelled) {
         String deterministic = deterministicReply(route, toolResult);
         if (deterministic != null) {
             fragmentConsumer.accept(deterministic);
             return;
         }
-        ollamaClient.generateAnswerStream(buildAnswerPrompt(userMessage, route, toolResult, history), fragmentConsumer);
+        ollamaClient.generateAnswerStream(buildAnswerPrompt(userMessage, route, toolResult, history), fragmentConsumer, isCancelled);
     }
 
     // Trả lời cố định cho các case đơn giản hoặc không có dữ liệu.

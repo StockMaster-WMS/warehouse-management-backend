@@ -89,7 +89,8 @@ public class OllamaClient {
     }
 
     // Stream câu trả lời từ /api/generate cho prompt raw.
-    public void generateAnswerStream(String prompt, java.util.function.Consumer<String> consumer) {
+    // Support a cancellable stream by polling AiCancelService.isCancelled(sessionId)
+    public void generateAnswerStream(String prompt, java.util.function.Consumer<String> consumer, java.util.function.Supplier<Boolean> isCancelled) {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "prompt", prompt,
@@ -113,6 +114,9 @@ public class OllamaClient {
                         String line;
                         while ((line = reader.readLine()) != null) {
                             if (line.isBlank()) continue;
+                            if (isCancelled != null && isCancelled.get()) {
+                                break;
+                            }
                             String content = extractGenerateContent(line);
                             if (!content.isEmpty()) {
                                 consumer.accept(content);
@@ -148,7 +152,7 @@ public class OllamaClient {
     }
 
     // Gọi API chat dạng stream.
-    public void chatStream(List<Map<String, String>> messages, java.util.function.Consumer<String> consumer) {
+    public void chatStream(List<Map<String, String>> messages, java.util.function.Consumer<String> consumer, java.util.function.Supplier<Boolean> isCancelled) {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "messages", messages,
@@ -170,6 +174,9 @@ public class OllamaClient {
                         String line;
                         while ((line = reader.readLine()) != null) {
                             if (line.isBlank()) continue;
+                            if (isCancelled != null && isCancelled.get()) {
+                                break;
+                            }
                             String content = extractContent(line);
                             if (!content.isEmpty()) {
                                 consumer.accept(content);
