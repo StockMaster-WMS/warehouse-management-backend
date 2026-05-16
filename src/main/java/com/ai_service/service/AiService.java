@@ -39,6 +39,12 @@ public class AiService {
 
         try {
             List<Map<String, String>> history = historyService.getMessages(sessionId);
+            // quick-return if same question was asked before in this session
+            String cached = historyService.findLastAnswerForQuestion(sessionId, userMessage);
+            if (cached != null) {
+                log.info("Returning cached answer for session={}, question={}", sessionId, userMessage);
+                return new AiAskResponse(cached, null);
+            }
             AiIntentResult route = intentRouterService.route(userMessage, history);
             AiToolResult toolResult = toolExecutorService.execute(route);
             rowsReturned = toolExecutorService.estimateRows(toolResult);
@@ -64,6 +70,10 @@ public class AiService {
     // Xử lý câu hỏi AI dạng stream và đẩy từng đoạn trả lời ra callback.
     public void askStream(AiAskRequest req, Consumer<String> fragmentConsumer) {
         String sessionId = req.getSessionId();
+        // register session for cancellation
+        // lazy-get AiCancelService via context to avoid constructor change in many places
+        var cancelService = com.ai_service.util.ApplicationContextHolder.getBean(com.ai_service.service.AiCancelService.class);
+        cancelService.startSession(sessionId);
         String userMessage = getUserMessage(req);
         long start = System.currentTimeMillis();
 
@@ -74,6 +84,13 @@ public class AiService {
 
         try {
             List<Map<String, String>> history = historyService.getMessages(sessionId);
+            // quick-return if same question was asked before in this session
+            String cached = historyService.findLastAnswerForQuestion(sessionId, userMessage);
+            if (cached != null) {
+                log.info("Returning cached answer for session={}, question={}", sessionId, userMessage);
+                fragmentConsumer.accept(cached);
+                return;
+            }
             AiIntentResult route = intentRouterService.route(userMessage, history);
             AiToolResult toolResult = toolExecutorService.execute(route);
             rowsReturned = toolExecutorService.estimateRows(toolResult);
@@ -85,7 +102,11 @@ public class AiService {
             answerComposerService.composeStream(userMessage, route, toolResult, history, fragment -> {
                 finalReply.append(fragment);
                 fragmentConsumer.accept(fragment);
-            });
+            }, () -> cancelService.isCancelled(sessionId));
+            // if cancelled, send a notice fragment
+            if (cancelService.isCancelled(sessionId)) {
+                fragmentConsumer.accept("\n--- (Đã huỷ) ---");
+            }
         } catch (Exception e) {
             error = e.getMessage();
             log.error("AI stream error", e);
@@ -96,6 +117,9 @@ public class AiService {
             auditService.log(sessionId, userMessage, auditPayload, rowsReturned, error,
                     System.currentTimeMillis() - start);
             historyService.addHistory(sessionId, userMessage, finalReply.toString());
+            // clear cancel token
+            var cancelService2 = com.ai_service.util.ApplicationContextHolder.getBean(com.ai_service.service.AiCancelService.class);
+            cancelService2.clear(sessionId);
         }
     }
 

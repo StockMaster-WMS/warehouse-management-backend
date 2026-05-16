@@ -18,12 +18,14 @@ public class OllamaClient {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
     private final String model;
+    private final int numCtx;
 
     public OllamaClient(
             RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper,
             @Value("${ai.ollama.api-url:http://localhost:11434}") String apiUrl,
             @Value("${ai.ollama.model:stockmaster-ai}") String model,
+            @Value("${ai.ollama.num-ctx:4096}") int numCtx,
             @Value("${ai.ollama.connect-timeout-seconds:5}") long connectTimeoutSeconds,
             @Value("${ai.ollama.read-timeout-seconds:120}") long readTimeoutSeconds) {
 
@@ -37,6 +39,7 @@ public class OllamaClient {
                 .build();
         this.objectMapper = objectMapper;
         this.model = model;
+        this.numCtx = numCtx;
     }
 
     // Gọi API chat không stream với tham số mặc định.
@@ -69,7 +72,7 @@ public class OllamaClient {
                 "options", Map.of(
                         "temperature", temperature,
                         "top_p", topP,
-                        "num_ctx", 8192,
+                    "num_ctx", numCtx,
                         "stop", List.of("<|im_end|>", "<|endoftext|>")
                 )
         );
@@ -86,7 +89,8 @@ public class OllamaClient {
     }
 
     // Stream câu trả lời từ /api/generate cho prompt raw.
-    public void generateAnswerStream(String prompt, java.util.function.Consumer<String> consumer) {
+    // Support a cancellable stream by polling AiCancelService.isCancelled(sessionId)
+    public void generateAnswerStream(String prompt, java.util.function.Consumer<String> consumer, java.util.function.Supplier<Boolean> isCancelled) {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "prompt", prompt,
@@ -95,7 +99,7 @@ public class OllamaClient {
                 "options", Map.of(
                         "temperature", 0.2,
                         "top_p", 0.3,
-                        "num_ctx", 8192,
+                    "num_ctx", numCtx,
                         "stop", List.of("<|im_end|>", "<|endoftext|>")
                 )
         );
@@ -110,6 +114,9 @@ public class OllamaClient {
                         String line;
                         while ((line = reader.readLine()) != null) {
                             if (line.isBlank()) continue;
+                            if (isCancelled != null && isCancelled.get()) {
+                                break;
+                            }
                             String content = extractGenerateContent(line);
                             if (!content.isEmpty()) {
                                 consumer.accept(content);
@@ -129,7 +136,7 @@ public class OllamaClient {
                 "options", Map.of(
                         "temperature", temperature,
                         "top_p", topP,
-                        "num_ctx", 8192
+                    "num_ctx", numCtx
                 )
         );
 
@@ -145,7 +152,7 @@ public class OllamaClient {
     }
 
     // Gọi API chat dạng stream.
-    public void chatStream(List<Map<String, String>> messages, java.util.function.Consumer<String> consumer) {
+    public void chatStream(List<Map<String, String>> messages, java.util.function.Consumer<String> consumer, java.util.function.Supplier<Boolean> isCancelled) {
         Map<String, Object> body = Map.of(
                 "model", model,
                 "messages", messages,
@@ -153,7 +160,7 @@ public class OllamaClient {
                 "options", Map.of(
                         "temperature", 0.7,
                         "top_p", 0.9,
-                        "num_ctx", 8192
+                    "num_ctx", numCtx
                 )
         );
 
@@ -167,6 +174,9 @@ public class OllamaClient {
                         String line;
                         while ((line = reader.readLine()) != null) {
                             if (line.isBlank()) continue;
+                            if (isCancelled != null && isCancelled.get()) {
+                                break;
+                            }
                             String content = extractContent(line);
                             if (!content.isEmpty()) {
                                 consumer.accept(content);
