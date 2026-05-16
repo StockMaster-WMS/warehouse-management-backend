@@ -12,6 +12,7 @@ import java.util.List;
 public class AiAskRequest {
     private String message;          
     private String question;
-    private String sessionId;        
+    private String sessionId;
+    private String requestId;
     private List<ChatMessage> history;
 }

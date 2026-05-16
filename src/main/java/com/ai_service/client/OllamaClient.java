@@ -1,6 +1,7 @@
 package com.ai_service.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.http.MediaType;
@@ -13,12 +14,14 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 @Component
+@Slf4j
 public class OllamaClient {
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
     private final String model;
     private final int numCtx;
+    private final String keepAlive;
 
     public OllamaClient(
             RestClient.Builder restClientBuilder,
@@ -26,6 +29,7 @@ public class OllamaClient {
             @Value("${ai.ollama.api-url:http://localhost:11434}") String apiUrl,
             @Value("${ai.ollama.model:stockmaster-ai}") String model,
             @Value("${ai.ollama.num-ctx:4096}") int numCtx,
+            @Value("${ai.ollama.keep-alive:30m}") String keepAlive,
             @Value("${ai.ollama.connect-timeout-seconds:5}") long connectTimeoutSeconds,
             @Value("${ai.ollama.read-timeout-seconds:120}") long readTimeoutSeconds) {
 
@@ -40,6 +44,7 @@ public class OllamaClient {
         this.objectMapper = objectMapper;
         this.model = model;
         this.numCtx = numCtx;
+        this.keepAlive = keepAlive;
     }
 
     // Gọi API chat không stream với tham số mặc định.
@@ -54,25 +59,35 @@ public class OllamaClient {
 
     // Sinh JSON intent ổn định để backend gọi tool cố định.
     public String generateIntent(String prompt) {
-        return generate(prompt, 0.0, 0.1);
+        return generate(prompt, 0.0, 0.1, 160);
     }
 
     // Sinh câu trả lời tự nhiên từ prompt đã format.
     public String generateAnswer(String prompt) {
-        return generate(prompt, 0.2, 0.3);
+        return generate(prompt, 0.2, 0.3, 512);
     }
 
     // Gửi prompt raw tới Ollama và lấy response dạng text.
     private String generate(String prompt, double temperature, double topP) {
+        return generate(prompt, temperature, topP, 512);
+    }
+
+    private String generate(String prompt, double temperature, double topP, int numPredict) {
+        long start = System.currentTimeMillis();
+        log.info("AI ollama generate start model={} temp={} topP={} numPredict={} promptChars={}",
+                model, temperature, topP, numPredict, prompt == null ? 0 : prompt.length());
+
         Map<String, Object> body = Map.of(
                 "model", model,
                 "prompt", prompt,
                 "stream", false,
                 "raw", true,
+                "keep_alive", keepAlive,
                 "options", Map.of(
                         "temperature", temperature,
                         "top_p", topP,
-                    "num_ctx", numCtx,
+                        "num_ctx", numCtx,
+                        "num_predict", numPredict,
                         "stop", List.of("<|im_end|>", "<|endoftext|>")
                 )
         );
@@ -85,21 +100,32 @@ public class OllamaClient {
                 .body(Map.class), 2);
 
         Object generatedText = response != null ? response.get("response") : null;
-        return generatedText instanceof String text ? text : "";
+        String text = generatedText instanceof String value ? value : "";
+        log.info("AI ollama generate done model={} outputChars={} durationMs={}",
+                model, text.length(), System.currentTimeMillis() - start);
+        return text;
     }
 
     // Stream câu trả lời từ /api/generate cho prompt raw.
     // Support a cancellable stream by polling AiCancelService.isCancelled(sessionId)
     public void generateAnswerStream(String prompt, java.util.function.Consumer<String> consumer, java.util.function.Supplier<Boolean> isCancelled) {
+        long start = System.currentTimeMillis();
+        int[] chunks = {0};
+        int[] chars = {0};
+        log.info("AI ollama stream start model={} numPredict={} promptChars={}",
+                model, 512, prompt == null ? 0 : prompt.length());
+
         Map<String, Object> body = Map.of(
                 "model", model,
                 "prompt", prompt,
                 "stream", true,
                 "raw", true,
+                "keep_alive", keepAlive,
                 "options", Map.of(
                         "temperature", 0.2,
                         "top_p", 0.3,
-                    "num_ctx", numCtx,
+                        "num_ctx", numCtx,
+                        "num_predict", 512,
                         "stop", List.of("<|im_end|>", "<|endoftext|>")
                 )
         );
@@ -119,24 +145,35 @@ public class OllamaClient {
                             }
                             String content = extractGenerateContent(line);
                             if (!content.isEmpty()) {
+                                chunks[0]++;
+                                chars[0] += content.length();
                                 consumer.accept(content);
                             }
                         }
                     }
                     return null;
                 });
+        log.info("AI ollama stream done model={} chunks={} outputChars={} cancelled={} durationMs={}",
+                model, chunks[0], chars[0], isCancelled != null && isCancelled.get(),
+                System.currentTimeMillis() - start);
     }
 
     // Gọi API chat không stream với cấu hình sampling tùy chỉnh.
     private String chat(List<Map<String, String>> messages, double temperature, double topP) {
+        long start = System.currentTimeMillis();
+        log.info("AI ollama chat start model={} temp={} topP={} messages={}",
+                model, temperature, topP, messages == null ? 0 : messages.size());
+
         Map<String, Object> body = Map.of(
                 "model", model,
                 "messages", messages,
                 "stream", false,
+                "keep_alive", keepAlive,
                 "options", Map.of(
                         "temperature", temperature,
                         "top_p", topP,
-                    "num_ctx", numCtx
+                        "num_ctx", numCtx,
+                        "num_predict", 512
                 )
         );
 
@@ -148,19 +185,30 @@ public class OllamaClient {
                 .body(Map.class);
 
         Map<?, ?> message = (Map<?, ?>) response.get("message");
-        return message != null ? (String) message.get("content") : "";
+        String content = message != null ? (String) message.get("content") : "";
+        log.info("AI ollama chat done model={} outputChars={} durationMs={}",
+                model, content == null ? 0 : content.length(), System.currentTimeMillis() - start);
+        return content == null ? "" : content;
     }
 
     // Gọi API chat dạng stream.
     public void chatStream(List<Map<String, String>> messages, java.util.function.Consumer<String> consumer, java.util.function.Supplier<Boolean> isCancelled) {
+        long start = System.currentTimeMillis();
+        int[] chunks = {0};
+        int[] chars = {0};
+        log.info("AI ollama chatStream start model={} messages={}",
+                model, messages == null ? 0 : messages.size());
+
         Map<String, Object> body = Map.of(
                 "model", model,
                 "messages", messages,
                 "stream", true,
+                "keep_alive", keepAlive,
                 "options", Map.of(
                         "temperature", 0.7,
                         "top_p", 0.9,
-                    "num_ctx", numCtx
+                        "num_ctx", numCtx,
+                        "num_predict", 512
                 )
         );
 
@@ -179,12 +227,17 @@ public class OllamaClient {
                             }
                             String content = extractContent(line);
                             if (!content.isEmpty()) {
+                                chunks[0]++;
+                                chars[0] += content.length();
                                 consumer.accept(content);
                             }
                         }
                     }
                     return null;
                 });
+        log.info("AI ollama chatStream done model={} chunks={} outputChars={} cancelled={} durationMs={}",
+                model, chunks[0], chars[0], isCancelled != null && isCancelled.get(),
+                System.currentTimeMillis() - start);
     }
 
     // Trích nội dung từ từng dòng JSON của /api/chat.
@@ -216,8 +269,12 @@ public class OllamaClient {
             } catch (RuntimeException e) {
                 last = e;
                 if (attempt == maxAttempts) {
+                    log.warn("AI ollama request failed attempt={}/{} error={}",
+                            attempt, maxAttempts, e.getMessage());
                     throw e;
                 }
+                log.warn("AI ollama request retry attempt={}/{} error={}",
+                        attempt, maxAttempts, e.getMessage());
                 try {
                     Thread.sleep(200L * attempt);
                 } catch (InterruptedException interrupted) {
