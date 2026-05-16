@@ -38,15 +38,21 @@ public class AiService {
         String finalReply = null;
 
         try {
+            log.info("AI ask start session={} question='{}'", sessionId, preview(userMessage));
             List<Map<String, String>> history = historyService.getMessages(sessionId);
             // quick-return if same question was asked before in this session
             String cached = historyService.findLastAnswerForQuestion(sessionId, userMessage);
             if (cached != null) {
-                log.info("Returning cached answer for session={}, question={}", sessionId, userMessage);
+                log.info("AI ask cache-hit session={} outputChars={} question='{}'",
+                        sessionId, cached.length(), preview(userMessage));
+                finalReply = cached;
                 return new AiAskResponse(cached, null);
             }
+            long routeStart = System.currentTimeMillis();
             AiIntentResult route = intentRouterService.route(userMessage, history);
+            long toolStart = System.currentTimeMillis();
             AiToolResult toolResult = toolExecutorService.execute(route);
+            long composeStart = System.currentTimeMillis();
             rowsReturned = toolExecutorService.estimateRows(toolResult);
             auditPayload = toAuditPayload(route, toolResult);
 
@@ -54,6 +60,9 @@ public class AiService {
                     route.getIntent(), toolResult.toolName(), rowsReturned);
 
             finalReply = answerComposerService.compose(userMessage, route, toolResult, history);
+            log.info("AI timings sync session={} intent={} routeMs={} toolMs={} composeMs={} totalMs={}",
+                    sessionId, route.getIntent(), toolStart - routeStart, composeStart - toolStart,
+                    System.currentTimeMillis() - composeStart, System.currentTimeMillis() - start);
             return new AiAskResponse(finalReply, null);
         } catch (Exception e) {
             error = e.getMessage();
@@ -63,17 +72,20 @@ public class AiService {
         } finally {
             auditService.log(sessionId, userMessage, auditPayload, rowsReturned, error,
                     System.currentTimeMillis() - start);
-            historyService.addHistory(sessionId, userMessage, finalReply);
+            if (finalReply != null) {
+                historyService.addHistory(sessionId, userMessage, finalReply);
+            }
         }
     }
 
     // Xử lý câu hỏi AI dạng stream và đẩy từng đoạn trả lời ra callback.
     public void askStream(AiAskRequest req, Consumer<String> fragmentConsumer) {
         String sessionId = req.getSessionId();
+        String requestId = StringUtils.hasText(req.getRequestId()) ? req.getRequestId() : sessionId;
         // register session for cancellation
         // lazy-get AiCancelService via context to avoid constructor change in many places
         var cancelService = com.ai_service.util.ApplicationContextHolder.getBean(com.ai_service.service.AiCancelService.class);
-        cancelService.startSession(sessionId);
+        cancelService.startSession(requestId);
         String userMessage = getUserMessage(req);
         long start = System.currentTimeMillis();
 
@@ -81,18 +93,26 @@ public class AiService {
         int rowsReturned = 0;
         String error = null;
         StringBuilder finalReply = new StringBuilder();
+        boolean cancelled = false;
 
         try {
+            log.info("AI stream start session={} request={} question='{}'",
+                    sessionId, requestId, preview(userMessage));
             List<Map<String, String>> history = historyService.getMessages(sessionId);
             // quick-return if same question was asked before in this session
             String cached = historyService.findLastAnswerForQuestion(sessionId, userMessage);
             if (cached != null) {
-                log.info("Returning cached answer for session={}, question={}", sessionId, userMessage);
+                log.info("AI stream cache-hit session={} request={} outputChars={} question='{}'",
+                        sessionId, requestId, cached.length(), preview(userMessage));
+                finalReply.append(cached);
                 fragmentConsumer.accept(cached);
                 return;
             }
+            long routeStart = System.currentTimeMillis();
             AiIntentResult route = intentRouterService.route(userMessage, history);
+            long toolStart = System.currentTimeMillis();
             AiToolResult toolResult = toolExecutorService.execute(route);
+            long composeStart = System.currentTimeMillis();
             rowsReturned = toolExecutorService.estimateRows(toolResult);
             auditPayload = toAuditPayload(route, toolResult);
 
@@ -102,25 +122,38 @@ public class AiService {
             answerComposerService.composeStream(userMessage, route, toolResult, history, fragment -> {
                 finalReply.append(fragment);
                 fragmentConsumer.accept(fragment);
-            }, () -> cancelService.isCancelled(sessionId));
-            // if cancelled, send a notice fragment
-            if (cancelService.isCancelled(sessionId)) {
-                fragmentConsumer.accept("\n--- (Đã huỷ) ---");
-            }
+            }, () -> cancelService.isCancelled(requestId));
+            cancelled = cancelService.isCancelled(requestId);
+            log.info("AI timings stream session={} request={} intent={} routeMs={} toolMs={} composeMs={} totalMs={}",
+                    sessionId, requestId, route.getIntent(), toolStart - routeStart, composeStart - toolStart,
+                    System.currentTimeMillis() - composeStart, System.currentTimeMillis() - start);
         } catch (Exception e) {
             error = e.getMessage();
             log.error("AI stream error", e);
-            String fallback = "Rất tiếc, hiện tại tôi chưa thể truy vấn dữ liệu này.";
-            finalReply.append(fallback);
-            fragmentConsumer.accept(fallback);
+            if (!cancelService.isCancelled(requestId)) {
+                String fallback = "Rất tiếc, hiện tại tôi chưa thể truy vấn dữ liệu này.";
+                finalReply.append(fallback);
+                fragmentConsumer.accept(fallback);
+            }
         } finally {
             auditService.log(sessionId, userMessage, auditPayload, rowsReturned, error,
                     System.currentTimeMillis() - start);
-            historyService.addHistory(sessionId, userMessage, finalReply.toString());
+            cancelled = cancelled || cancelService.isCancelled(requestId);
+            if (!cancelled && !finalReply.isEmpty()) {
+                historyService.addHistory(sessionId, userMessage, finalReply.toString());
+            }
             // clear cancel token
             var cancelService2 = com.ai_service.util.ApplicationContextHolder.getBean(com.ai_service.service.AiCancelService.class);
-            cancelService2.clear(sessionId);
+            cancelService2.clear(requestId);
         }
+    }
+
+    private String preview(String value) {
+        if (value == null) {
+            return "";
+        }
+        String compact = value.replaceAll("\\s+", " ").trim();
+        return compact.substring(0, Math.min(120, compact.length()));
     }
 
     // Lấy nội dung người dùng từ message hoặc question.

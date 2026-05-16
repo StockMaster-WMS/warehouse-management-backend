@@ -37,6 +37,13 @@ public class AiToolExecutorService {
             case WAREHOUSE_DETAIL -> AiToolResult.data("WarehouseTool.getWarehouseDetail", getWarehouseDetail(params));
             case PRODUCT_COUNT -> AiToolResult.data("ProductTool.countProducts", countProducts(params));
             case PRODUCT_LIST -> AiToolResult.data("ProductTool.listProducts", listProducts(params));
+            case PRODUCT_DETAIL -> AiToolResult.data("ProductTool.getProductDetail", getProductDetail(params));
+            case SUPPLIER_LIST -> AiToolResult.data("SupplierTool.listSuppliers", listSuppliers(params));
+            case SUPPLIER_SEARCH -> AiToolResult.data("SupplierTool.searchSuppliers", listSuppliers(params));
+            case SUPPLIER_DETAIL -> AiToolResult.data("SupplierTool.getSupplierDetail", getSupplierDetail(params));
+            case CUSTOMER_LIST -> AiToolResult.data("CustomerTool.listCustomers", listCustomers(params));
+            case CUSTOMER_SEARCH -> AiToolResult.data("CustomerTool.searchCustomers", listCustomers(params));
+            case CUSTOMER_DETAIL -> AiToolResult.data("CustomerTool.getCustomerDetail", getCustomerDetail(params));
             case LOCATION_SEARCH -> AiToolResult.data("LocationTool.searchLocations", searchLocations(params));
             case LOCATION_COUNT -> AiToolResult.data("LocationTool.countLocations", countLocations(params));
             case BEST_HEAVY_LOCATION ->
@@ -53,6 +60,11 @@ public class AiToolExecutorService {
                 AiToolResult.data("StockTool.getWarehouseStockSummary", getWarehouseStockSummary(params));
             case LOW_STOCK -> AiToolResult.data("StockTool.getLowStock", getLowStock());
             case NEAR_EXPIRY -> AiToolResult.data("StockTool.getNearExpiry", getNearExpiry(params));
+            case STOCK_MOVEMENT_HISTORY ->
+                AiToolResult.data("StockTool.getMovementHistory", getStockMovementHistory(params));
+            case STOCK_TRANSFER -> AiToolResult.message("StockTool.transferGuide", getStockTransferGuide(params));
+            case INVENTORY_ADJUSTMENT ->
+                AiToolResult.message("StockTool.adjustmentGuide", getInventoryAdjustmentGuide(params));
             case PENDING_PUTAWAY -> AiToolResult.data("InboundTool.getPendingPutaway", getPendingPutaway());
             case PUTAWAY_BY_WAREHOUSE ->
                 AiToolResult.data("InboundTool.getPutawayByWarehouse", getPutawayByWarehouse());
@@ -61,23 +73,37 @@ public class AiToolExecutorService {
             case PENDING_PO_RECEIPT -> AiToolResult.data("InboundTool.getPendingPoReceipt", getPendingPoReceipt());
             case PURCHASE_ORDER_STATUS ->
                 AiToolResult.data("InboundTool.getPurchaseOrderStatus", getPurchaseOrders(params));
+            case PURCHASE_ORDER_DETAIL ->
+                AiToolResult.data("InboundTool.getPurchaseOrderDetail", getPurchaseOrderDetail(params));
             case OUTBOUND_PRIORITY ->
                 AiToolResult.data("OutboundTool.getPrioritySalesOrders", getPrioritySalesOrders());
             case PACKING_STATUS -> AiToolResult.data("OutboundTool.getPackingStatus", getPackingStatus());
             case PICKING_TOP -> AiToolResult.data("OutboundTool.getPickingTop", getPickingTop());
             case PICKING_STATUS -> AiToolResult.data("OutboundTool.getPickingStatus", getPickingStatus(params));
             case SALES_TOP -> AiToolResult.data("OutboundTool.getSalesTop", getSalesTop());
+            case SALES_ORDER_DETAIL ->
+                AiToolResult.data("OutboundTool.getSalesOrderDetail", getSalesOrderDetail(params));
+            case SALES_ORDER_STATUS ->
+                AiToolResult.data("OutboundTool.getSalesOrderStatus", getSalesOrderStatus(params));
             case FLOW_REPORT -> AiToolResult.data("ReportTool.getFlowReport", getFlowReport());
             case ACTIVE_CYCLE_COUNTS -> AiToolResult.data("CycleCountTool.getActive", getActiveCycleCounts());
             case CYCLE_COUNT_VARIANCE -> AiToolResult.data("CycleCountTool.getVariance", getCycleCountVariance(params));
             case RMA_PENDING -> AiToolResult.data("InboundTool.getPendingRma", getPendingRma());
             case DAILY_TASKS -> AiToolResult.data("ReportTool.getDailyTasks", getDailyTasks());
             case REPORT_SUMMARY -> AiToolResult.data("ReportTool.getOperationalSummary", getOperationalSummary());
+            case INBOUND_REPORT -> AiToolResult.data("ReportTool.getInboundReport", getInboundReport(params));
+            case OUTBOUND_REPORT -> AiToolResult.data("ReportTool.getOutboundReport", getOutboundReport(params));
+            case MONTHLY_REPORT -> AiToolResult.data("ReportTool.getMonthlyReport", getMonthlyReport());
+            case GLOBAL_SEARCH -> AiToolResult.data("SearchTool.globalSearch", getGlobalSearch(params));
+            case AUDIT_LOG -> AiToolResult.data("AuditTool.getAuditLogs", getAuditLogs(params));
+            case AI_AUDIT_LOG -> AiToolResult.data("AuditTool.getAiAuditLogs", getAiAuditLogs(params));
             case GENERAL_GUIDE -> AiToolResult.message("GeneralGuide", getGuide(params));
             case AMBIGUOUS -> AiToolResult.message("Clarification",
                     "Bạn vui lòng nói rõ thêm mã kho, SKU, đơn hàng hoặc khoảng thời gian cần kiểm tra.");
             case UNSUPPORTED -> AiToolResult.message("Unsupported",
-                    "Tôi hiện chỉ hỗ trợ các câu hỏi liên quan đến vận hành kho StockMaster-WMS.");
+                    "Chào bạn. Tôi là trợ lý AI vận hành kho StockMaster-WMS. Tôi hiện chỉ hỗ trợ các câu hỏi liên quan đến kho, tồn kho, nhập/xuất, putaway, picking, kiểm kê, RMA và báo cáo vận hành.");
+            default -> AiToolResult.message("UnsupportedIntent",
+                    "Intent này đã được khai báo nhưng backend chưa có tool xử lý dữ liệu tương ứng.");
         };
     }
 
@@ -193,6 +219,164 @@ public class AiToolExecutorService {
         result.put("limit", DEFAULT_LIMIT);
         result.put("filtered", StringUtils.hasText(keyword) || StringUtils.hasText(status));
         return result;
+    }
+
+    private List<Map<String, Object>> getProductDetail(Map<String, Object> params) {
+        String sku = firstText(params, "sku", "code");
+        if (!StringUtils.hasText(sku)) {
+            sku = resolveProductSku(firstText(params, "product", "query"));
+        }
+        String keyword = firstText(params, "product", "query");
+
+        List<Object> args = new ArrayList<>();
+        StringBuilder where = new StringBuilder(" WHERE p.status IS NOT NULL ");
+        if (StringUtils.hasText(sku)) {
+            where.append(" AND LOWER(p.sku) = LOWER(?)");
+            args.add(sku);
+        } else if (StringUtils.hasText(keyword)) {
+            where.append(" AND (LOWER(p.sku) LIKE ? OR LOWER(p.name) LIKE ? OR LOWER(p.barcode_ean13) LIKE ?)");
+            String like = like(cleanProductKeyword(keyword));
+            args.add(like);
+            args.add(like);
+            args.add(like);
+        }
+
+        return jdbcTemplate.queryForList((""" 
+                SELECT
+                    p.sku,
+                    p.barcode_ean13,
+                    p.name AS product_name,
+                    c.name AS category_name,
+                    s.code AS supplier_code,
+                    s.name AS supplier_name,
+                    p.base_unit,
+                    p.weight_kg,
+                    p.min_stock_qty,
+                    p.is_lot_tracked,
+                    p.is_expiry_tracked,
+                    p.status,
+                    COALESCE(SUM(sl.qty_on_hand), 0) AS qty_on_hand,
+                    COALESCE(SUM(sl.qty_reserved), 0) AS qty_reserved,
+                    COALESCE(SUM(sl.qty_available), 0) AS qty_available
+                FROM products p
+                LEFT JOIN categories c ON c.id = p.category_id
+                LEFT JOIN suppliers s ON s.id = p.primary_supplier_id
+                LEFT JOIN stock_levels sl ON sl.product_id = p.id
+                %s
+                GROUP BY p.id, p.sku, p.barcode_ean13, p.name, c.name, s.code, s.name,
+                         p.base_unit, p.weight_kg, p.min_stock_qty, p.is_lot_tracked,
+                         p.is_expiry_tracked, p.status
+                ORDER BY p.updated_at DESC NULLS LAST, p.name ASC
+                LIMIT 10
+                """.formatted(where)), args.toArray());
+    }
+
+    private Map<String, Object> listSuppliers(Map<String, Object> params) {
+        String keyword = firstText(params, "query", "supplier", "code");
+        String status = firstText(params, "status");
+        List<Object> args = new ArrayList<>();
+        StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
+        if (StringUtils.hasText(status)) {
+            where.append(" AND LOWER(status) = LOWER(?)");
+            args.add(status);
+        }
+        if (StringUtils.hasText(keyword)) {
+            where.append(" AND (LOWER(code) LIKE ? OR LOWER(name) LIKE ? OR LOWER(contact_name) LIKE ? OR LOWER(contact_phone) LIKE ? OR LOWER(contact_email) LIKE ?)");
+            String like = like(keyword);
+            args.add(like);
+            args.add(like);
+            args.add(like);
+            args.add(like);
+            args.add(like);
+        }
+        Map<String, Object> count = jdbcTemplate.queryForMap(
+                "SELECT COUNT(*) AS total FROM suppliers " + where, args.toArray());
+        List<Map<String, Object>> items = jdbcTemplate.queryForList((""" 
+                SELECT code, name, tax_code, contact_name, contact_phone, contact_email,
+                       address, payment_terms, lead_time_days, status, updated_at
+                FROM suppliers
+                %s
+                ORDER BY updated_at DESC NULLS LAST, name ASC
+                LIMIT %d
+                """.formatted(where, DEFAULT_LIMIT)), args.toArray());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", count.get("total"));
+        result.put("items", items);
+        return result;
+    }
+
+    private List<Map<String, Object>> getSupplierDetail(Map<String, Object> params) {
+        String keyword = firstText(params, "supplier", "code", "query");
+        if (!StringUtils.hasText(keyword)) {
+            return List.of();
+        }
+        String like = like(keyword);
+        return jdbcTemplate.queryForList("""
+                SELECT code, name, tax_code, contact_name, contact_phone, contact_email,
+                       address, payment_terms, lead_time_days, status, created_at, updated_at
+                FROM suppliers
+                WHERE LOWER(code) = LOWER(?)
+                   OR LOWER(name) LIKE ?
+                   OR LOWER(tax_code) = LOWER(?)
+                   OR LOWER(contact_phone) LIKE ?
+                   OR LOWER(contact_email) LIKE ?
+                ORDER BY updated_at DESC NULLS LAST, name ASC
+                LIMIT 10
+                """, keyword, like, keyword, like, like);
+    }
+
+    private Map<String, Object> listCustomers(Map<String, Object> params) {
+        String keyword = firstText(params, "query", "customer", "code");
+        String status = firstText(params, "status");
+        List<Object> args = new ArrayList<>();
+        StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
+        if (StringUtils.hasText(status)) {
+            boolean active = !"inactive".equalsIgnoreCase(status) && !"false".equalsIgnoreCase(status);
+            where.append(" AND is_active = ?");
+            args.add(active);
+        }
+        if (StringUtils.hasText(keyword)) {
+            where.append(" AND (LOWER(code) LIKE ? OR LOWER(name) LIKE ? OR LOWER(contact_name) LIKE ? OR LOWER(phone) LIKE ? OR LOWER(email) LIKE ?)");
+            String like = like(keyword);
+            args.add(like);
+            args.add(like);
+            args.add(like);
+            args.add(like);
+            args.add(like);
+        }
+        Map<String, Object> count = jdbcTemplate.queryForMap(
+                "SELECT COUNT(*) AS total FROM customers " + where, args.toArray());
+        List<Map<String, Object>> items = jdbcTemplate.queryForList((""" 
+                SELECT code, name, contact_name, phone, email, tax_code, is_active, updated_at
+                FROM customers
+                %s
+                ORDER BY updated_at DESC NULLS LAST, name ASC
+                LIMIT %d
+                """.formatted(where, DEFAULT_LIMIT)), args.toArray());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", count.get("total"));
+        result.put("items", items);
+        return result;
+    }
+
+    private List<Map<String, Object>> getCustomerDetail(Map<String, Object> params) {
+        String keyword = firstText(params, "customer", "code", "query");
+        if (!StringUtils.hasText(keyword)) {
+            return List.of();
+        }
+        String like = like(keyword);
+        return jdbcTemplate.queryForList("""
+                SELECT code, name, contact_name, phone, email, tax_code, address,
+                       notes, is_active, created_at, updated_at
+                FROM customers
+                WHERE LOWER(code) = LOWER(?)
+                   OR LOWER(name) LIKE ?
+                   OR LOWER(contact_name) LIKE ?
+                   OR LOWER(phone) LIKE ?
+                   OR LOWER(email) LIKE ?
+                ORDER BY updated_at DESC NULLS LAST, name ASC
+                LIMIT 10
+                """, keyword, like, like, like, like);
     }
 
     // Lấy danh sách kho hiện có.
@@ -705,6 +889,67 @@ public class AiToolExecutorService {
                 """, threshold);
     }
 
+    private List<Map<String, Object>> getStockMovementHistory(Map<String, Object> params) {
+        String sku = firstText(params, "sku");
+        if (!StringUtils.hasText(sku)) {
+            sku = resolveProductSku(firstText(params, "product", "query"));
+        }
+        ResolvedWarehouse warehouse = resolveWarehouse(params);
+        String movementType = firstText(params, "status", "movementType");
+        String dateRange = firstText(params, "dateRange");
+
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    sm.created_at,
+                    sm.movement_type,
+                    sm.qty_change,
+                    sm.qty_after,
+                    sm.reserved_change,
+                    sm.reserved_after,
+                    sm.lot_number,
+                    sm.reason,
+                    sm.reference_type,
+                    sm.created_by,
+                    w.code AS warehouse_code,
+                    l.code AS location_code,
+                    COALESCE(p.sku, sm.product_id::text) AS sku,
+                    COALESCE(p.name, 'Sản phẩm ' || sm.product_id::text) AS product_name
+                FROM stock_movements sm
+                LEFT JOIN warehouses w ON w.id = sm.warehouse_id
+                LEFT JOIN locations l ON l.id = sm.location_id
+                LEFT JOIN products p ON p.id = sm.product_id
+                WHERE 1 = 1
+                """);
+        if (StringUtils.hasText(sku)) {
+            sql.append(" AND LOWER(p.sku) = LOWER(?)");
+            args.add(sku);
+        }
+        if (warehouse != null) {
+            sql.append(" AND LOWER(w.code) = LOWER(?)");
+            args.add(warehouse.code());
+        }
+        if (StringUtils.hasText(movementType)) {
+            sql.append(" AND LOWER(sm.movement_type) LIKE ?");
+            args.add(like(movementType));
+        }
+        appendDateRange(sql, args, "sm.created_at", dateRange);
+        sql.append(" ORDER BY sm.created_at DESC LIMIT ").append(DEFAULT_LIMIT);
+        return jdbcTemplate.queryForList(sql.toString(), args.toArray());
+    }
+
+    private String getStockTransferGuide(Map<String, Object> params) {
+        return """
+                Tôi không tự chuyển kho qua chat. Để chuyển tồn kho, hãy mở màn hình chuyển kho/stock transfer, chọn SKU, kho/vị trí nguồn, kho/vị trí đích, số lượng và lý do; sau đó kiểm tra lại tồn khả dụng trước khi xác nhận.
+                """.trim();
+    }
+
+    private String getInventoryAdjustmentGuide(Map<String, Object> params) {
+        return """
+                Tôi không tự điều chỉnh tồn kho qua chat. Để điều chỉnh tồn, hãy kiểm tra SKU/kho/vị trí hiện tại, tạo phiếu điều chỉnh với lý do rõ ràng, nhập số lượng tăng hoặc giảm và chỉ xác nhận khi có quyền duyệt.
+                """.trim();
+    }
+
     // Lấy các task putaway đang chờ xử lý.
     private List<Map<String, Object>> getPendingPutaway() {
         return jdbcTemplate.queryForList("""
@@ -830,6 +1075,39 @@ public class AiToolExecutorService {
         return jdbcTemplate.queryForList(sql.toString(), args.toArray());
     }
 
+    private List<Map<String, Object>> getPurchaseOrderDetail(Map<String, Object> params) {
+        String code = firstText(params, "code", "query");
+        if (!StringUtils.hasText(code)) {
+            return getPurchaseOrders(params);
+        }
+        return jdbcTemplate.queryForList("""
+                SELECT
+                    po.po_number,
+                    po.status,
+                    po.order_date,
+                    po.expected_date,
+                    po.total_amount,
+                    s.code AS supplier_code,
+                    s.name AS supplier_name,
+                    w.code AS warehouse_code,
+                    w.name AS warehouse_name,
+                    pi.line_number,
+                    COALESCE(p.sku, pi.product_sku) AS sku,
+                    COALESCE(p.name, pi.product_sku) AS product_name,
+                    pi.ordered_qty,
+                    pi.received_qty,
+                    pi.unit_price
+                FROM purchase_orders po
+                LEFT JOIN suppliers s ON s.id = po.supplier_id
+                LEFT JOIN warehouses w ON w.id = po.warehouse_id
+                LEFT JOIN po_items pi ON pi.po_id = po.id
+                LEFT JOIN products p ON p.id = pi.product_id
+                WHERE LOWER(po.po_number) LIKE ?
+                ORDER BY po.po_number ASC, pi.line_number ASC NULLS LAST
+                LIMIT 50
+                """, like(code));
+    }
+
     // Lấy các đơn xuất đang cần ưu tiên xử lý.
     private List<Map<String, Object>> getPrioritySalesOrders() {
         return jdbcTemplate.queryForList("""
@@ -847,6 +1125,70 @@ public class AiToolExecutorService {
                 ORDER BY so.priority ASC, so.created_at ASC
                 LIMIT 50
                 """);
+    }
+
+    private List<Map<String, Object>> getSalesOrderStatus(Map<String, Object> params) {
+        String code = firstText(params, "code", "query");
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    so.so_number,
+                    so.customer_name,
+                    so.priority,
+                    so.status,
+                    so.created_at,
+                    w.code AS warehouse_code,
+                    w.name AS warehouse_name,
+                    COALESCE(SUM(soi.ordered_qty), 0) AS ordered_qty,
+                    COALESCE(SUM(soi.shipped_qty), 0) AS shipped_qty
+                FROM sales_orders so
+                LEFT JOIN warehouses w ON w.id = so.warehouse_id
+                LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+                WHERE 1 = 1
+                """);
+        if (StringUtils.hasText(code)) {
+            sql.append(" AND LOWER(so.so_number) LIKE ?");
+            args.add(like(code));
+        } else {
+            sql.append(" AND so.status <> 'CANCELLED'");
+        }
+        sql.append("""
+                GROUP BY so.id, so.so_number, so.customer_name, so.priority, so.status,
+                         so.created_at, w.code, w.name
+                ORDER BY so.priority ASC, so.created_at DESC
+                LIMIT 50
+                """);
+        return jdbcTemplate.queryForList(sql.toString(), args.toArray());
+    }
+
+    private List<Map<String, Object>> getSalesOrderDetail(Map<String, Object> params) {
+        String code = firstText(params, "code", "query");
+        if (!StringUtils.hasText(code)) {
+            return getSalesOrderStatus(params);
+        }
+        return jdbcTemplate.queryForList("""
+                SELECT
+                    so.so_number,
+                    so.customer_name,
+                    so.priority,
+                    so.status,
+                    so.created_at,
+                    w.code AS warehouse_code,
+                    w.name AS warehouse_name,
+                    soi.line_number,
+                    COALESCE(p.sku, soi.product_sku) AS sku,
+                    COALESCE(p.name, soi.product_sku) AS product_name,
+                    soi.ordered_qty,
+                    soi.shipped_qty,
+                    soi.unit_price
+                FROM sales_orders so
+                LEFT JOIN warehouses w ON w.id = so.warehouse_id
+                LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+                LEFT JOIN products p ON p.id = soi.product_id
+                WHERE LOWER(so.so_number) LIKE ?
+                ORDER BY so.so_number ASC, soi.line_number ASC NULLS LAST
+                LIMIT 50
+                """, like(code));
     }
 
     private List<Map<String, Object>> getPackingStatus() {
@@ -924,6 +1266,81 @@ public class AiToolExecutorService {
                        COALESCE(SUM(CASE WHEN qty_change < 0 THEN -qty_change ELSE 0 END), 0) AS outbound_qty
                 FROM stock_movements
                 WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'
+                """));
+        return report;
+    }
+
+    private Map<String, Object> getInboundReport(Map<String, Object> params) {
+        String dateRange = firstText(params, "dateRange");
+        List<Object> args = new ArrayList<>();
+        StringBuilder filter = new StringBuilder(" WHERE 1 = 1 ");
+        appendDateRange(filter, args, "ir.received_date", dateRange);
+
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("summary", jdbcTemplate.queryForMap((""" 
+                SELECT COUNT(DISTINCT ir.id) AS receipts,
+                       COUNT(DISTINCT po.id) AS purchase_orders,
+                       COALESCE(SUM(iri.received_qty), 0) AS received_qty
+                FROM inbound_receipts ir
+                LEFT JOIN purchase_orders po ON po.id = ir.po_id
+                LEFT JOIN inbound_receipt_items iri ON iri.receipt_id = ir.id
+                %s
+                """.formatted(filter)), args.toArray()));
+        report.put("top_suppliers", jdbcTemplate.queryForList((""" 
+                SELECT s.code AS supplier_code, s.name AS supplier_name,
+                       COUNT(DISTINCT ir.id) AS receipts,
+                       COALESCE(SUM(iri.received_qty), 0) AS received_qty
+                FROM inbound_receipts ir
+                JOIN purchase_orders po ON po.id = ir.po_id
+                LEFT JOIN suppliers s ON s.id = po.supplier_id
+                LEFT JOIN inbound_receipt_items iri ON iri.receipt_id = ir.id
+                %s
+                GROUP BY s.code, s.name
+                ORDER BY received_qty DESC, receipts DESC
+                LIMIT 5
+                """.formatted(filter)), args.toArray()));
+        return report;
+    }
+
+    private Map<String, Object> getOutboundReport(Map<String, Object> params) {
+        String dateRange = firstText(params, "dateRange");
+        List<Object> args = new ArrayList<>();
+        StringBuilder filter = new StringBuilder(" WHERE so.status <> 'CANCELLED' ");
+        appendDateRange(filter, args, "so.created_at", dateRange);
+
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("summary", jdbcTemplate.queryForMap((""" 
+                SELECT COUNT(DISTINCT so.id) AS sales_orders,
+                       COALESCE(SUM(soi.ordered_qty), 0) AS ordered_qty,
+                       COALESCE(SUM(soi.shipped_qty), 0) AS shipped_qty
+                FROM sales_orders so
+                LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+                %s
+                """.formatted(filter)), args.toArray()));
+        report.put("by_status", jdbcTemplate.queryForList((""" 
+                SELECT so.status, COUNT(DISTINCT so.id) AS sales_orders,
+                       COALESCE(SUM(soi.ordered_qty), 0) AS ordered_qty,
+                       COALESCE(SUM(soi.shipped_qty), 0) AS shipped_qty
+                FROM sales_orders so
+                LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+                %s
+                GROUP BY so.status
+                ORDER BY sales_orders DESC, so.status ASC
+                """.formatted(filter)), args.toArray()));
+        return report;
+    }
+
+    private Map<String, Object> getMonthlyReport() {
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("stock", getStockTotal());
+        report.put("inbound", getInboundReport(Map.of("dateRange", "THIS_MONTH")).get("summary"));
+        report.put("outbound", getOutboundReport(Map.of("dateRange", "THIS_MONTH")).get("summary"));
+        report.put("movements", jdbcTemplate.queryForMap("""
+                SELECT COUNT(*) AS movements,
+                       COALESCE(SUM(CASE WHEN qty_change > 0 THEN qty_change ELSE 0 END), 0) AS inbound_qty,
+                       COALESCE(SUM(CASE WHEN qty_change < 0 THEN -qty_change ELSE 0 END), 0) AS outbound_qty
+                FROM stock_movements
+                WHERE created_at >= date_trunc('month', CURRENT_DATE)
                 """));
         return report;
     }
@@ -1119,9 +1536,119 @@ public class AiToolExecutorService {
         return summary;
     }
 
+    private Map<String, Object> getGlobalSearch(Map<String, Object> params) {
+        String keyword = firstText(params, "query", "code", "sku", "product");
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (!StringUtils.hasText(keyword)) {
+            result.put("message", "Thiếu từ khóa tìm kiếm.");
+            return result;
+        }
+        String like = like(keyword);
+        result.put("products", jdbcTemplate.queryForList("""
+                SELECT sku AS code, name, status, 'PRODUCT' AS type
+                FROM products
+                WHERE LOWER(sku) LIKE ? OR LOWER(name) LIKE ? OR LOWER(barcode_ean13) LIKE ?
+                ORDER BY updated_at DESC NULLS LAST
+                LIMIT 5
+                """, like, like, like));
+        result.put("warehouses", jdbcTemplate.queryForList("""
+                SELECT code, name, CASE WHEN is_active THEN 'ACTIVE' ELSE 'INACTIVE' END AS status, 'WAREHOUSE' AS type
+                FROM warehouses
+                WHERE LOWER(code) LIKE ? OR LOWER(name) LIKE ? OR LOWER(address) LIKE ?
+                ORDER BY is_active DESC, name ASC
+                LIMIT 5
+                """, like, like, like));
+        result.put("suppliers", jdbcTemplate.queryForList("""
+                SELECT code, name, status, 'SUPPLIER' AS type
+                FROM suppliers
+                WHERE LOWER(code) LIKE ? OR LOWER(name) LIKE ? OR LOWER(contact_email) LIKE ?
+                ORDER BY updated_at DESC NULLS LAST
+                LIMIT 5
+                """, like, like, like));
+        result.put("customers", jdbcTemplate.queryForList("""
+                SELECT code, name, CASE WHEN is_active THEN 'ACTIVE' ELSE 'INACTIVE' END AS status, 'CUSTOMER' AS type
+                FROM customers
+                WHERE LOWER(code) LIKE ? OR LOWER(name) LIKE ? OR LOWER(email) LIKE ?
+                ORDER BY updated_at DESC NULLS LAST
+                LIMIT 5
+                """, like, like, like));
+        result.put("purchase_orders", jdbcTemplate.queryForList("""
+                SELECT po_number AS code, status, 'PURCHASE_ORDER' AS type
+                FROM purchase_orders
+                WHERE LOWER(po_number) LIKE ?
+                ORDER BY created_at DESC
+                LIMIT 5
+                """, like));
+        result.put("sales_orders", jdbcTemplate.queryForList("""
+                SELECT so_number AS code, customer_name AS name, status, 'SALES_ORDER' AS type
+                FROM sales_orders
+                WHERE LOWER(so_number) LIKE ? OR LOWER(customer_name) LIKE ?
+                ORDER BY created_at DESC
+                LIMIT 5
+                """, like, like));
+        return result;
+    }
+
+    private List<Map<String, Object>> getAuditLogs(Map<String, Object> params) {
+        String query = firstText(params, "query", "code");
+        String dateRange = firstText(params, "dateRange");
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("""
+                SELECT service_name, module, action_type, action, entity_type, entity_name,
+                       actor_name, actor_email, reason, created_at
+                FROM audit_logs
+                WHERE 1 = 1
+                """);
+        if (StringUtils.hasText(query)) {
+            sql.append("""
+                     AND (
+                        LOWER(service_name) LIKE ? OR LOWER(module) LIKE ? OR LOWER(action) LIKE ?
+                        OR LOWER(entity_type) LIKE ? OR LOWER(entity_name) LIKE ? OR LOWER(actor_name) LIKE ?
+                     )
+                    """);
+            String like = like(query);
+            args.add(like);
+            args.add(like);
+            args.add(like);
+            args.add(like);
+            args.add(like);
+            args.add(like);
+        }
+        appendDateRange(sql, args, "created_at", dateRange);
+        sql.append(" ORDER BY created_at DESC LIMIT ").append(DEFAULT_LIMIT);
+        return jdbcTemplate.queryForList(sql.toString(), args.toArray());
+    }
+
+    private List<Map<String, Object>> getAiAuditLogs(Map<String, Object> params) {
+        String query = firstText(params, "query");
+        String dateRange = firstText(params, "dateRange");
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("""
+                SELECT session_id, question, generated_sql, rows_returned,
+                       execution_error, latency_ms, created_at
+                FROM ai_audit_logs
+                WHERE 1 = 1
+                """);
+        if (StringUtils.hasText(query)) {
+            sql.append(" AND LOWER(question) LIKE ?");
+            args.add(like(query));
+        }
+        appendDateRange(sql, args, "created_at", dateRange);
+        sql.append(" ORDER BY created_at DESC LIMIT ").append(DEFAULT_LIMIT);
+        return jdbcTemplate.queryForList(sql.toString(), args.toArray());
+    }
+
     // Trả lời hướng dẫn thao tác theo câu hỏi cụ thể.
     private String getGuide(Map<String, Object> params) {
         String query = normalize(firstText(params, "query"));
+        if (query.contains("xin chao") || query.contains("chao ban") || query.contains("hello")
+                || query.contains("hi ") || query.contains("ban la ai") || query.contains("ban co the giup")
+                || query.contains("ban lam duoc gi")) {
+            return """
+                    Xin chào, tôi là trợ lý AI vận hành kho StockMaster-WMS.
+                    Tôi có thể giúp bạn tra cứu tồn kho, kho/vị trí, nhập kho, putaway, xuất kho, picking, kiểm kê, RMA và báo cáo vận hành. Bạn muốn kiểm tra nội dung nào?
+                    """.trim();
+        }
         if (query.contains("nhap") && (query.contains("lo hang") || query.contains("hang moi"))) {
             return """
                     Cách nhập lô hàng mới:
@@ -1229,6 +1756,22 @@ public class AiToolExecutorService {
             }
         }
         return null;
+    }
+
+    private void appendDateRange(StringBuilder sql, List<Object> args, String column, String dateRange) {
+        if (!StringUtils.hasText(dateRange)) {
+            return;
+        }
+        String normalized = dateRange.trim().toUpperCase(Locale.ROOT);
+        switch (normalized) {
+            case "TODAY" -> sql.append(" AND ").append(column).append(" >= CURRENT_DATE");
+            case "THIS_WEEK" -> sql.append(" AND ").append(column).append(" >= date_trunc('week', CURRENT_DATE)");
+            case "LAST_7_DAYS" -> sql.append(" AND ").append(column).append(" >= CURRENT_DATE - INTERVAL '7 days'");
+            case "THIS_MONTH" -> sql.append(" AND ").append(column).append(" >= date_trunc('month', CURRENT_DATE)");
+            default -> {
+                // Không thêm điều kiện nếu dateRange không thuộc nhóm được hỗ trợ.
+            }
+        }
     }
 
     // Chuyển object thành text sạch hoặc null.

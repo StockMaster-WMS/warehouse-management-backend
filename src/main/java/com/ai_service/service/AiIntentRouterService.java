@@ -29,27 +29,52 @@ public class AiIntentRouterService {
     private static final Pattern DAYS_PATTERN = Pattern.compile("(\\d+)\\s*(?:ngay|ngày|day|days)", Pattern.CASE_INSENSITIVE);
     private static final Pattern SKU_PATTERN = Pattern.compile("\\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+\\b");
     private static final Pattern WAREHOUSE_CODE_PATTERN = Pattern.compile("\\bWH-[A-Z0-9-]+\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern BUSINESS_CODE_PATTERN = Pattern.compile("\\b(?:PO|SO|SUP|CUS|CUST|KH|NCC)-[A-Z0-9-]+\\b", Pattern.CASE_INSENSITIVE);
 
     private final OllamaClient ollamaClient;
     private final ObjectMapper objectMapper;
 
     // Định tuyến câu hỏi người dùng thành intent và tham số.
     public AiIntentResult route(String userMessage, List<Map<String, String>> history) {
+        long start = System.currentTimeMillis();
         AiIntentResult deterministic = deterministic(userMessage, false);
         if (deterministic != null) {
+            log.info("AI route source=deterministic intent={} confidence={} reason={} question='{}' durationMs={}",
+                    deterministic.getIntent(), deterministic.getConfidence(), deterministic.getReason(),
+                    preview(userMessage), System.currentTimeMillis() - start);
             return deterministic;
         }
 
+        String normalized = normalize(userMessage);
+        if (!looksWarehouseRelated(normalized)) {
+            AiIntentResult result = AiIntentResult.of(AiIntent.UNSUPPORTED, extractCommonParams(userMessage), 0.85,
+                    "fast unsupported outside WMS domain");
+            log.info("AI route source=fast-unsupported intent={} reason={} question='{}' durationMs={}",
+                    result.getIntent(), result.getReason(), preview(userMessage), System.currentTimeMillis() - start);
+            return result;
+        }
+
         try {
+            long ollamaStart = System.currentTimeMillis();
+            log.info("AI route source=ollama start question='{}' historyMessages={}",
+                    preview(userMessage), history == null ? 0 : history.size());
             String raw = ollamaClient.generateIntent(buildRouterPrompt(userMessage, history));
             AiIntentResult parsed = correctIntent(userMessage, parseIntent(raw));
             if (parsed.getIntent() != AiIntent.UNSUPPORTED || looksUnsupported(userMessage)) {
+                log.info("AI route source=ollama intent={} confidence={} reason={} ollamaMs={} durationMs={}",
+                        parsed.getIntent(), parsed.getConfidence(), parsed.getReason(),
+                        System.currentTimeMillis() - ollamaStart, System.currentTimeMillis() - start);
                 return parsed;
             }
         } catch (Exception e) {
-            log.warn("AI intent routing failed, using heuristic fallback: {}", e.getMessage());
+            log.warn("AI route source=ollama failed question='{}' durationMs={} error={}",
+                    preview(userMessage), System.currentTimeMillis() - start, e.getMessage());
         }
-        return heuristic(userMessage);
+        AiIntentResult fallback = heuristic(userMessage);
+        log.info("AI route source=heuristic intent={} confidence={} reason={} question='{}' durationMs={}",
+                fallback.getIntent(), fallback.getConfidence(), fallback.getReason(),
+                preview(userMessage), System.currentTimeMillis() - start);
+        return fallback;
     }
 
     // Tạo prompt để model trả về JSON intent.
@@ -88,6 +113,13 @@ public class AiIntentRouterService {
                 - WAREHOUSE_DETAIL: hỏi chi tiết một kho cụ thể theo mã/tên.
                 - PRODUCT_COUNT: hỏi tổng số/số lượng sản phẩm.
                 - PRODUCT_LIST: hỏi danh sách/liệt kê sản phẩm.
+                - PRODUCT_DETAIL: hỏi chi tiết một sản phẩm/SKU/barcode.
+                - SUPPLIER_LIST: hỏi danh sách nhà cung cấp.
+                - SUPPLIER_SEARCH: tìm kiếm nhà cung cấp theo tên/mã/sđt/email.
+                - SUPPLIER_DETAIL: hỏi chi tiết một nhà cung cấp.
+                - CUSTOMER_LIST: hỏi danh sách khách hàng.
+                - CUSTOMER_SEARCH: tìm kiếm khách hàng theo tên/mã/sđt/email.
+                - CUSTOMER_DETAIL: hỏi chi tiết một khách hàng.
                 - LOCATION_SEARCH: hỏi vị trí, location, zone, aisle, rack, bin.
                 - STOCK_BY_PRODUCT: hỏi tồn kho của SKU/sản phẩm, có thể kèm kho.
                 - STOCK_TOTAL: hỏi tổng tồn kho toàn hệ thống.
@@ -95,16 +127,28 @@ public class AiIntentRouterService {
                 - WAREHOUSE_STOCK_SUMMARY: hỏi kho nào nhiều tồn nhất hoặc tồn nhiều nhóm hàng trong một kho.
                 - LOW_STOCK: hỏi hàng tồn thấp, gần hết hàng, dưới định mức.
                 - NEAR_EXPIRY: hỏi hàng sắp hết hạn/hết hạn trong N ngày.
+                - STOCK_MOVEMENT_HISTORY: hỏi lịch sử biến động tồn kho/stock movement.
+                - STOCK_TRANSFER: hỏi hướng dẫn/chuyển tồn giữa kho/vị trí; không tự thao tác.
+                - INVENTORY_ADJUSTMENT: hỏi hướng dẫn/điều chỉnh tồn thủ công; không tự thao tác.
                 - PENDING_PUTAWAY: hỏi task putaway/chờ cất hàng/chưa đưa vào vị trí.
                 - LATEST_INBOUND: hỏi đơn nhập/phiếu nhập/sản phẩm vừa nhập gần đây nhất.
                 - PURCHASE_ORDER_STATUS: hỏi trạng thái đơn nhập/PO.
+                - PURCHASE_ORDER_DETAIL: hỏi chi tiết PO/dòng hàng trong PO.
                 - OUTBOUND_PRIORITY: hỏi đơn xuất cần ưu tiên/xử lý gấp.
+                - SALES_ORDER_STATUS: hỏi trạng thái SO/đơn bán/đơn xuất theo mã.
+                - SALES_ORDER_DETAIL: hỏi chi tiết SO/dòng hàng trong SO.
                 - PICKING_STATUS: hỏi picking/lấy hàng/chờ pick.
                 - ACTIVE_CYCLE_COUNTS: hỏi lịch kiểm kê/cycle count đang diễn ra.
                 - CYCLE_COUNT_VARIANCE: hỏi kiểm kê, lệch tồn, chênh lệch kiểm đếm.
                 - RMA_PENDING: hỏi yêu cầu trả hàng/RMA đang chờ xử lý.
                 - DAILY_TASKS: hỏi hôm nay cần làm gì, việc cần xử lý.
                 - REPORT_SUMMARY: hỏi tổng quan/tóm tắt dashboard/báo cáo vận hành.
+                - INBOUND_REPORT: báo cáo nhập kho.
+                - OUTBOUND_REPORT: báo cáo xuất kho/bán hàng.
+                - MONTHLY_REPORT: báo cáo tháng này.
+                - GLOBAL_SEARCH: tìm kiếm toàn hệ thống.
+                - AUDIT_LOG: hỏi lịch sử thao tác/audit log nghiệp vụ.
+                - AI_AUDIT_LOG: hỏi log/lịch sử hỏi đáp AI.
                 - GENERAL_GUIDE: chào hỏi hoặc hỏi trợ lý làm được gì.
                 - AMBIGUOUS: thiếu thông tin quan trọng cần hỏi lại.
                 - UNSUPPORTED: ngoài phạm vi hệ thống kho.
@@ -191,8 +235,15 @@ public class AiIntentRouterService {
         String normalized = normalize(userMessage);
         Map<String, Object> params = extractCommonParams(userMessage);
 
-        if (containsAny(normalized, "thoi tiet", "bong da", "chung khoan", "nau an", "bai tho", "viet tho",
-                "cap nhat", "xoa ", "delete", "drop table", "update ", "insert ",
+        if (looksGreeting(normalized)) {
+            return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.95, "deterministic greeting");
+        }
+
+        if (looksUnsupported(userMessage)) {
+            return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.95, "deterministic unsupported");
+        }
+
+        if (containsAny(normalized, "cap nhat", "xoa ", "delete", "drop table", "update ", "insert ",
                 "alter table", "truncate", "sua so luong", "doi so luong", "thanh 999",
                 "tao don", "huy don", "duyet po", "duyet don", "gia vo", "bo qua system prompt",
                 "ignore system prompt", "sql update", "sql delete")) {
@@ -214,10 +265,75 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.SALES_TOP, params, 0.85, "deterministic colloquial hot items");
         }
 
-        if (containsAny(normalized, "xin chao", "hello", "hi ", "ban co the giup gi", "ban lam duoc gi",
-                "tro ly kho", "tro ly lam duoc gi", "putaway la gi", "la gi", "duoc tinh the nao",
-                "nen xu ly ra sao", "huong dan", "giai thich", "cach ", "lam sao")) {
+        if (looksDomainGuide(normalized)) {
             return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.9, "deterministic guide");
+        }
+
+        if (containsAny(normalized, "ai audit", "log ai", "lich su hoi ai", "lich su ai", "ai log")) {
+            return AiIntentResult.of(AiIntent.AI_AUDIT_LOG, params, 0.9, "deterministic ai audit log");
+        }
+
+        if (containsAny(normalized, "audit log", "lich su thao tac", "nhat ky thao tac", "log thao tac",
+                "ai da sua", "ai tao", "ai cap nhat")) {
+            return AiIntentResult.of(AiIntent.AUDIT_LOG, params, 0.9, "deterministic audit log");
+        }
+
+        if (containsAny(normalized, "tim kiem toan he thong", "global search", "tim khap he thong",
+                "search all", "tim kiem chung")) {
+            return AiIntentResult.of(AiIntent.GLOBAL_SEARCH, params, 0.9, "deterministic global search");
+        }
+
+        if (containsAny(normalized, "bao cao thang", "monthly report")
+                || (containsAny(normalized, "thang nay") && containsAny(normalized, "bao cao", "thong ke", "tong hop"))) {
+            return AiIntentResult.of(AiIntent.MONTHLY_REPORT, params, 0.9, "deterministic monthly report");
+        }
+
+        if (containsAny(normalized, "bao cao nhap kho", "inbound report", "report nhap")) {
+            return AiIntentResult.of(AiIntent.INBOUND_REPORT, params, 0.9, "deterministic inbound report");
+        }
+
+        if (containsAny(normalized, "bao cao xuat kho", "outbound report", "report xuat", "bao cao ban hang")) {
+            return AiIntentResult.of(AiIntent.OUTBOUND_REPORT, params, 0.9, "deterministic outbound report");
+        }
+
+        if (containsAny(normalized, "chuyen kho", "chuyen ton", "stock transfer", "transfer stock",
+                "chuyen hang sang kho", "chuyen vi tri")) {
+            return AiIntentResult.of(AiIntent.STOCK_TRANSFER, params, 0.9, "deterministic stock transfer");
+        }
+
+        if (containsAny(normalized, "dieu chinh ton", "adjustment", "inventory adjustment",
+                "chinh ton", "sua ton thu cong", "ton kho thu cong")) {
+            return AiIntentResult.of(AiIntent.INVENTORY_ADJUSTMENT, params, 0.9, "deterministic inventory adjustment");
+        }
+
+        if (containsAny(normalized, "lich su ton", "lich su bien dong", "stock movement",
+                "bien dong ton", "movement history", "lich su nhap xuat ton")) {
+            return AiIntentResult.of(AiIntent.STOCK_MOVEMENT_HISTORY, params, 0.9, "deterministic stock movement");
+        }
+
+        if (containsAny(normalized, "nha cung cap", "supplier", "ncc")) {
+            if (containsAny(normalized, "chi tiet", "thong tin", "detail", "ma ", "code")) {
+                return AiIntentResult.of(AiIntent.SUPPLIER_DETAIL, params, 0.9, "deterministic supplier detail");
+            }
+            if (containsAny(normalized, "tim", "search", "kiem")) {
+                return AiIntentResult.of(AiIntent.SUPPLIER_SEARCH, params, 0.9, "deterministic supplier search");
+            }
+            return AiIntentResult.of(AiIntent.SUPPLIER_LIST, params, 0.9, "deterministic supplier list");
+        }
+
+        if (containsAny(normalized, "khach hang", "customer")) {
+            if (containsAny(normalized, "chi tiet", "thong tin", "detail", "ma ", "code")) {
+                return AiIntentResult.of(AiIntent.CUSTOMER_DETAIL, params, 0.9, "deterministic customer detail");
+            }
+            if (containsAny(normalized, "tim", "search", "kiem")) {
+                return AiIntentResult.of(AiIntent.CUSTOMER_SEARCH, params, 0.9, "deterministic customer search");
+            }
+            return AiIntentResult.of(AiIntent.CUSTOMER_LIST, params, 0.9, "deterministic customer list");
+        }
+
+        if (containsAny(normalized, "chi tiet san pham", "thong tin san pham", "product detail",
+                "san pham detail")) {
+            return AiIntentResult.of(AiIntent.PRODUCT_DETAIL, params, 0.9, "deterministic product detail");
         }
 
         if (containsAny(normalized, "bao nhieu kho", "co may kho", "tong so kho", "so luong kho",
@@ -374,6 +490,16 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.PACKING_STATUS, params, 0.9, "deterministic packing");
         }
 
+        if (containsAny(normalized, "chi tiet so", "chi tiet don xuat", "chi tiet sales order", "sales order detail")
+                || (containsAny(normalized, "so-") && containsAny(normalized, "chi tiet", "dong hang", "mat hang"))) {
+            return AiIntentResult.of(AiIntent.SALES_ORDER_DETAIL, params, 0.9, "deterministic sales order detail");
+        }
+
+        if (containsAny(normalized, "trang thai so", "trang thai don xuat", "sales order status")
+                || (containsAny(normalized, "so-") && containsAny(normalized, "trang thai", "sao roi", "status"))) {
+            return AiIntentResult.of(AiIntent.SALES_ORDER_STATUS, params, 0.9, "deterministic sales order status");
+        }
+
         if (containsAny(normalized, "don xuat", "sales order", "priority outbound", "uu tien xu ly",
                 "uu tien cao", "xu ly gap", "can xu ly gap", "so nao nen pick truoc")) {
             return AiIntentResult.of(AiIntent.OUTBOUND_PRIORITY, params, 0.9, "deterministic outbound");
@@ -401,6 +527,11 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.AMBIGUOUS, params, 0.9, "deterministic multi-intent question");
         }
 
+        if (containsAny(normalized, "chi tiet po", "chi tiet don nhap", "purchase order detail")
+                || (containsAny(normalized, "po-") && containsAny(normalized, "chi tiet", "dong hang", "mat hang"))) {
+            return AiIntentResult.of(AiIntent.PURCHASE_ORDER_DETAIL, params, 0.9, "deterministic purchase order detail");
+        }
+
         if (containsAny(normalized, "don nhap", "purchase order", " po ", "trang thai po", "po-", "po dang")) {
             if (containsAny(normalized, "cho nhan", "chua nhan", "dang cho nhan", "nhan hang chua")) {
                 return AiIntentResult.of(AiIntent.PENDING_PO_RECEIPT, params, 0.9, "deterministic pending po receipt");
@@ -422,6 +553,11 @@ public class AiIntentRouterService {
         Matcher whMatcher = WAREHOUSE_CODE_PATTERN.matcher(userMessage == null ? "" : userMessage);
         if (whMatcher.find()) {
             params.put("warehouseCode", whMatcher.group().toUpperCase(Locale.ROOT));
+        }
+
+        Matcher codeMatcher = BUSINESS_CODE_PATTERN.matcher(userMessage == null ? "" : userMessage);
+        if (codeMatcher.find()) {
+            params.put("code", codeMatcher.group().toUpperCase(Locale.ROOT));
         }
 
         Matcher skuMatcher = SKU_PATTERN.matcher(userMessage == null ? "" : userMessage.toUpperCase(Locale.ROOT));
@@ -446,9 +582,54 @@ public class AiIntentRouterService {
     // Kiểm tra câu hỏi có nằm ngoài phạm vi hoặc nguy hiểm không.
     private boolean looksUnsupported(String userMessage) {
         String normalized = normalize(userMessage);
-        return containsAny(normalized, "thoi tiet", "bong da", "chung khoan", "nau an", "viet code",
+        return Pattern.compile("\\d+\\s*[+\\-*/x:]\\s*\\d+").matcher(normalized).find()
+                || containsAny(normalized,
+                "thoi tiet", "bong da", "chung khoan", "nau an", "nau pho", "cong thuc",
+                "viet code", "python", "react", "vue", "windows 11", "lap trinh",
+                "tin tuc", "moi nhat ve kinh te", "bau cu", "tong thong", "gia vang",
+                "hoc tieng anh", "don xin nghi viec", "nen an gi", "an com",
+                "ban thich mau", "chuyen cuoi", "cau chuyen cuoi", "lam sao de bay",
+                "troi xanh", "co ma", "khoe khong",
                 "cap nhat", "xoa ", "delete", "drop table", "update ", "insert ", "alter table", "truncate",
-                "tao don", "huy don", "duyet po", "duyet don", "gia vo", "bo qua system prompt");
+                "tao don", "huy don", "duyet po", "duyet don", "gia vo", "bo qua system prompt",
+                "ignore system prompt");
+    }
+
+    private boolean looksGreeting(String normalized) {
+        return containsAny(normalized,
+                "xin chao", "chao ban", "hello", "hi ", "hi,", "hey", "good morning", "good afternoon");
+    }
+
+    private boolean looksDomainGuide(String normalized) {
+        if (containsAny(normalized, "ban co the giup", "ban giup duoc gi", "ban lam duoc gi",
+                "ban la ai", "ban la ai gi", "ban la tro ly", "tro ly kho", "tro ly lam duoc gi")) {
+            return true;
+        }
+        boolean guideVerb = containsAny(normalized, "huong dan", "giai thich", "cach ", "lam sao",
+                "quy trinh", "nen xu ly ra sao", "duoc tinh the nao", " la gi");
+        boolean warehouseTopic = containsAny(normalized,
+                "kho", "ton kho", "sku", "barcode", "putaway", "picking", "cycle count", "kiem ke",
+                "rma", "tra hang", "nhap kho", "xuat kho", "don nhap", "don xuat", "po", "so-",
+                "purchase order", "sales order", "lo hang", "vi tri", "location", "hang hong");
+        return guideVerb && warehouseTopic;
+    }
+
+    private boolean looksWarehouseRelated(String normalized) {
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        return containsAny(normalized,
+                "kho", "warehouse", "ton", "ton kho", "stock", "sku", "san pham", "hang",
+                "barcode", "lot", "expiry", "het han", "sap het han",
+                "putaway", "cat hang", "nhap", "nhap kho", "inbound", "receipt",
+                "don nhap", "purchase order", "po-", " po ",
+                "xuat", "xuat kho", "outbound", "sales order", "so-", " don so",
+                "picking", "pick", "packing", "lay hang",
+                "kiem ke", "cycle count", "lech", "chenh lech",
+                "rma", "tra hang", "vi tri", "location", "zone", "aisle", "rack", "bin",
+                "nha cung cap", "supplier", "ncc", "khach hang", "customer",
+                "audit", "log", "lich su thao tac", "global search", "tim kiem",
+                "bao cao", "dashboard", "van hanh", "hom nay co gi can lam");
     }
 
     // Trích số ngày trong câu hỏi như "7 ngày" hoặc "30 days".
@@ -553,6 +734,14 @@ public class AiIntentRouterService {
             return value;
         }
         return value.substring(0, maxLength) + "...";
+    }
+
+    private String preview(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replaceAll("\\s+", " ").trim()
+                .substring(0, Math.min(120, value.replaceAll("\\s+", " ").trim().length()));
     }
 
     // Chuyển object sang JSON để đưa vào prompt.

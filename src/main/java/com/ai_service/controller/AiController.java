@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.util.concurrent.Executor;
@@ -50,16 +51,33 @@ public class AiController {
     @Operation(summary = "Hỏi đáp dữ liệu dạng Stream (SSE)", description = "Trả về câu trả lời theo thời gian thực (từng từ một)")
     public SseEmitter askStream(
             @RequestParam String question,
-            @RequestParam(required = false) String sessionId) {
+            @RequestParam(required = false) String sessionId,
+            @RequestParam(required = false) String requestId) {
         
         SseEmitter emitter = new SseEmitter(300_000L); // 5 phút timeout
         AtomicBoolean clientDisconnected = new AtomicBoolean(false);
+        String cancelKey = StringUtils.hasText(requestId) ? requestId : sessionId;
+
+        emitter.onTimeout(() -> {
+            clientDisconnected.set(true);
+            aiCancelService.cancel(cancelKey);
+            emitter.complete();
+        });
+        emitter.onError(error -> {
+            clientDisconnected.set(true);
+            aiCancelService.cancel(cancelKey);
+        });
+        emitter.onCompletion(() -> {
+            clientDisconnected.set(true);
+            aiCancelService.cancel(cancelKey);
+        });
         
         aiTaskExecutor.execute(() -> {
             try {
                 AiAskRequest req = new AiAskRequest();
                 req.setQuestion(question);
                 req.setSessionId(sessionId);
+                req.setRequestId(requestId);
 
                 aiService.askStream(req, fragment -> {
                     if (clientDisconnected.get()) {
@@ -96,9 +114,10 @@ public class AiController {
 
     @PostMapping("/cancel")
     @Operation(summary = "Huỷ phiên AI đang chạy", description = "Huỷ một phiên streaming AI theo sessionId")
-    public ResponseEntity<?> cancel(@RequestParam String sessionId) {
+    public ResponseEntity<?> cancel(@RequestParam(required = false) String sessionId,
+            @RequestParam(required = false) String requestId) {
         try {
-            aiCancelService.cancel(sessionId);
+            aiCancelService.cancel(StringUtils.hasText(requestId) ? requestId : sessionId);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             log.error("Cancel error: {}", e.getMessage(), e);
