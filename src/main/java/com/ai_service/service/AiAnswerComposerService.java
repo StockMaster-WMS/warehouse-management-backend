@@ -19,6 +19,9 @@ import java.util.function.Consumer;
 @RequiredArgsConstructor
 public class AiAnswerComposerService {
 
+    private static final int MAX_HISTORY_MESSAGES = 4;
+    private static final int MAX_TOOL_LIST_ITEMS = 5;
+    private static final int MAX_TOOL_TEXT_LENGTH = 2000;
     private final OllamaClient ollamaClient;
     private final ObjectMapper objectMapper;
 
@@ -89,7 +92,9 @@ public class AiAnswerComposerService {
         }
         if (data instanceof Map<?, ?> map) {
             return switch (route.getIntent()) {
+                case PRODUCT_COUNT -> "Hệ thống hiện có " + value(map, "total") + " sản phẩm.";
                 case LOCATION_COUNT -> locationCountReply(map);
+                case PRODUCT_LIST -> productListReply(map);
                 case STOCK_TOTAL -> "Tổng tồn kho hiện có: " + value(map, "qty_on_hand") + " đơn vị, đã giữ chỗ "
                         + value(map, "qty_reserved") + ", khả dụng " + value(map, "qty_available")
                         + " trên " + value(map, "stocked_skus") + " SKU có tồn.";
@@ -158,6 +163,19 @@ public class AiAnswerComposerService {
         }
         return "Toàn hệ thống có " + value(map, "total") + " vị trí; available "
                 + value(map, "available") + ", maintenance " + value(map, "maintenance") + ".";
+    }
+
+    private String productListReply(Map<?, ?> map) {
+        Object itemsObject = map.get("items");
+        if (!(itemsObject instanceof List<?> items)) {
+            return "Tôi chưa lấy được danh sách sản phẩm phù hợp.";
+        }
+        if (items.isEmpty()) {
+            return "Hiện chưa có sản phẩm nào phù hợp với điều kiện bạn hỏi.";
+        }
+        return "Có " + value(map, "total") + " sản phẩm trong hệ thống. Một số sản phẩm gần nhất: "
+                + joinRows(limit(items, 5), row -> value(row, "sku") + " - " + value(row, "product_name")
+                + " (" + value(row, "category_name") + ", " + value(row, "status") + ")");
     }
 
     private String stockByProductReply(List<?> list) {
@@ -430,12 +448,12 @@ public class AiAnswerComposerService {
                 <|im_end|>
                 <|im_start|>assistant
                 """.formatted(
-                toJson(history),
+                toJson(compactHistory(history)),
                 userMessage,
                 route == null ? "UNSUPPORTED" : route.getIntent(),
                 toJson(route == null ? Map.of() : route.safeParameters()),
                 toolResult == null ? "none" : toolResult.toolName(),
-                toJson(toolResult == null ? null : toolResult.data())
+                toJson(compactToolResultData(toolResult == null ? null : toolResult.data()))
         );
     }
 
@@ -447,5 +465,23 @@ public class AiAnswerComposerService {
             log.warn("Cannot serialize AI prompt payload", e);
             return String.valueOf(value);
         }
+    }
+
+    private List<Map<String, String>> compactHistory(List<Map<String, String>> history) {
+        if (history == null || history.isEmpty()) {
+            return List.of();
+        }
+        int startIndex = Math.max(0, history.size() - MAX_HISTORY_MESSAGES);
+        return history.subList(startIndex, history.size());
+    }
+
+    private Object compactToolResultData(Object data) {
+        if (data instanceof List<?> list && list.size() > MAX_TOOL_LIST_ITEMS) {
+            return list.subList(0, MAX_TOOL_LIST_ITEMS);
+        }
+        if (data instanceof String text && text.length() > MAX_TOOL_TEXT_LENGTH) {
+            return text.substring(0, MAX_TOOL_TEXT_LENGTH) + "...";
+        }
+        return data;
     }
 }

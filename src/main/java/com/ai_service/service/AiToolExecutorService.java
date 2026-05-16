@@ -35,26 +35,34 @@ public class AiToolExecutorService {
             case WAREHOUSE_COUNT -> AiToolResult.data("WarehouseTool.countWarehouses", countWarehouses());
             case WAREHOUSE_LIST -> AiToolResult.data("WarehouseTool.listWarehouses", listWarehouses());
             case WAREHOUSE_DETAIL -> AiToolResult.data("WarehouseTool.getWarehouseDetail", getWarehouseDetail(params));
+            case PRODUCT_COUNT -> AiToolResult.data("ProductTool.countProducts", countProducts(params));
+            case PRODUCT_LIST -> AiToolResult.data("ProductTool.listProducts", listProducts(params));
             case LOCATION_SEARCH -> AiToolResult.data("LocationTool.searchLocations", searchLocations(params));
             case LOCATION_COUNT -> AiToolResult.data("LocationTool.countLocations", countLocations(params));
-            case BEST_HEAVY_LOCATION -> AiToolResult.data("LocationTool.getBestHeavyLocation", getBestHeavyLocations(params));
+            case BEST_HEAVY_LOCATION ->
+                AiToolResult.data("LocationTool.getBestHeavyLocation", getBestHeavyLocations(params));
             case STOCK_BY_PRODUCT -> getStockByProductResult(params);
             case STOCK_TOTAL -> AiToolResult.data("StockTool.getStockTotal", getStockTotal());
             case STOCK_LOWEST -> AiToolResult.data("StockTool.getLowestStock", getLowestStock());
             case STOCK_HIGHEST -> AiToolResult.data("StockTool.getHighestStock", getHighestStock());
             case PRODUCT_BY_BARCODE -> AiToolResult.data("StockTool.getProductByBarcode", getProductByBarcode(params));
             case LOT_TRACKED_COUNT -> AiToolResult.data("ProductTool.getLotTrackedCount", getLotTrackedCount());
-            case STOCK_BELOW_THRESHOLD -> AiToolResult.data("StockTool.getStockBelowThreshold", getStockBelowThreshold(params));
-            case WAREHOUSE_STOCK_SUMMARY -> AiToolResult.data("StockTool.getWarehouseStockSummary", getWarehouseStockSummary(params));
+            case STOCK_BELOW_THRESHOLD ->
+                AiToolResult.data("StockTool.getStockBelowThreshold", getStockBelowThreshold(params));
+            case WAREHOUSE_STOCK_SUMMARY ->
+                AiToolResult.data("StockTool.getWarehouseStockSummary", getWarehouseStockSummary(params));
             case LOW_STOCK -> AiToolResult.data("StockTool.getLowStock", getLowStock());
             case NEAR_EXPIRY -> AiToolResult.data("StockTool.getNearExpiry", getNearExpiry(params));
             case PENDING_PUTAWAY -> AiToolResult.data("InboundTool.getPendingPutaway", getPendingPutaway());
-            case PUTAWAY_BY_WAREHOUSE -> AiToolResult.data("InboundTool.getPutawayByWarehouse", getPutawayByWarehouse());
+            case PUTAWAY_BY_WAREHOUSE ->
+                AiToolResult.data("InboundTool.getPutawayByWarehouse", getPutawayByWarehouse());
             case INBOUND_TODAY -> AiToolResult.data("InboundTool.getInboundToday", getInboundToday());
             case LATEST_INBOUND -> AiToolResult.data("InboundTool.getLatestInbound", getLatestInbound());
             case PENDING_PO_RECEIPT -> AiToolResult.data("InboundTool.getPendingPoReceipt", getPendingPoReceipt());
-            case PURCHASE_ORDER_STATUS -> AiToolResult.data("InboundTool.getPurchaseOrderStatus", getPurchaseOrders(params));
-            case OUTBOUND_PRIORITY -> AiToolResult.data("OutboundTool.getPrioritySalesOrders", getPrioritySalesOrders());
+            case PURCHASE_ORDER_STATUS ->
+                AiToolResult.data("InboundTool.getPurchaseOrderStatus", getPurchaseOrders(params));
+            case OUTBOUND_PRIORITY ->
+                AiToolResult.data("OutboundTool.getPrioritySalesOrders", getPrioritySalesOrders());
             case PACKING_STATUS -> AiToolResult.data("OutboundTool.getPackingStatus", getPackingStatus());
             case PICKING_TOP -> AiToolResult.data("OutboundTool.getPickingTop", getPickingTop());
             case PICKING_STATUS -> AiToolResult.data("OutboundTool.getPickingStatus", getPickingStatus(params));
@@ -66,8 +74,10 @@ public class AiToolExecutorService {
             case DAILY_TASKS -> AiToolResult.data("ReportTool.getDailyTasks", getDailyTasks());
             case REPORT_SUMMARY -> AiToolResult.data("ReportTool.getOperationalSummary", getOperationalSummary());
             case GENERAL_GUIDE -> AiToolResult.message("GeneralGuide", getGuide(params));
-            case AMBIGUOUS -> AiToolResult.message("Clarification", "Bạn vui lòng nói rõ thêm mã kho, SKU, đơn hàng hoặc khoảng thời gian cần kiểm tra.");
-            case UNSUPPORTED -> AiToolResult.message("Unsupported", "Tôi hiện chỉ hỗ trợ các câu hỏi liên quan đến vận hành kho StockMaster-WMS.");
+            case AMBIGUOUS -> AiToolResult.message("Clarification",
+                    "Bạn vui lòng nói rõ thêm mã kho, SKU, đơn hàng hoặc khoảng thời gian cần kiểm tra.");
+            case UNSUPPORTED -> AiToolResult.message("Unsupported",
+                    "Tôi hiện chỉ hỗ trợ các câu hỏi liên quan đến vận hành kho StockMaster-WMS.");
         };
     }
 
@@ -94,6 +104,95 @@ public class AiToolExecutorService {
                     COUNT(*) FILTER (WHERE is_active = FALSE) AS inactive
                 FROM warehouses
                 """);
+    }
+
+    // Đếm tổng số sản phẩm trong hệ thống.
+    private Map<String, Object> countProducts(Map<String, Object> params) {
+        String keyword = firstText(params, "query", "keyword", "product");
+
+        String cleaned = cleanProductKeyword(keyword);
+        String like = null;
+        if (StringUtils.hasText(cleaned)) {
+            String compact = cleaned.replaceAll("\\W+", "");
+            if (compact.length() >= 3) {
+                like = like(cleaned);
+            }
+        }
+
+        List<Object> args = new ArrayList<>();
+        StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
+        if (StringUtils.hasText(like)) {
+            where.append(" AND (LOWER(p.sku) LIKE ? OR LOWER(p.name) LIKE ? OR LOWER(c.name) LIKE ?)");
+            args.add(like);
+            args.add(like);
+            args.add(like);
+        }
+
+        Map<String, Object> totalRow = jdbcTemplate.queryForMap(("""
+                SELECT COUNT(*) AS total
+                FROM products p
+                LEFT JOIN categories c ON c.id = p.category_id
+                %s
+                """.formatted(where)), args.toArray());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", totalRow.get("total"));
+        result.put("filtered", StringUtils.hasText(keyword));
+        return result;
+    }
+
+    // Đếm và lấy danh sách sản phẩm cơ bản cho câu hỏi "danh sách sản phẩm".
+    private Map<String, Object> listProducts(Map<String, Object> params) {
+        String keyword = firstText(params, "query", "keyword", "product");
+        String status = firstText(params, "status");
+        String like = StringUtils.hasText(keyword) ? like(cleanProductKeyword(keyword)) : null;
+
+        List<Object> args = new ArrayList<>();
+        StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
+        if (StringUtils.hasText(status)) {
+            where.append(" AND LOWER(p.status) = LOWER(?)");
+            args.add(status);
+        }
+        if (StringUtils.hasText(like)) {
+            where.append(" AND (LOWER(p.sku) LIKE ? OR LOWER(p.name) LIKE ? OR LOWER(c.name) LIKE ?)");
+            args.add(like);
+            args.add(like);
+            args.add(like);
+        }
+
+        Map<String, Object> countRow = jdbcTemplate.queryForMap("""
+                    SELECT COUNT(*) AS total
+                    FROM products p
+                    LEFT JOIN categories c ON c.id = p.category_id
+                    LEFT JOIN suppliers s ON s.id = p.primary_supplier_id
+                    %s
+                """.formatted(where), args.toArray());
+
+        List<Map<String, Object>> items = jdbcTemplate.queryForList(("""
+                SELECT
+                    p.sku,
+                    p.name AS product_name,
+                    c.name AS category_name,
+                    s.name AS supplier_name,
+                    p.status,
+                    p.min_stock_qty,
+                    p.is_lot_tracked,
+                    p.is_expiry_tracked,
+                    p.updated_at
+                FROM products p
+                LEFT JOIN categories c ON c.id = p.category_id
+                LEFT JOIN suppliers s ON s.id = p.primary_supplier_id
+                %s
+                ORDER BY p.updated_at DESC NULLS LAST, p.name ASC
+                LIMIT %d
+                """.formatted(where, DEFAULT_LIMIT)), args.toArray());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("total", countRow.get("total"));
+        result.put("items", items);
+        result.put("limit", DEFAULT_LIMIT);
+        result.put("filtered", StringUtils.hasText(keyword) || StringUtils.hasText(status));
+        return result;
     }
 
     // Lấy danh sách kho hiện có.
@@ -138,7 +237,8 @@ public class AiToolExecutorService {
     private List<Map<String, Object>> searchLocations(Map<String, Object> params) {
         String zone = text(params.get("zone"));
         ResolvedWarehouse resolvedWarehouse = resolveWarehouse(params);
-        String warehouse = resolvedWarehouse == null ? firstText(params, "warehouseCode", "warehouse") : resolvedWarehouse.code();
+        String warehouse = resolvedWarehouse == null ? firstText(params, "warehouseCode", "warehouse")
+                : resolvedWarehouse.code();
         String query = firstText(params, "query");
         String normalizedQuery = normalize(query);
         String keyword = firstText(params, "location", "code");
@@ -420,7 +520,8 @@ public class AiToolExecutorService {
                 """.formatted(productCondition), label, warehouseCode);
     }
 
-    // Resolve sản phẩm/kho trước khi tra tồn kho để phân biệt sai kho và không có tồn.
+    // Resolve sản phẩm/kho trước khi tra tồn kho để phân biệt sai kho và không có
+    // tồn.
     private AiToolResult getStockByProductResult(Map<String, Object> params) {
         Map<String, Object> resolvedParams = new LinkedHashMap<>(params);
         String query = firstText(resolvedParams, "query", "product");
@@ -447,7 +548,8 @@ public class AiToolExecutorService {
         }
         if (rows.isEmpty() && warehouse != null) {
             return AiToolResult.message("StockTool.getStockByProduct",
-                    "Kho " + warehouse.code() + " có tồn tại, nhưng tôi chưa tìm thấy tồn kho phù hợp với sản phẩm hoặc SKU bạn hỏi trong kho này.");
+                    "Kho " + warehouse.code()
+                            + " có tồn tại, nhưng tôi chưa tìm thấy tồn kho phù hợp với sản phẩm hoặc SKU bạn hỏi trong kho này.");
         }
         return AiToolResult.data("StockTool.getStockByProduct", rows);
     }
@@ -1045,7 +1147,8 @@ public class AiToolExecutorService {
                     2. Chọn dòng hàng cần putaway, số lượng cần cất và vị trí gợi ý nếu có.
                     3. Gán nhân viên thực hiện nếu quy trình yêu cầu.
                     4. Khi hàng được đưa vào vị trí thực tế, cập nhật task sang hoàn tất để tồn kho được phản ánh đúng vị trí.
-                    """.trim();
+                    """
+                    .trim();
         }
         if (query.contains("picking")) {
             return """
@@ -1113,7 +1216,8 @@ public class AiToolExecutorService {
         return """
                 Tôi có thể hỗ trợ tra cứu kho, vị trí, tồn kho, hàng tồn thấp, hàng sắp hết hạn, putaway, đơn nhập, đơn xuất, picking, kiểm kê và tổng quan vận hành.
                 Với yêu cầu cần số liệu, hãy nêu rõ mã SKU/tên sản phẩm, kho hoặc khoảng thời gian nếu có.
-                """.trim();
+                """
+                .trim();
     }
 
     // Lấy chuỗi đầu tiên có giá trị từ danh sách key.
@@ -1349,7 +1453,8 @@ public class AiToolExecutorService {
         return score;
     }
 
-    // Tránh match nhầm model sản phẩm khác đời, ví dụ hỏi iPhone 16 nhưng chỉ có iPhone 15.
+    // Tránh match nhầm model sản phẩm khác đời, ví dụ hỏi iPhone 16 nhưng chỉ có
+    // iPhone 15.
     private boolean numbersCompatible(String normalizedQuery, String normalizedValue) {
         List<String> queryNumbers = Pattern.compile("\\d+")
                 .matcher(normalizedQuery == null ? "" : normalizedQuery)

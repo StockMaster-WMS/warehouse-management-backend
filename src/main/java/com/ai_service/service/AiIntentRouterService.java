@@ -23,6 +23,8 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class AiIntentRouterService {
 
+    private static final int MAX_HISTORY_MESSAGES = 4;
+    private static final int MAX_HISTORY_TEXT_LENGTH = 400;
     private static final Pattern JSON_OBJECT_PATTERN = Pattern.compile("\\{[\\s\\S]*}");
     private static final Pattern DAYS_PATTERN = Pattern.compile("(\\d+)\\s*(?:ngay|ngày|day|days)", Pattern.CASE_INSENSITIVE);
     private static final Pattern SKU_PATTERN = Pattern.compile("\\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+\\b");
@@ -84,6 +86,8 @@ public class AiIntentRouterService {
                 - WAREHOUSE_COUNT: hỏi tổng số/số lượng kho.
                 - WAREHOUSE_LIST: hỏi danh sách/liệt kê các kho.
                 - WAREHOUSE_DETAIL: hỏi chi tiết một kho cụ thể theo mã/tên.
+                - PRODUCT_COUNT: hỏi tổng số/số lượng sản phẩm.
+                - PRODUCT_LIST: hỏi danh sách/liệt kê sản phẩm.
                 - LOCATION_SEARCH: hỏi vị trí, location, zone, aisle, rack, bin.
                 - STOCK_BY_PRODUCT: hỏi tồn kho của SKU/sản phẩm, có thể kèm kho.
                 - STOCK_TOTAL: hỏi tổng tồn kho toàn hệ thống.
@@ -119,7 +123,7 @@ public class AiIntentRouterService {
                 Current question: %s
                 <|im_end|>
                 <|im_start|>assistant
-                """.formatted(toJson(history), userMessage);
+                """.formatted(toJson(compactHistory(history)), userMessage);
     }
 
     // Parse JSON intent từ output thô của model.
@@ -254,6 +258,16 @@ public class AiIntentRouterService {
         if (containsAny(normalized, "danh sach kho", "liet ke kho", "cac kho", "nhung kho", "kho dang active",
                 "list all active warehouses", "warehouse code")) {
             return AiIntentResult.of(AiIntent.WAREHOUSE_LIST, params, 0.9, "deterministic warehouse list");
+        }
+
+        if (containsAny(normalized, "danh sach san pham", "liet ke san pham", "cac san pham", "list products",
+                "product list", "show products", "xem san pham")) {
+            return AiIntentResult.of(AiIntent.PRODUCT_LIST, params, 0.9, "deterministic product list");
+        }
+
+        if (containsAny(normalized, "bao nhieu san pham", "co bao nhieu san pham", "tong so san pham",
+                "so luong san pham", "how many products", "product count", "tong product")) {
+            return AiIntentResult.of(AiIntent.PRODUCT_COUNT, params, 0.9, "deterministic product count");
         }
 
         if (containsAny(normalized, "putaway", "cat hang", "cho cat vao vi tri", "cho dua vao vi tri", "cho putaway")) {
@@ -512,6 +526,33 @@ public class AiIntentRouterService {
                 .replaceAll("\\bko\\b", "khong")
                 .replaceAll("\\bk\\b", "khong")
                 .replaceAll("\\br\\b", "roi");
+    }
+
+    private List<Map<String, String>> compactHistory(List<Map<String, String>> history) {
+        if (history == null || history.isEmpty()) {
+            return List.of();
+        }
+        int startIndex = Math.max(0, history.size() - MAX_HISTORY_MESSAGES);
+        return history.subList(startIndex, history.size()).stream()
+                .map(this::compactHistoryMessage)
+                .toList();
+    }
+
+    private Map<String, String> compactHistoryMessage(Map<String, String> message) {
+        if (message == null || message.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> compacted = new LinkedHashMap<>();
+        compacted.put("role", truncate(message.get("role"), 32));
+        compacted.put("content", truncate(message.get("content"), MAX_HISTORY_TEXT_LENGTH));
+        return compacted;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength) + "...";
     }
 
     // Chuyển object sang JSON để đưa vào prompt.

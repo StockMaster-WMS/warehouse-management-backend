@@ -18,12 +18,14 @@ public class OllamaClient {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
     private final String model;
+    private final int numCtx;
 
     public OllamaClient(
             RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper,
             @Value("${ai.ollama.api-url:http://localhost:11434}") String apiUrl,
             @Value("${ai.ollama.model:stockmaster-ai}") String model,
+            @Value("${ai.ollama.num-ctx:4096}") int numCtx,
             @Value("${ai.ollama.connect-timeout-seconds:5}") long connectTimeoutSeconds,
             @Value("${ai.ollama.read-timeout-seconds:120}") long readTimeoutSeconds) {
 
@@ -37,6 +39,7 @@ public class OllamaClient {
                 .build();
         this.objectMapper = objectMapper;
         this.model = model;
+        this.numCtx = numCtx;
     }
 
     // Gọi API chat không stream với tham số mặc định.
@@ -69,7 +72,7 @@ public class OllamaClient {
                 "options", Map.of(
                         "temperature", temperature,
                         "top_p", topP,
-                        "num_ctx", 8192,
+                    "num_ctx", numCtx,
                         "stop", List.of("<|im_end|>", "<|endoftext|>")
                 )
         );
@@ -95,7 +98,7 @@ public class OllamaClient {
                 "options", Map.of(
                         "temperature", 0.2,
                         "top_p", 0.3,
-                        "num_ctx", 8192,
+                    "num_ctx", numCtx,
                         "stop", List.of("<|im_end|>", "<|endoftext|>")
                 )
         );
@@ -129,7 +132,7 @@ public class OllamaClient {
                 "options", Map.of(
                         "temperature", temperature,
                         "top_p", topP,
-                        "num_ctx", 8192
+                    "num_ctx", numCtx
                 )
         );
 
@@ -153,7 +156,7 @@ public class OllamaClient {
                 "options", Map.of(
                         "temperature", 0.7,
                         "top_p", 0.9,
-                        "num_ctx", 8192
+                    "num_ctx", numCtx
                 )
         );
 
