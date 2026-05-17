@@ -1,5 +1,6 @@
 package com.warehouse_service.entity;
 
+import com.common.util.CodeGenerator;
 import com.common.util.UuidUtils;
 import jakarta.persistence.*;
 import lombok.*;
@@ -20,6 +21,9 @@ public class CycleCount {
     @Id
     private UUID id;
 
+    @Column(name = "count_number", unique = true, length = 40)
+    private String countNumber;
+
     @Column(name = "warehouse_id", nullable = false)
     private UUID warehouseId;
 
@@ -30,8 +34,17 @@ public class CycleCount {
 
     private String description;
 
+    @Column(name = "scope", length = 20)
+    private String scope;
+
+    @Column(name = "scope_value")
+    private String scopeValue;
+
     @Column(name = "scheduled_at")
     private OffsetDateTime scheduledAt;
+
+    @Column(name = "started_at")
+    private OffsetDateTime startedAt;
 
     @Column(name = "completed_at")
     private OffsetDateTime completedAt;
@@ -53,9 +66,10 @@ public class CycleCount {
         if (id == null) id = UuidUtils.uuidV7();
         if (createdAt == null) createdAt = OffsetDateTime.now();
         if (status == null) status = CycleCountStatus.PENDING;
+        if (countNumber == null) countNumber = CodeGenerator.generate("CC");
     }
 
     public enum CycleCountStatus {
-        PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+        PENDING, IN_PROGRESS, COMPLETED, APPROVED, CANCELLED
     }
 }

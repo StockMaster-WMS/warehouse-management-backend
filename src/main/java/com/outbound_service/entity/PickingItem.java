@@ -52,6 +52,9 @@ public class PickingItem {
     @Column(name = "pick_sequence")
     private Integer pickSequence;
 
+    @Column(name = "assignee_id")
+    private UUID assigneeId;
+
     @PrePersist
     void prePersist() {
         if (id == null) id = UuidUtils.uuidV7();

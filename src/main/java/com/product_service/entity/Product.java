@@ -9,11 +9,10 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "products",
-        indexes = {
-                @Index(name = "idx_products_sku",      columnList = "sku"),
-                @Index(name = "idx_products_category", columnList = "category_id")
-        })
+@Table(name = "products", indexes = {
+        @Index(name = "idx_products_sku", columnList = "sku"),
+        @Index(name = "idx_products_category", columnList = "category_id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -95,9 +94,12 @@ public class Product {
     @PrePersist
     void prePersist() {
         OffsetDateTime now = OffsetDateTime.now();
-        if (id == null) id = UuidUtils.uuidV7();
-        if (createdAt == null) createdAt = now;
-        if (updatedAt == null) updatedAt = now;
+        if (id == null)
+            id = UuidUtils.uuidV7();
+        if (createdAt == null)
+            createdAt = now;
+        if (updatedAt == null)
+            updatedAt = now;
         if (createdBy == null) {
             createdBy = UUID.fromString("00000000-0000-0000-0000-000000000000");
         }

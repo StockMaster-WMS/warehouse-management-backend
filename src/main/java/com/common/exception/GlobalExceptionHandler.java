@@ -59,7 +59,12 @@ public class GlobalExceptionHandler {
             root = root.getCause();
         }
         log.error("Unexpected error (rootCause={}): {}", root.getClass().getName(), root.getMessage(), ex);
+        
+        java.io.StringWriter sw = new java.io.StringWriter();
+        java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+        ex.printStackTrace(pw);
+        
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Lỗi hệ thống", "INTERNAL_SERVER_ERROR"));
+                .body(ApiResponse.error("Error: " + ex.getMessage() + " || Trace: " + sw.toString(), "INTERNAL_SERVER_ERROR"));
     }
 }

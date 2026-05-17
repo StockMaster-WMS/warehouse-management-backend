@@ -29,11 +29,13 @@ public class ReportService {
     private final SalesOrderItemRepository salesOrderItemRepository;
 
     public ReportSummaryResponse getSummary() {
-        BigDecimal totalRevenue = salesOrderRepository.sumTotalRevenue();
+        OffsetDateTime thirtyDaysAgo = OffsetDateTime.now().minusDays(30);
+        BigDecimal totalRevenue = salesOrderRepository.sumTotalRevenue(thirtyDaysAgo);
         long totalOrders = salesOrderRepository.count();
+        long activeOrders = salesOrderRepository.countByStatusNotIn(List.of(SalesOrderStatus.CANCELLED, SalesOrderStatus.DRAFT));
         long shippedOrders = salesOrderRepository.countByStatus(SalesOrderStatus.SHIPPED);
         
-        double completionRate = totalOrders == 0 ? 0 : (double) shippedOrders * 100 / totalOrders;
+        double completionRate = activeOrders == 0 ? 0 : (double) shippedOrders * 100 / activeOrders;
         
         List<RevenueTrendResponse> trend = getRevenueTrend(7);
         List<TopSkuResponse> topSkus = getTopSkus(5);
