@@ -145,36 +145,33 @@ public class AiToolExecutorService {
 
     // Đếm tổng số sản phẩm trong hệ thống.
     private Map<String, Object> countProducts(Map<String, Object> params) {
-        String keyword = firstText(params, "query", "keyword", "product");
-
-        String cleaned = cleanProductKeyword(keyword);
-        String like = null;
-        if (StringUtils.hasText(cleaned)) {
-            String compact = cleaned.replaceAll("\\W+", "");
-            if (compact.length() >= 3) {
-                like = like(cleaned);
-            }
+        String query = firstText(params, "query");
+        if (asksByWarehouse(query)) {
+            List<Map<String, Object>> byWarehouse = jdbcTemplate.queryForList("""
+                    SELECT
+                        w.code AS warehouse_code,
+                        w.name AS warehouse_name,
+                        COUNT(DISTINCT sl.product_id) AS product_count
+                    FROM warehouses w
+                    LEFT JOIN stock_levels sl ON sl.warehouse_id = w.id
+                    GROUP BY w.id, w.code, w.name
+                    ORDER BY w.code ASC
+                    """);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("total", jdbcTemplate.queryForObject("SELECT COUNT(*) FROM products", Long.class));
+            result.put("byWarehouse", byWarehouse);
+            result.put("filtered", false);
+            return result;
         }
 
-        List<Object> args = new ArrayList<>();
-        StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
-        if (StringUtils.hasText(like)) {
-            where.append(" AND (LOWER(p.sku) LIKE ? OR LOWER(p.name) LIKE ? OR LOWER(c.name) LIKE ?)");
-            args.add(like);
-            args.add(like);
-            args.add(like);
-        }
-
-        Map<String, Object> totalRow = jdbcTemplate.queryForMap(("""
+        Map<String, Object> totalRow = jdbcTemplate.queryForMap("""
                 SELECT COUNT(*) AS total
-                FROM products p
-                LEFT JOIN categories c ON c.id = p.category_id
-                %s
-                """.formatted(where)), args.toArray());
+                FROM products
+                """);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", totalRow.get("total"));
-        result.put("filtered", StringUtils.hasText(keyword));
+        result.put("filtered", false);
         return result;
     }
 
@@ -1986,6 +1983,15 @@ public class AiToolExecutorService {
                 || normalized.contains(" kho wh-") || normalized.contains("kho hcm") || normalized.contains("kho hn")
                 || normalized.contains("kho ha noi") || normalized.contains("kho da nang")
                 || normalized.contains("tp hcm") || normalized.contains("wh-hcm") || normalized.contains("wh-hn");
+    }
+
+    private boolean asksByWarehouse(String query) {
+        String normalized = normalize(query);
+        return normalized.contains("tung kho")
+                || normalized.contains("moi kho")
+                || normalized.contains("theo kho")
+                || normalized.contains("per warehouse")
+                || normalized.contains("by warehouse");
     }
 
     // Chấm điểm candidate theo token xuất hiện trong câu hỏi.
