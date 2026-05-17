@@ -135,7 +135,7 @@ public class PurchaseOrderService {
     @Transactional
     public PurchaseOrderResponse update(UUID id, UpdatePurchaseOrderRequest request) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
-        requirePoNotFinished(purchaseOrder);
+        requirePoDraft(purchaseOrder, "Chỉ cập nhật đơn nhập khi đang DRAFT");
         PurchaseOrderResponse before = purchaseOrderMapper.toResponse(purchaseOrder);
 
         purchaseOrderRepository.findByPoNumber(request.poNumber())
@@ -158,7 +158,7 @@ public class PurchaseOrderService {
     @Transactional
     public void delete(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
-        requirePoNotFinished(purchaseOrder);
+        requirePoDraft(purchaseOrder, "Chỉ xóa đơn nhập khi đang DRAFT");
         if (poItemRepository.existsByPurchaseOrderId(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không thể xóa PO đã có dòng hàng");
         }
@@ -200,9 +200,10 @@ public class PurchaseOrderService {
     public PurchaseOrderResponse cancel(UUID id) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
         PurchaseOrderResponse before = purchaseOrderMapper.toResponse(purchaseOrder);
-        if (purchaseOrder.getStatus() == PurchaseOrderStatus.COMPLETED) {
+        if (purchaseOrder.getStatus() == PurchaseOrderStatus.PARTIAL
+                || purchaseOrder.getStatus() == PurchaseOrderStatus.COMPLETED) {
             throw new AppException(ErrorCode.BAD_REQUEST,
-                    "Không thể hủy đơn nhập đã hoàn tất");
+                    "Không thể hủy đơn nhập đã phát sinh nhận hàng");
         }
         if (purchaseOrder.getStatus() == PurchaseOrderStatus.CANCELLED) {
             throw new AppException(ErrorCode.BAD_REQUEST,
@@ -229,6 +230,12 @@ public class PurchaseOrderService {
                 || purchaseOrder.getStatus() == PurchaseOrderStatus.CANCELLED) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Đơn nhập đã kết thúc, không thể chỉnh sửa");
+        }
+    }
+
+    private void requirePoDraft(PurchaseOrder purchaseOrder, String message) {
+        if (purchaseOrder.getStatus() != PurchaseOrderStatus.DRAFT) {
+            throw new AppException(ErrorCode.BAD_REQUEST, message);
         }
     }
 

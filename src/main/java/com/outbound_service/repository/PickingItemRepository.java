@@ -31,6 +31,8 @@ public interface PickingItemRepository extends JpaRepository<PickingItem, UUID>,
 
 	boolean existsBySoItem_SalesOrder_Id(UUID salesOrderId);
 
+	boolean existsBySoItem_Id(UUID soItemId);
+
 	@Query("SELECT p FROM PickingItem p JOIN FETCH p.soItem s JOIN FETCH s.salesOrder WHERE p.id = :id")
 	Optional<PickingItem> findByIdWithSoAndOrder(@Param("id") UUID id);
 }

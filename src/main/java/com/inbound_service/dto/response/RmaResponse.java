@@ -21,6 +21,7 @@ public record RmaResponse(
         UUID productId,
         Integer expectedQty,
         Integer receivedQty,
+        UUID receivedLocationId,
         String lotNumber,
         String condition,
         String notes

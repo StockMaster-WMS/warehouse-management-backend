@@ -57,7 +57,7 @@ public class InboundReceiptService {
         }
 
         // 1. Lấy PO và kiểm tra trạng thái
-        PurchaseOrder po = purchaseOrderRepository.findById(request.purchaseOrderId())
+        PurchaseOrder po = purchaseOrderRepository.findByIdForUpdate(request.purchaseOrderId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
 
         if (!RECEIVABLE_STATUSES.contains(po.getStatus())) {
@@ -66,7 +66,7 @@ public class InboundReceiptService {
         }
 
         // 2. Lấy danh sách dòng PO
-        List<PoItem> poItems = poItemRepository.findByPurchaseOrderId(po.getId());
+        List<PoItem> poItems = poItemRepository.findByPurchaseOrderIdForUpdate(po.getId());
         Map<UUID, PoItem> poItemMap = new HashMap<>();
         for (PoItem item : poItems) {
             poItemMap.put(item.getId(), item);

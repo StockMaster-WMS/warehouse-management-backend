@@ -194,6 +194,12 @@ public class StockLevelService {
     @Transactional
     public void delete(UUID id) {
         StockLevel stockLevel = getStockLevel(id);
+        int onHand = stockLevel.getQtyOnHand() == null ? 0 : stockLevel.getQtyOnHand();
+        int reserved = stockLevel.getQtyReserved() == null ? 0 : stockLevel.getQtyReserved();
+        if (onHand != 0 || reserved != 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Không thể xóa dòng tồn còn số lượng. Hãy điều chỉnh tồn về 0 trước");
+        }
         StockLevelResponse before = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stockLevel));
         stockLevelRepository.delete(stockLevel);
         auditLogService.record("STOCK", "DELETE", "Xóa tồn kho",

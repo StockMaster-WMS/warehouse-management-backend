@@ -30,6 +30,8 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class LocationService {
 
+    private static final int MAX_BULK_LOCATIONS = 5_000;
+
     private final LocationRepository locationRepository;
     private final WarehouseRepository warehouseRepository;
     private final StockLevelRepository stockLevelRepository;
@@ -71,6 +73,14 @@ public class LocationService {
     @Transactional
     public void generateBulk(BulkLocationGeneratorRequest request) {
         Warehouse warehouse = getWarehouse(request.getWarehouseId());
+        long total = 1L * request.getAisleCount()
+                * request.getRackCount()
+                * request.getLevelCount()
+                * request.getBinCount();
+        if (total > MAX_BULK_LOCATIONS) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Số vị trí tạo hàng loạt vượt giới hạn " + MAX_BULK_LOCATIONS);
+        }
         List<Location> locations = new ArrayList<>();
 
         for (int a = 1; a <= request.getAisleCount(); a++) {

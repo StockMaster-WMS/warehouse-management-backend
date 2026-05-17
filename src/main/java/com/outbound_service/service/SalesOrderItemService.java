@@ -10,6 +10,7 @@ import com.outbound_service.entity.SalesOrder;
 import com.outbound_service.entity.SalesOrderItem;
 import com.outbound_service.entity.SalesOrderStatus;
 import com.outbound_service.mapper.SalesOrderItemMapper;
+import com.outbound_service.repository.PickingItemRepository;
 import com.outbound_service.repository.SalesOrderItemRepository;
 import com.outbound_service.repository.SalesOrderItemSpecification;
 import com.outbound_service.repository.SalesOrderRepository;
@@ -29,6 +30,7 @@ public class SalesOrderItemService {
 
     private final SalesOrderItemRepository salesOrderItemRepository;
     private final SalesOrderRepository salesOrderRepository;
+    private final PickingItemRepository pickingItemRepository;
     private final SalesOrderItemMapper salesOrderItemMapper;
 
     // Lấy danh sách dòng đơn xuất có phân trang và tìm kiếm.
@@ -67,9 +69,16 @@ public class SalesOrderItemService {
     @Transactional
     public SalesOrderItemResponse update(UUID id, UpdateSalesOrderItemRequest request) {
         SalesOrderItem item = getLine(id);
-        SalesOrder order = getOrder(request.salesOrderId());
+        SalesOrder order = item.getSalesOrder();
         requireOrderPending(order);
-        ensureLineUnique(request.salesOrderId(), request.lineNumber(), id);
+        if (!order.getId().equals(request.salesOrderId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không được chuyển dòng đơn xuất sang đơn khác");
+        }
+        if (pickingItemRepository.existsBySoItem_Id(id)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Không thể sửa dòng đơn xuất đã có picking; hãy xử lý picking trước");
+        }
+        ensureLineUnique(order.getId(), request.lineNumber(), id);
 
         int shipped = request.shippedQty() == null ? item.getShippedQty() : request.shippedQty();
         if (shipped < 0 || shipped > request.orderedQty()) {
@@ -88,12 +97,16 @@ public class SalesOrderItemService {
     public void delete(UUID id) {
         SalesOrderItem item = getLine(id);
         requireOrderPending(item.getSalesOrder());
+        if (pickingItemRepository.existsBySoItem_Id(id)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Không thể xóa dòng đơn xuất đã có picking");
+        }
         salesOrderItemRepository.delete(item);
     }
 
     // Tìm thực thể dòng đơn xuất, ném lỗi nếu không tồn tại.
     private SalesOrderItem getLine(UUID id) {
-        return salesOrderItemRepository.findById(id)
+        return salesOrderItemRepository.findByIdWithSalesOrder(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn xuất"));
     }
 
