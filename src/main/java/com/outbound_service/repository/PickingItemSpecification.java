@@ -18,4 +18,10 @@ public class PickingItemSpecification {
     public static Specification<PickingItem> hasLocationId(UUID locationId) {
         return (root, query, cb) -> locationId == null ? null : cb.equal(root.get("locationId"), locationId);
     }
+
+    public static Specification<PickingItem> hasStatus(String status) {
+        return (root, query, cb) -> (status == null || status.isBlank()) 
+            ? null 
+            : cb.equal(root.get("status"), com.outbound_service.entity.PickingItemStatus.valueOf(status.toUpperCase()));
+    }
 }

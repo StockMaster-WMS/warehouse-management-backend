@@ -63,7 +63,8 @@ public class DashboardService {
             StockSummaryResponse stock,
             long openPurchaseOrders,
             long openSalesOrders) {
-        java.math.BigDecimal totalRevenue = salesOrderRepository.sumTotalRevenue();
+        java.time.OffsetDateTime thirtyDaysAgo = java.time.OffsetDateTime.now().minusDays(30);
+        java.math.BigDecimal totalRevenue = salesOrderRepository.sumTotalRevenue(thirtyDaysAgo);
         long customerCount = customerRepository.count();
 
         return List.of(

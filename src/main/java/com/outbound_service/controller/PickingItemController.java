@@ -37,19 +37,43 @@ public class PickingItemController {
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
-    @Operation(summary = "Lấy danh sách picking items", description = "Phân trang; lọc soItemId, productId, locationId")
+    @Operation(summary = "Lấy danh sách picking items", description = "Phân trang; lọc soItemId, productId, locationId, status")
     public ApiResponse<PagedResponse<PickingItemResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "id") String sort,
-            @RequestParam(defaultValue = "desc") String sortDir,
+            @RequestParam(defaultValue = "pickSequence") String sort,
+            @RequestParam(defaultValue = "asc") String sortDir,
             @Parameter(description = "ID so item") @RequestParam(required = false) UUID soItemId,
             @Parameter(description = "ID sản phẩm") @RequestParam(required = false) UUID productId,
-            @Parameter(description = "ID vị trí") @RequestParam(required = false) UUID locationId) {
-        String resolvedSort = resolveSortField(sort);
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), resolvedSort));
+            @Parameter(description = "ID vị trí") @RequestParam(required = false) UUID locationId,
+            @Parameter(description = "Trạng thái (PENDING, PICKED, ...)") @RequestParam(required = false) String status) {
+        
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách picking item thành công",
-                pickingItemService.findAll(pageable, soItemId, productId, locationId));
+                pickingItemService.findAll(pageable, soItemId, productId, locationId, status));
+    }
+
+    @PostMapping("/{id}/assign")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @Operation(summary = "Phân công nhiệm vụ lấy hàng")
+    public ApiResponse<PickingItemResponse> assignTask(@PathVariable UUID id, @RequestBody java.util.Map<String, String> payload) {
+        UUID assigneeId = payload.get("assigneeId") != null ? UUID.fromString(payload.get("assigneeId")) : null;
+        return ApiResponse.success("Phân công thành công", pickingItemService.assignTask(id, assigneeId));
+    }
+
+    @PostMapping("/{id}/exception")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @Operation(summary = "Báo lỗi lấy hàng")
+    public ApiResponse<PickingItemResponse> reportException(@PathVariable UUID id, @RequestBody java.util.Map<String, String> payload) {
+        String reason = payload.get("reason");
+        return ApiResponse.success("Ghi nhận báo lỗi thành công", pickingItemService.reportException(id, reason));
+    }
+
+    @PostMapping("/{id}/complete-mobile")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @Operation(summary = "Hoàn tất picking nhanh cho Mobile", description = "Dùng cho Mobile khi quét xong: Tự động set status=PICKED và cập nhật kho")
+    public ApiResponse<PickingItemResponse> completeMobile(@PathVariable UUID id) {
+        return ApiResponse.success("Hoàn tất lấy hàng thành công", pickingItemService.completeMobile(id));
     }
 
     private String resolveSortField(String sort) {

@@ -1,6 +1,5 @@
 package com.warehouse_service.dto.request;
 
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.Valid;
 import java.time.OffsetDateTime;
@@ -14,8 +13,27 @@ public record CreateCycleCountRequest(
     String description,
 
     OffsetDateTime scheduledAt,
+    /**
+     * SCOPE mode: WAREHOUSE, ZONE, LOCATION, PRODUCT
+     * - If scope is set, items can be null/empty
+     * - If scope is null, items must be provided
+     */
+    String scope,
 
-    @NotEmpty(message = "Cần ít nhất một sản phẩm để kiểm kê")
+    /**
+     * scopeValue depends on scope:
+     * - WAREHOUSE: ignored (uses warehouseId)
+     * - ZONE: zone name (e.g., "A", "B", "COLD_ZONE")
+     * - LOCATION: locationId
+     * - PRODUCT: productId
+     */
+    String scopeValue,
+
+    /**
+     * Manual mode: List của items cần kiểm kê
+     * - Required if scope is null
+     * - Ignored if scope is set
+     */
     @Valid
     List<ItemRequest> items
 ) {

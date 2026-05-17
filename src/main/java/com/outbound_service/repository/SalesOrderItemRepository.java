@@ -16,10 +16,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface SalesOrderItemRepository extends JpaRepository<SalesOrderItem, UUID>, JpaSpecificationExecutor<SalesOrderItem> {
+public interface SalesOrderItemRepository
+        extends JpaRepository<SalesOrderItem, UUID>, JpaSpecificationExecutor<SalesOrderItem> {
 
     @Override
-    @EntityGraph(attributePaths = {"salesOrder"})
+    @EntityGraph(attributePaths = { "salesOrder" })
     Page<SalesOrderItem> findAll(Specification<SalesOrderItem> spec, Pageable pageable);
 
     List<SalesOrderItem> findBySalesOrder_Id(UUID salesOrderId);
@@ -37,14 +38,17 @@ public interface SalesOrderItemRepository extends JpaRepository<SalesOrderItem, 
 
     interface TopSkuView {
         UUID getProductId();
+
         String getProductSku();
+
         Long getTotalQty();
+
         java.math.BigDecimal getTotalRevenue();
     }
 
     @Query(value = """
-            select product_id as "productId", 
-                   product_sku as "productSku", 
+            select product_id as "productId",
+                   product_sku as "productSku",
                    sum(shipped_qty) as "totalQty",
                    sum(unit_price * shipped_qty) as "totalRevenue"
             from sales_order_items
@@ -56,6 +60,7 @@ public interface SalesOrderItemRepository extends JpaRepository<SalesOrderItem, 
 
     interface DailyRevenueView {
         java.time.LocalDate getOrderDate();
+
         java.math.BigDecimal getRevenue();
     }
 

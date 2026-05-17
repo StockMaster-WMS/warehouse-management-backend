@@ -6,20 +6,28 @@ import java.util.UUID;
 
 public record CycleCountResponse(
     UUID id,
+    String countNumber,
     UUID warehouseId,
+    String warehouseName,
     String status,
     String description,
+    String scope,
+    String scopeValue,
     OffsetDateTime scheduledAt,
+    OffsetDateTime startedAt,
     OffsetDateTime completedAt,
     UUID createdBy,
     UUID approvedBy,
     OffsetDateTime createdAt,
-    List<ItemResponse> items
+    List<LineResponse> lines
 ) {
-    public record ItemResponse(
+    public record LineResponse(
         UUID id,
         UUID productId,
+        String productName,
+        String productSku,
         UUID locationId,
+        String locationCode,
         String lotNumber,
         Integer systemQty,
         Integer countedQty,
