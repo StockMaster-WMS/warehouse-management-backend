@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -42,6 +43,7 @@ public class RmaService {
 
     @Transactional
     public RmaResponse create(CreateRmaRequest request) {
+        validateCreateRequest(request);
         Rma rma = Rma.builder()
                 .rmaNumber(CodeGenerator.generate("RMA"))
                 .salesOrderId(request.salesOrderId())
@@ -64,7 +66,7 @@ public class RmaService {
 
     @Transactional
     public RmaResponse receiveItem(UUID rmaId, ReceiveRmaRequest request) {
-        Rma rma = rmaRepository.findById(rmaId)
+        Rma rma = rmaRepository.findByIdWithItemsForUpdate(rmaId)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy RMA"));
 
         RmaItem item = rma.getItems().stream()
@@ -72,26 +74,35 @@ public class RmaService {
                 .findFirst()
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy mặt hàng trong RMA"));
 
-        item.setReceivedQty(request.receivedQty());
+        if (rma.getStatus() == Rma.RmaStatus.COMPLETED || rma.getStatus() == Rma.RmaStatus.CANCELLED) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không thể nhận hàng cho RMA đã kết thúc");
+        }
+
+        int expectedQty = item.getExpectedQty() == null ? 0 : item.getExpectedQty();
+        int oldReceivedQty = item.getReceivedQty() == null ? 0 : item.getReceivedQty();
+        int newReceivedQty = request.receivedQty();
+        if (newReceivedQty > expectedQty) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Số lượng nhận không được vượt quá số lượng dự kiến (" + newReceivedQty + "/" + expectedQty + ")");
+        }
+
+        UUID oldLocationId = item.getReceivedLocationId();
+        UUID newLocationId = request.locationId() != null ? request.locationId() : oldLocationId;
+        if (newReceivedQty > 0 && newLocationId == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Cần chọn vị trí nhận hàng trả lại");
+        }
+
+        replaceRestockedQuantity(rma, item, oldReceivedQty, oldLocationId, newReceivedQty, newLocationId);
+
+        item.setReceivedQty(newReceivedQty);
+        item.setReceivedLocationId(newReceivedQty > 0 ? newLocationId : null);
         item.setCondition(request.condition());
         item.setNotes(request.notes());
 
-        // Increment stock if location is provided
-        if (request.locationId() != null && request.receivedQty() > 0) {
-            stockLevelService.adjust(new StockAdjustCommand(
-                    rma.getWarehouseId(),
-                    request.locationId(),
-                    item.getProductId(),
-                    item.getLotNumber(),
-                    request.receivedQty(),
-                    "RMA_RECEIVE:" + rma.getId() + ":" + item.getId(),
-                    "RMA",
-                    rma.getId()
-            ));
-        }
-
-        if (rma.getStatus() == Rma.RmaStatus.REQUESTED) {
+        if (hasAnyReceivedItem(rma)) {
             rma.setStatus(Rma.RmaStatus.RECEIVED);
+        } else {
+            rma.setStatus(Rma.RmaStatus.REQUESTED);
         }
 
         return toResponse(rmaRepository.save(rma));
@@ -99,8 +110,24 @@ public class RmaService {
 
     @Transactional
     public RmaResponse complete(UUID id) {
-        Rma rma = rmaRepository.findById(id)
+        Rma rma = rmaRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy RMA"));
+
+        if (rma.getStatus() == Rma.RmaStatus.COMPLETED) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "RMA đã hoàn tất trước đó");
+        }
+        if (rma.getStatus() == Rma.RmaStatus.CANCELLED) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không thể hoàn tất RMA đã hủy");
+        }
+        for (RmaItem item : rma.getItems()) {
+            int expected = item.getExpectedQty() == null ? 0 : item.getExpectedQty();
+            int received = item.getReceivedQty() == null ? 0 : item.getReceivedQty();
+            if (received != expected) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Chưa nhận đủ hàng trả cho sản phẩm " + item.getProductId()
+                                + " (" + received + "/" + expected + ")");
+            }
+        }
 
         rma.setStatus(Rma.RmaStatus.COMPLETED);
         rma.setCompletedAt(OffsetDateTime.now());
@@ -114,6 +141,7 @@ public class RmaService {
                         i.getProductId(),
                         i.getExpectedQty(),
                         i.getReceivedQty(),
+                        i.getReceivedLocationId(),
                         i.getLotNumber(),
                         i.getCondition(),
                         i.getNotes()
@@ -131,5 +159,59 @@ public class RmaService {
                 rma.getCompletedAt(),
                 items
         );
+    }
+
+    private void validateCreateRequest(CreateRmaRequest request) {
+        for (CreateRmaRequest.ItemRequest item : request.items()) {
+            if (item.expectedQty() == null || item.expectedQty() <= 0) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng dự kiến trả phải lớn hơn 0");
+            }
+        }
+    }
+
+    private void replaceRestockedQuantity(Rma rma, RmaItem item,
+            int oldReceivedQty, UUID oldLocationId,
+            int newReceivedQty, UUID newLocationId) {
+        if (oldReceivedQty == newReceivedQty && Objects.equals(oldLocationId, newLocationId)) {
+            return;
+        }
+
+        if (oldReceivedQty > 0 && oldLocationId == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "RMA thiếu vị trí nhận cũ, không thể điều chỉnh tồn kho an toàn");
+        }
+
+        if (oldReceivedQty > 0) {
+            stockLevelService.adjust(new StockAdjustCommand(
+                    rma.getWarehouseId(),
+                    oldLocationId,
+                    item.getProductId(),
+                    item.getLotNumber(),
+                    -oldReceivedQty,
+                    "RMA_RECEIVE:" + rma.getId() + ":" + item.getId() + ":REVERSE:"
+                            + oldLocationId + ":" + oldReceivedQty + ":TO:" + newReceivedQty + ":" + newLocationId,
+                    "RMA",
+                    rma.getId()
+            ));
+        }
+
+        if (newReceivedQty > 0) {
+            stockLevelService.adjust(new StockAdjustCommand(
+                    rma.getWarehouseId(),
+                    newLocationId,
+                    item.getProductId(),
+                    item.getLotNumber(),
+                    newReceivedQty,
+                    "RMA_RECEIVE:" + rma.getId() + ":" + item.getId() + ":APPLY:"
+                            + newLocationId + ":" + newReceivedQty + ":FROM:" + oldReceivedQty + ":" + oldLocationId,
+                    "RMA",
+                    rma.getId()
+            ));
+        }
+    }
+
+    private boolean hasAnyReceivedItem(Rma rma) {
+        return rma.getItems().stream()
+                .anyMatch(item -> item.getReceivedQty() != null && item.getReceivedQty() > 0);
     }
 }

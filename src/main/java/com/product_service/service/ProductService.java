@@ -152,9 +152,11 @@ public class ProductService {
     public void delete(UUID id) {
         Product product = getProduct(id);
         ProductResponse before = productMapper.toResponse(product);
-        productRepository.delete(product);
-        auditLogService.record("PRODUCT", "DELETE", "Xóa sản phẩm",
-                "PRODUCT", id, before.sku(), before, null,
+        product.setStatus("INACTIVE");
+        Product saved = productRepository.save(product);
+        ProductResponse after = productMapper.toResponse(saved);
+        auditLogService.record("PRODUCT", "DEACTIVATE", "Ngừng sử dụng sản phẩm",
+                "PRODUCT", id, before.sku(), before, after,
                 null, Map.of("sku", before.sku()));
     }
 

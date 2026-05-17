@@ -5,6 +5,7 @@ import com.ai_service.intent.AiIntentResult;
 import com.ai_service.tool.AiToolResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -95,8 +96,18 @@ public class AiToolExecutorService {
             case OUTBOUND_REPORT -> AiToolResult.data("ReportTool.getOutboundReport", getOutboundReport(params));
             case MONTHLY_REPORT -> AiToolResult.data("ReportTool.getMonthlyReport", getMonthlyReport());
             case GLOBAL_SEARCH -> AiToolResult.data("SearchTool.globalSearch", getGlobalSearch(params));
-            case AUDIT_LOG -> AiToolResult.data("AuditTool.getAuditLogs", getAuditLogs(params));
-            case AI_AUDIT_LOG -> AiToolResult.data("AuditTool.getAiAuditLogs", getAiAuditLogs(params));
+            case AUDIT_LOG -> {
+                if (!hasAuthority("ADMIN")) {
+                    yield AiToolResult.message("AuditTool.forbidden", "Bạn không có quyền xem nhật ký hệ thống.");
+                }
+                yield AiToolResult.data("AuditTool.getAuditLogs", getAuditLogs(params));
+            }
+            case AI_AUDIT_LOG -> {
+                if (!hasAuthority("ADMIN")) {
+                    yield AiToolResult.message("AuditTool.forbidden", "Bạn không có quyền xem nhật ký AI.");
+                }
+                yield AiToolResult.data("AuditTool.getAiAuditLogs", getAiAuditLogs(params));
+            }
             case GENERAL_GUIDE -> AiToolResult.message("GeneralGuide", getGuide(params));
             case AMBIGUOUS -> AiToolResult.message("Clarification",
                     "Bạn vui lòng nói rõ thêm mã kho, SKU, đơn hàng hoặc khoảng thời gian cần kiểm tra.");
@@ -1756,6 +1767,13 @@ public class AiToolExecutorService {
             }
         }
         return null;
+    }
+
+    private boolean hasAuthority(String authority) {
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null
+                && authentication.getAuthorities().stream()
+                .anyMatch(granted -> authority.equals(granted.getAuthority()));
     }
 
     private void appendDateRange(StringBuilder sql, List<Object> args, String column, String dateRange) {

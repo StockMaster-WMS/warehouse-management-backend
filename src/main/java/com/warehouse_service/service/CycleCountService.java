@@ -8,16 +8,21 @@ import com.warehouse_service.dto.request.RecordCountRequest;
 import com.warehouse_service.dto.response.CycleCountResponse;
 import com.warehouse_service.entity.CycleCount;
 import com.warehouse_service.entity.CycleCountItem;
+import com.warehouse_service.entity.Location;
 import com.warehouse_service.entity.StockLevel;
 import com.warehouse_service.repository.CycleCountItemRepository;
 import com.warehouse_service.repository.CycleCountRepository;
+import com.warehouse_service.repository.LocationRepository;
 import com.warehouse_service.repository.StockLevelRepository;
+import com.warehouse_service.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -30,6 +35,8 @@ public class CycleCountService {
     private final CycleCountItemRepository cycleCountItemRepository;
     private final StockLevelRepository stockLevelRepository;
     private final StockLevelService stockLevelService;
+    private final WarehouseRepository warehouseRepository;
+    private final LocationRepository locationRepository;
 
     public List<CycleCountResponse> getAll() {
         return cycleCountRepository.findAll().stream()
@@ -45,6 +52,10 @@ public class CycleCountService {
 
     @Transactional
     public CycleCountResponse create(CreateCycleCountRequest request, UUID creatorId) {
+        warehouseRepository.findById(request.warehouseId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho"));
+
+        Set<String> uniqueLines = new HashSet<>();
         CycleCount count = CycleCount.builder()
                 .warehouseId(request.warehouseId())
                 .description(request.description())
@@ -56,8 +67,21 @@ public class CycleCountService {
         CycleCount saved = cycleCountRepository.save(count);
 
         List<CycleCountItem> items = request.items().stream().map(req -> {
+            Location location = locationRepository.findById(req.locationId())
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy vị trí"));
+            if (!location.getWarehouse().getId().equals(request.warehouseId())) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Vị trí kiểm kê không thuộc kho đã chọn");
+            }
+
+            String lot = normalizeLot(req.lotNumber());
+            String lineKey = req.locationId() + ":" + req.productId() + ":" + lot;
+            if (!uniqueLines.add(lineKey)) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Dòng kiểm kê bị trùng vị trí/sản phẩm/lô: " + lineKey);
+            }
+
             Integer systemQty = stockLevelRepository.findByLocationIdAndProductIdAndLotNumber(
-                            req.locationId(), req.productId(), req.lotNumber())
+                            req.locationId(), req.productId(), lot)
                     .map(StockLevel::getQtyOnHand)
                     .orElse(0);
 
@@ -65,7 +89,7 @@ public class CycleCountService {
                     .cycleCount(saved)
                     .productId(req.productId())
                     .locationId(req.locationId())
-                    .lotNumber(req.lotNumber())
+                    .lotNumber(lot)
                     .systemQty(systemQty)
                     .status(CycleCountItem.ItemStatus.PENDING)
                     .build();
@@ -89,12 +113,19 @@ public class CycleCountService {
 
     @Transactional
     public CycleCountResponse recordCount(UUID countId, RecordCountRequest request) {
-        CycleCountItem item = cycleCountItemRepository.findById(request.itemId())
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng kiểm kê"));
-
-        if (!item.getCycleCount().getId().equals(countId)) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Dòng kiểm kê không thuộc đợt này");
+        CycleCount count = cycleCountRepository.findByIdWithItemsForUpdate(countId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đợt kiểm kê"));
+        if (count.getStatus() != CycleCount.CycleCountStatus.IN_PROGRESS) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ ghi nhận số lượng khi đợt kiểm kê đang IN_PROGRESS");
         }
+        if (request.countedQty() < 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng đếm được không được âm");
+        }
+
+        CycleCountItem item = count.getItems().stream()
+                .filter(line -> line.getId().equals(request.itemId()))
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng kiểm kê"));
 
         item.setCountedQty(request.countedQty());
         item.setDiscrepancy(request.countedQty() - item.getSystemQty());
@@ -102,12 +133,13 @@ public class CycleCountService {
         item.setStatus(CycleCountItem.ItemStatus.COUNTED);
 
         cycleCountItemRepository.save(item);
-        return toResponse(getEntity(countId));
+        return toResponse(count);
     }
 
     @Transactional
     public CycleCountResponse completeAndAdjust(UUID id, UUID approverId) {
-        CycleCount count = getEntity(id);
+        CycleCount count = cycleCountRepository.findByIdWithItemsForUpdate(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đợt kiểm kê"));
         if (count.getStatus() != CycleCount.CycleCountStatus.IN_PROGRESS) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ hoàn tất khi đang IN_PROGRESS");
         }
@@ -119,7 +151,7 @@ public class CycleCountService {
                         count.getWarehouseId(),
                         item.getLocationId(),
                         item.getProductId(),
-                        item.getLotNumber(),
+                        normalizeLot(item.getLotNumber()),
                         item.getDiscrepancy(),
                         "CYCLE_COUNT:" + count.getId() + ":" + item.getId(),
                         "CYCLE_COUNT",
@@ -142,6 +174,10 @@ public class CycleCountService {
     private CycleCount getEntity(UUID id) {
         return cycleCountRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đợt kiểm kê"));
+    }
+
+    private String normalizeLot(String lotNumber) {
+        return lotNumber == null ? "" : lotNumber.trim();
     }
 
     private CycleCountResponse toResponse(CycleCount count) {

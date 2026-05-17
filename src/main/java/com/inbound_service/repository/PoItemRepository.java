@@ -24,6 +24,10 @@ public interface PoItemRepository extends JpaRepository<PoItem, UUID>, JpaSpecif
 
 	List<PoItem> findByPurchaseOrderId(UUID purchaseOrderId);
 
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("SELECT p FROM PoItem p JOIN FETCH p.purchaseOrder WHERE p.purchaseOrder.id = :purchaseOrderId ORDER BY p.lineNumber ASC")
+	List<PoItem> findByPurchaseOrderIdForUpdate(@Param("purchaseOrderId") UUID purchaseOrderId);
+
 	boolean existsByPurchaseOrderId(UUID purchaseOrderId);
 
 	Optional<PoItem> findByPurchaseOrderIdAndLineNumber(UUID purchaseOrderId, Short lineNumber);
@@ -37,4 +41,6 @@ public interface PoItemRepository extends JpaRepository<PoItem, UUID>, JpaSpecif
 
 	@Query("SELECT COALESCE(MAX(p.lineNumber), 0) FROM PoItem p WHERE p.purchaseOrder.id = :poId")
 	short findMaxLineNumberByPurchaseOrderId(@Param("poId") UUID poId);
+
+	boolean existsByProductId(UUID productId);
 }
