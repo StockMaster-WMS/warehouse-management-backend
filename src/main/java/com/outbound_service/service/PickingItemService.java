@@ -54,10 +54,11 @@ public class PickingItemService {
 
     // Lấy danh sách picking item có phân trang và bộ lọc.
     public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId,
-            UUID locationId) {
+            UUID locationId, String status) {
         Specification<PickingItem> spec = PickingItemSpecification.hasSoItemId(soItemId)
                 .and(PickingItemSpecification.hasProductId(productId))
-                .and(PickingItemSpecification.hasLocationId(locationId));
+                .and(PickingItemSpecification.hasLocationId(locationId))
+                .and(PickingItemSpecification.hasStatus(status));
         Page<PickingItem> page = pickingItemRepository.findAll(spec, pageable);
         Map<UUID, ProductResponse> productCache = new HashMap<>();
         Map<UUID, LocationResponse> locationCache = new HashMap<>();
@@ -102,7 +103,8 @@ public class PickingItemService {
                 product == null ? null : product.name(),
                 product == null ? null : product.barcodeEan13(),
                 location == null ? null : location.code(),
-                location == null ? null : location.code());
+                location == null ? null : location.code(),
+                row.assigneeId());
     }
 
     // Tải thông tin sản phẩm theo hướng an toàn, không làm hỏng luồng danh sách.
@@ -219,6 +221,38 @@ public class PickingItemService {
 
         PickingItem saved = pickingItemRepository.save(existing);
         PickingItemResponse after = pickingItemMapper.toResponse(saved);
+
+        // Logic trọng tâm cho Mobile: Khi hoàn tất lấy hàng (PICKED), trừ tồn thực tế và giải phóng giữ chỗ
+        if (saved.getStatus() == PickingItemStatus.PICKED && (before.status() == null || !before.status().equals("PICKED"))) {
+            try {
+                // 1. Trừ tồn tay (OnHand)
+                stockLevelService.adjust(new com.common.api.stock.StockAdjustCommand(
+                        so.getWarehouseId(),
+                        saved.getLocationId(),
+                        saved.getProductId(),
+                        org.springframework.util.StringUtils.hasText(saved.getLotNumber()) ? saved.getLotNumber() : "",
+                        -saved.getQtyToPick(),
+                        "PICKING_ITEM:" + saved.getId() + ":COMPLETE_PICK",
+                        "PICKING_ITEM",
+                        saved.getId()
+                ));
+
+                // 2. Giải phóng giữ chỗ (Reserved)
+                stockLevelService.adjustReserved(new com.common.api.stock.StockReserveCommand(
+                        so.getWarehouseId(),
+                        saved.getLocationId(),
+                        saved.getProductId(),
+                        org.springframework.util.StringUtils.hasText(saved.getLotNumber()) ? saved.getLotNumber() : "",
+                        -saved.getQtyToPick(),
+                        "PICKING_ITEM:" + saved.getId() + ":COMPLETE_RELEASE",
+                        "PICKING_ITEM",
+                        saved.getId()
+                ));
+            } catch (Exception e) {
+                log.error("Lỗi cập nhật tồn kho khi hoàn tất picking: {}", e.getMessage());
+            }
+        }
+
         String actionType = saved.getStatus() == PickingItemStatus.PICKED ? "PICK" : "UPDATE";
         String action = saved.getStatus() == PickingItemStatus.PICKED ? "Hoàn tất picking" : "Cập nhật picking";
         auditLogService.record("PICKING", actionType, action,
@@ -248,6 +282,75 @@ public class PickingItemService {
         auditLogService.record("PICKING", "DELETE", "Xóa nhiệm vụ picking",
                 "PICKING_ITEM", id, pickingEntityName(item), before, null,
                 null, pickingMetadata(item));
+    }
+
+    @Transactional
+    public PickingItemResponse assignTask(UUID id, UUID assigneeId) {
+        PickingItem item = pickingItemRepository.findByIdWithSoAndOrder(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy picking item"));
+        PickingItemResponse before = pickingItemMapper.toResponse(item);
+
+        SalesOrder so = item.getSoItem().getSalesOrder();
+        assertSalesOrderAllowsPickingMutation(so);
+
+        item.setAssigneeId(assigneeId);
+        PickingItem saved = pickingItemRepository.save(item);
+        
+        PickingItemResponse after = pickingItemMapper.toResponse(saved);
+        auditLogService.record("PICKING", "ASSIGN", "Phân công nhiệm vụ picking",
+                "PICKING_ITEM", saved.getId(), pickingEntityName(saved), before, after,
+                null, pickingMetadata(saved));
+        return after;
+    }
+
+    @Transactional
+    public PickingItemResponse reportException(UUID id, String reason) {
+        PickingItem item = pickingItemRepository.findByIdWithSoAndOrder(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy picking item"));
+        PickingItemResponse before = pickingItemMapper.toResponse(item);
+
+        SalesOrder so = item.getSoItem().getSalesOrder();
+        assertSalesOrderAllowsPickingMutation(so);
+
+        // Logic: Khi báo lỗi, chuyển lại về PENDING (hoặc trạng thái ngoại lệ nếu có), 
+        // tạm thời đặt qtyPicked = 0.
+        item.setStatus(PickingItemStatus.PENDING);
+        item.setQtyPicked(0);
+        PickingItem saved = pickingItemRepository.save(item);
+        
+        PickingItemResponse after = pickingItemMapper.toResponse(saved);
+        
+        Map<String, Object> meta = pickingMetadata(saved);
+        meta.put("exceptionReason", reason);
+
+        auditLogService.record("PICKING", "EXCEPTION", "Báo lỗi lấy hàng: " + reason,
+                "PICKING_ITEM", saved.getId(), pickingEntityName(saved), before, after,
+                null, meta);
+        return after;
+    }
+
+    @Transactional
+    public PickingItemResponse completeMobile(UUID id) {
+        PickingItem item = pickingItemRepository.findByIdWithSoAndOrder(id)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy picking item"));
+        
+        if (item.getStatus() == PickingItemStatus.PICKED) {
+            return pickingItemMapper.toResponse(item); // Đã hoàn tất
+        }
+
+        UpdatePickingItemRequest request = new UpdatePickingItemRequest(
+            item.getSoItem().getId(),
+            item.getProductId(),
+            item.getLocationId(),
+            item.getQtyToPick(),
+            item.getQtyToPick(), // Hoàn tất nên qtyPicked = qtyToPick
+            "PICKED",
+            item.getPickSequence(),
+            item.getLotNumber()
+        );
+
+        // Reuse the update logic which handles the physical stock deduction and reserve releasing
+        return update(id, request);
     }
 
 

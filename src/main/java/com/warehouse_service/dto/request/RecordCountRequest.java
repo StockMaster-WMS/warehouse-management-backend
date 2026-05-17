@@ -1,14 +1,16 @@
 package com.warehouse_service.dto.request;
 
 import jakarta.validation.constraints.NotNull;
+import java.util.List;
 import java.util.UUID;
 
 public record RecordCountRequest(
-    @NotNull(message = "ID dòng kiểm kê không được để trống")
-    UUID itemId,
-
-    @NotNull(message = "Số lượng đếm được không được để trống")
-    Integer countedQty,
-
-    String notes
-) {}
+    List<ItemResult> results
+) {
+    public record ItemResult(
+        UUID productId,
+        UUID locationId,
+        Integer actualQty,
+        String notes
+    ) {}
+}

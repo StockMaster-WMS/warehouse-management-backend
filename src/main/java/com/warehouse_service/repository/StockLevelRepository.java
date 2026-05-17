@@ -90,4 +90,35 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 	@EntityGraph(attributePaths = {"warehouse", "location"})
 	@Query("select s from StockLevel s where s.id in :ids")
 	List<StockLevel> findByIdInWithWarehouseAndLocation(@Param("ids") Collection<UUID> ids);
+
+	/**
+	 * Find all stock levels in a specific zone within a warehouse
+	 */
+	@EntityGraph(attributePaths = {"warehouse", "location"})
+	@Query("""
+			select s from StockLevel s
+			where s.warehouse.id = :warehouseId
+			  and s.location.zone = :zone
+			order by s.location.code asc
+			""")
+	List<StockLevel> findByWarehouseIdAndZone(@Param("warehouseId") UUID warehouseId, @Param("zone") String zone);
+
+	/**
+	 * Find all stock levels in a specific location
+	 */
+	@EntityGraph(attributePaths = {"warehouse", "location"})
+	@Query("select s from StockLevel s where s.location.id = :locationId order by s.productId asc, s.lotNumber asc")
+	List<StockLevel> findByLocationIdWithDetails(@Param("locationId") UUID locationId);
+
+	/**
+	 * Find all stock levels for a specific product in a warehouse
+	 */
+	@EntityGraph(attributePaths = {"warehouse", "location"})
+	@Query("""
+			select s from StockLevel s
+			where s.warehouse.id = :warehouseId
+			  and s.productId = :productId
+			order by s.location.code asc, s.lotNumber asc
+			""")
+	List<StockLevel> findByWarehouseIdAndProductIdWithDetails(@Param("warehouseId") UUID warehouseId, @Param("productId") UUID productId);
 }

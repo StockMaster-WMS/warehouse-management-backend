@@ -25,7 +25,8 @@ spring:
     enabled: ${WAREHOUSE_FLYWAY_ENABLED:true}
     locations: classpath:db/migration
     baseline-on-migrate: true
-    repair: true
+    validate-on-migrate: ${WAREHOUSE_FLYWAY_VALIDATE_ON_MIGRATE:true}
+    repair-on-migrate: ${WAREHOUSE_FLYWAY_REPAIR_ON_MIGRATE:false}
 
 app:
   cors:
