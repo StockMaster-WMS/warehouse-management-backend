@@ -169,14 +169,6 @@ public class CycleCountService {
         if (request.results() == null || request.results().isEmpty()) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Danh sách kết quả không được rỗng");
         }
-        if (request.countedQty() < 0) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng đếm được không được âm");
-        }
-
-        CycleCountItem item = count.getItems().stream()
-                .filter(line -> line.getId().equals(request.itemId()))
-                .findFirst()
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng kiểm kê"));
 
         for (RecordCountRequest.ItemResult result : request.results()) {
             CycleCountItem item = count.getItems().stream()
@@ -186,6 +178,11 @@ public class CycleCountService {
                     .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
                             "Không tìm thấy dòng kiểm kê: product=" + result.productId()
                                     + ", location=" + result.locationId()));
+            
+            if (result.actualQty() != null && result.actualQty() < 0) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng đếm được không được âm");
+            }
+            
             item.setCountedQty(result.actualQty());
             item.setDiscrepancy(result.actualQty() - item.getSystemQty());
             item.setNotes(result.notes());
@@ -419,5 +416,9 @@ public class CycleCountService {
             log.warn("Failed to load product summaries: {}", e.getMessage());
             return Map.of();
         }
+    }
+
+    private String normalizeLot(String lotNumber) {
+        return lotNumber == null ? "" : lotNumber.trim();
     }
 }
