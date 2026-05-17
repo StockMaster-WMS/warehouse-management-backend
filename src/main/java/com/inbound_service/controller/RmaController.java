@@ -10,9 +10,11 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,8 +30,15 @@ public class RmaController {
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy danh sách yêu cầu trả hàng")
-    public ApiResponse<List<RmaResponse>> getAll() {
-        return ApiResponse.success("Lấy danh sách RMA thành công", rmaService.getAll());
+    public ApiResponse<List<RmaResponse>> getAll(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String reason,
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo) {
+        return ApiResponse.success("Lấy danh sách RMA thành công",
+                rmaService.getAll(keyword, status, reason, warehouseId, createdFrom, createdTo));
     }
 
     @GetMapping("/{id}")

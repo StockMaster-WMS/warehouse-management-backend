@@ -5,6 +5,7 @@ import com.inbound_service.entity.InboundReceiptStatus;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public class InboundReceiptSpecification {
@@ -35,5 +36,17 @@ public class InboundReceiptSpecification {
         return (root, query, cb) -> status == null
                 ? null
                 : cb.equal(root.get("status"), status);
+    }
+
+    public static Specification<InboundReceipt> createdFrom(OffsetDateTime createdFrom) {
+        return (root, query, cb) -> createdFrom == null
+                ? null
+                : cb.greaterThanOrEqualTo(root.get("createdAt"), createdFrom);
+    }
+
+    public static Specification<InboundReceipt> createdTo(OffsetDateTime createdTo) {
+        return (root, query, cb) -> createdTo == null
+                ? null
+                : cb.lessThanOrEqualTo(root.get("createdAt"), createdTo);
     }
 }

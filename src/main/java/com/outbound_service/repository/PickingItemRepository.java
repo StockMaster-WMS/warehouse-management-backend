@@ -17,7 +17,7 @@ import java.util.UUID;
 public interface PickingItemRepository extends JpaRepository<PickingItem, UUID>, JpaSpecificationExecutor<PickingItem> {
 
 	@Override
-	@EntityGraph(attributePaths = {"soItem"})
+	@EntityGraph(attributePaths = {"soItem", "soItem.salesOrder"})
 	Page<PickingItem> findAll(Specification<PickingItem> spec, Pageable pageable);
 
 	List<PickingItem> findBySoItem_Id(UUID soItemId);

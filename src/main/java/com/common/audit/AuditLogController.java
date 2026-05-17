@@ -8,12 +8,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
+import java.time.OffsetDateTime;
 
 @RestController
 @RequiredArgsConstructor
@@ -33,9 +36,11 @@ public class AuditLogController {
             @RequestParam(required = false) String module,
             @RequestParam(required = false) String actionType,
             @RequestParam(required = false) String entityType,
-            @RequestParam(required = false) String keyword) {
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         return ApiResponse.success("Lấy nhật ký hệ thống thành công",
-                auditLogService.findAll(pageable, module, actionType, entityType, keyword));
+                auditLogService.findAll(pageable, module, actionType, entityType, keyword, createdFrom, createdTo));
     }
 }

@@ -12,11 +12,14 @@ import com.inbound_service.entity.RmaItem;
 import com.inbound_service.repository.RmaRepository;
 import com.warehouse_service.service.StockLevelService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -29,8 +32,32 @@ public class RmaService {
     private final RmaRepository rmaRepository;
     private final StockLevelService stockLevelService;
 
-    public List<RmaResponse> getAll() {
-        return rmaRepository.findAll().stream()
+    public List<RmaResponse> getAll(String keyword, String status, String reason, UUID warehouseId,
+            OffsetDateTime createdFrom, OffsetDateTime createdTo) {
+        String normalizedKeyword = StringUtils.hasText(keyword)
+                ? keyword.trim().toLowerCase(Locale.ROOT)
+                : null;
+        String normalizedStatus = StringUtils.hasText(status)
+                ? status.trim().toUpperCase(Locale.ROOT)
+                : null;
+        String normalizedReason = StringUtils.hasText(reason)
+                ? reason.trim().toUpperCase(Locale.ROOT)
+                : null;
+
+        return rmaRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt")).stream()
+                .filter(rma -> normalizedKeyword == null
+                        || containsIgnoreCase(rma.getRmaNumber(), normalizedKeyword)
+                        || containsIgnoreCase(rma.getCustomerName(), normalizedKeyword)
+                        || containsIgnoreCase(rma.getReason(), normalizedKeyword))
+                .filter(rma -> normalizedStatus == null
+                        || (rma.getStatus() != null && rma.getStatus().name().equals(normalizedStatus)))
+                .filter(rma -> normalizedReason == null
+                        || (rma.getReason() != null && rma.getReason().trim().toUpperCase(Locale.ROOT).equals(normalizedReason)))
+                .filter(rma -> warehouseId == null || warehouseId.equals(rma.getWarehouseId()))
+                .filter(rma -> createdFrom == null
+                        || (rma.getCreatedAt() != null && !rma.getCreatedAt().isBefore(createdFrom)))
+                .filter(rma -> createdTo == null
+                        || (rma.getCreatedAt() != null && !rma.getCreatedAt().isAfter(createdTo)))
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
@@ -213,5 +240,9 @@ public class RmaService {
     private boolean hasAnyReceivedItem(Rma rma) {
         return rma.getItems().stream()
                 .anyMatch(item -> item.getReceivedQty() != null && item.getReceivedQty() > 0);
+    }
+
+    private boolean containsIgnoreCase(String value, String lowercaseNeedle) {
+        return value != null && value.toLowerCase(Locale.ROOT).contains(lowercaseNeedle);
     }
 }

@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
 
+import java.time.OffsetDateTime;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -52,10 +54,12 @@ public class SalesOrderController {
             @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) UUID warehouseId) {
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách đơn xuất thành công",
-                salesOrderService.findAll(pageable, keyword, status, warehouseId));
+                salesOrderService.findAll(pageable, keyword, status, warehouseId, createdFrom, createdTo));
     }
 
     @GetMapping("/{id}")

@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @RestController
@@ -37,7 +39,7 @@ public class PickingItemController {
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
-    @Operation(summary = "Lấy danh sách picking items", description = "Phân trang; lọc soItemId, productId, locationId")
+    @Operation(summary = "Lấy danh sách picking items", description = "Phân trang; lọc soItemId, productId, locationId, status")
     public ApiResponse<PagedResponse<PickingItemResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -45,11 +47,16 @@ public class PickingItemController {
             @RequestParam(defaultValue = "desc") String sortDir,
             @Parameter(description = "ID so item") @RequestParam(required = false) UUID soItemId,
             @Parameter(description = "ID sản phẩm") @RequestParam(required = false) UUID productId,
-            @Parameter(description = "ID vị trí") @RequestParam(required = false) UUID locationId) {
+            @Parameter(description = "ID vị trí") @RequestParam(required = false) UUID locationId,
+            @Parameter(description = "Trạng thái picking") @RequestParam(required = false) String status,
+            @Parameter(description = "Từ thời điểm tạo đơn xuất (ISO 8601)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
+            @Parameter(description = "Đến thời điểm tạo đơn xuất (ISO 8601)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo) {
         String resolvedSort = resolveSortField(sort);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), resolvedSort));
         return ApiResponse.success("Lấy danh sách picking item thành công",
-                pickingItemService.findAll(pageable, soItemId, productId, locationId));
+                pickingItemService.findAll(pageable, soItemId, productId, locationId, status, createdFrom, createdTo));
     }
 
     private String resolveSortField(String sort) {
