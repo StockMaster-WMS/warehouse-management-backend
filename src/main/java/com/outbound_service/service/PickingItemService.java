@@ -5,8 +5,12 @@ import com.common.api.stock.StockReserveCommand;
 import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.product_service.entity.Product;
+import com.product_service.repository.ProductRepository;
 import com.product_service.service.ProductService;
 import com.product_service.dto.response.ProductResponse;
+import com.warehouse_service.entity.Location;
+import com.warehouse_service.repository.LocationRepository;
 import com.warehouse_service.service.LocationService;
 import com.warehouse_service.dto.response.LocationResponse;
 import com.warehouse_service.service.StockLevelService;
@@ -30,13 +34,18 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -48,23 +57,31 @@ public class PickingItemService {
     private final SalesOrderItemRepository salesOrderItemRepository;
     private final PickingItemMapper pickingItemMapper;
     private final StockLevelService stockLevelService;
+    private final ProductRepository productRepository;
+    private final LocationRepository locationRepository;
     private final ProductService productService;
     private final LocationService locationService;
     private final AuditLogService auditLogService;
 
     // Lấy danh sách picking item có phân trang và bộ lọc.
+    @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
     public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId,
-            UUID locationId, String status) {
+            UUID locationId, String status, OffsetDateTime createdFrom, OffsetDateTime createdTo) {
+        PickingItemStatus pickingStatus = parseOptionalPickingStatus(status);
         Specification<PickingItem> spec = PickingItemSpecification.hasSoItemId(soItemId)
                 .and(PickingItemSpecification.hasProductId(productId))
                 .and(PickingItemSpecification.hasLocationId(locationId))
-                .and(PickingItemSpecification.hasStatus(status));
+                .and(PickingItemSpecification.hasStatus(pickingStatus))
+                .and(PickingItemSpecification.salesOrderCreatedFrom(createdFrom))
+                .and(PickingItemSpecification.salesOrderCreatedTo(createdTo));
         Page<PickingItem> page = pickingItemRepository.findAll(spec, pageable);
-        Map<UUID, ProductResponse> productCache = new HashMap<>();
-        Map<UUID, LocationResponse> locationCache = new HashMap<>();
-        List<PickingItemResponse> rows = page.getContent().stream()
+        List<PickingItemResponse> mappedRows = page.getContent().stream()
                 .map(pickingItemMapper::toResponse)
-                .map(row -> enrichListRow(row, productCache, locationCache))
+                .toList();
+        Map<UUID, Product> productsById = loadProductsById(mappedRows);
+        Map<UUID, Location> locationsById = loadLocationsById(mappedRows);
+        List<PickingItemResponse> rows = mappedRows.stream()
+                .map(row -> enrichListRow(row, productsById, locationsById))
                 .toList();
         return new PagedResponse<>(
                 rows,
@@ -76,17 +93,16 @@ public class PickingItemService {
 
     // Bổ sung thông tin sản phẩm và vị trí cho dòng hiển thị danh sách.
     private PickingItemResponse enrichListRow(PickingItemResponse row,
-            Map<UUID, ProductResponse> productCache,
-            Map<UUID, LocationResponse> locationCache) {
-        ProductResponse product = productCache.computeIfAbsent(
-                row.productId(), this::loadProductSafe);
-        LocationResponse location = locationCache.computeIfAbsent(
-                row.locationId(), this::loadLocationSafe);
+            Map<UUID, Product> productsById,
+            Map<UUID, Location> locationsById) {
+        Product product = productsById.get(row.productId());
+        Location location = locationsById.get(row.locationId());
 
         String productSku = row.productSku();
         if ((productSku == null || productSku.isBlank()) && product != null) {
-            productSku = product.sku();
+            productSku = product.getSku();
         }
+        String locationCode = location == null ? String.valueOf(row.locationId()) : location.getCode();
 
         return new PickingItemResponse(
                 row.id(),
@@ -100,34 +116,41 @@ public class PickingItemService {
                 row.pickSequence(),
                 row.salesOrderNumber(),
                 productSku,
-                product == null ? null : product.name(),
-                product == null ? null : product.barcodeEan13(),
-                location == null ? null : location.code(),
-                location == null ? null : location.code(),
+                product == null ? null : product.getName(),
+                product == null ? null : product.getBarcodeEan13(),
+                locationCode,
+                locationCode,
                 row.assigneeId());
     }
 
-    // Tải thông tin sản phẩm theo hướng an toàn, không làm hỏng luồng danh sách.
-    private ProductResponse loadProductSafe(UUID productId) {
-        try {
-            return productService.findById(productId);
-        } catch (Exception e) {
-            // Keep list resilient when product details cannot be loaded.
-            log.warn("Failed to load product details for productId={}: {}", productId, e.getMessage());
-            return null;
+    private Map<UUID, Product> loadProductsById(List<PickingItemResponse> rows) {
+        Set<UUID> ids = new HashSet<>();
+        for (PickingItemResponse row : rows) {
+            if (row.productId() != null) {
+                ids.add(row.productId());
+            }
         }
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return productRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Product::getId, Function.identity()));
     }
 
-    // Tải thông tin vị trí theo hướng an toàn, không làm hỏng luồng danh sách.
-    private LocationResponse loadLocationSafe(UUID locationId) {
-        try {
-            return locationService.findById(locationId);
-        } catch (Exception e) {
-            // Keep list resilient when warehouse location lookup fails.
-            log.warn("Failed to load location details for locationId={}: {}", locationId, e.getMessage());
-            return null;
+    private Map<UUID, Location> loadLocationsById(List<PickingItemResponse> rows) {
+        Set<UUID> ids = new HashSet<>();
+        for (PickingItemResponse row : rows) {
+            if (row.locationId() != null) {
+                ids.add(row.locationId());
+            }
         }
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return locationRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Location::getId, Function.identity()));
     }
+
     // Tạo mới picking item và cộng lượng reserved tương ứng.
     @Transactional
     public PickingItemResponse create(CreatePickingItemRequest request) {
@@ -375,6 +398,13 @@ public class PickingItemService {
         } catch (IllegalArgumentException e) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Trạng thái picking không hợp lệ: " + raw);
         }
+    }
+
+    private static PickingItemStatus parseOptionalPickingStatus(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        return parsePickingStatus(raw);
     }
 
     // Kiểm tra tính hợp lệ của qtyToPick, qtyPicked theo trạng thái.

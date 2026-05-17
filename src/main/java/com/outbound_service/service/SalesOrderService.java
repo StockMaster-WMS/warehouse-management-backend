@@ -29,6 +29,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -52,10 +53,12 @@ public class SalesOrderService {
 
     // Lấy danh sách đơn xuất có phân trang và bộ lọc.
     public PagedResponse<SalesOrderResponse> findAll(Pageable pageable, String keyword, String status,
-            UUID warehouseId) {
+            UUID warehouseId, OffsetDateTime createdFrom, OffsetDateTime createdTo) {
         Specification<SalesOrder> spec = SalesOrderSpecification.hasKeyword(keyword)
                 .and(SalesOrderSpecification.hasStatus(status))
-                .and(SalesOrderSpecification.hasWarehouseId(warehouseId));
+                .and(SalesOrderSpecification.hasWarehouseId(warehouseId))
+                .and(SalesOrderSpecification.createdFrom(createdFrom))
+                .and(SalesOrderSpecification.createdTo(createdTo));
         Page<SalesOrder> page = salesOrderRepository.findAll(spec, pageable);
         Page<SalesOrderResponse> mapped = page.map(salesOrderMapper::toResponse);
         return new PagedResponse<>(

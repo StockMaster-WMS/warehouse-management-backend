@@ -33,6 +33,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -54,11 +55,13 @@ public class PurchaseOrderService {
 
     // Lấy danh sách đơn nhập có phân trang và bộ lọc.
     public PagedResponse<PurchaseOrderResponse> findAll(Pageable pageable, String keyword, String status,
-            UUID supplierId, UUID warehouseId) {
+            UUID supplierId, UUID warehouseId, OffsetDateTime createdFrom, OffsetDateTime createdTo) {
         Specification<PurchaseOrder> spec = PurchaseOrderSpecification.hasKeyword(keyword)
                 .and(PurchaseOrderSpecification.hasStatus(status))
                 .and(PurchaseOrderSpecification.hasSupplierId(supplierId))
-                .and(PurchaseOrderSpecification.hasWarehouseId(warehouseId));
+                .and(PurchaseOrderSpecification.hasWarehouseId(warehouseId))
+                .and(PurchaseOrderSpecification.createdFrom(createdFrom))
+                .and(PurchaseOrderSpecification.createdTo(createdTo));
         Page<PurchaseOrder> page = purchaseOrderRepository.findAll(spec, pageable);
         Page<PurchaseOrderResponse> mapped = page.map(purchaseOrderMapper::toResponse);
         return new PagedResponse<>(

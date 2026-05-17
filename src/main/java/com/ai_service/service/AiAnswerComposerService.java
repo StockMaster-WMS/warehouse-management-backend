@@ -52,13 +52,27 @@ public class AiAnswerComposerService {
         public void composeStream(String userMessage, AiIntentResult route, AiToolResult toolResult,
             List<Map<String, String>> history, Consumer<String> fragmentConsumer, java.util.function.Supplier<Boolean> isCancelled) {
         long start = System.currentTimeMillis();
+        if (isCancelled != null && isCancelled.get()) {
+            log.info("AI composeStream cancelled before compose intent={} tool={}",
+                    route == null ? "null" : route.getIntent(),
+                    toolResult == null ? "null" : toolResult.toolName());
+            return;
+        }
         String deterministic = deterministicReply(route, toolResult);
         if (deterministic != null) {
             log.info("AI composeStream mode=deterministic intent={} tool={} outputChars={} durationMs={}",
                     route == null ? "null" : route.getIntent(),
                     toolResult == null ? "null" : toolResult.toolName(),
                     deterministic.length(), System.currentTimeMillis() - start);
-            fragmentConsumer.accept(deterministic);
+            if (isCancelled == null || !isCancelled.get()) {
+                fragmentConsumer.accept(deterministic);
+            }
+            return;
+        }
+        if (isCancelled != null && isCancelled.get()) {
+            log.info("AI composeStream cancelled before ollama intent={} tool={}",
+                    route == null ? "null" : route.getIntent(),
+                    toolResult == null ? "null" : toolResult.toolName());
             return;
         }
         log.info("AI composeStream mode=ollama start intent={} tool={}",
@@ -117,7 +131,7 @@ public class AiAnswerComposerService {
         }
         if (data instanceof Map<?, ?> map) {
             return switch (route.getIntent()) {
-                case PRODUCT_COUNT -> "Hệ thống hiện có " + value(map, "total") + " sản phẩm.";
+                case PRODUCT_COUNT -> productCountReply(map);
                 case LOCATION_COUNT -> locationCountReply(map);
                 case PRODUCT_LIST -> productListReply(map);
                 case SUPPLIER_LIST, SUPPLIER_SEARCH -> supplierListReply(map);
@@ -216,6 +230,16 @@ public class AiAnswerComposerService {
         return "Có " + value(map, "total") + " sản phẩm trong hệ thống. Một số sản phẩm gần nhất: "
                 + joinRows(limit(items, 5), row -> value(row, "sku") + " - " + value(row, "product_name")
                 + " (" + value(row, "category_name") + ", " + value(row, "status") + ")");
+    }
+
+    private String productCountReply(Map<?, ?> map) {
+        Object byWarehouseObject = map.get("byWarehouse");
+        if (byWarehouseObject instanceof List<?> byWarehouse && !byWarehouse.isEmpty()) {
+            return "Hệ thống hiện có " + value(map, "total") + " sản phẩm. Theo từng kho: "
+                    + joinRows(limit(byWarehouse, 8), row -> value(row, "warehouse_code") + " - "
+                    + value(row, "warehouse_name") + ": " + value(row, "product_count") + " sản phẩm có tồn");
+        }
+        return "Hệ thống hiện có " + value(map, "total") + " sản phẩm.";
     }
 
     private String supplierListReply(Map<?, ?> map) {

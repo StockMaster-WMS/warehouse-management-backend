@@ -30,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.*;
 
 @Service
@@ -195,11 +196,14 @@ public class InboundReceiptService {
     // Lấy danh sách phiếu nhập có phân trang và bộ lọc.
     @Transactional(readOnly = true)
     public PagedResponse<InboundReceiptResponse> findAll(Pageable pageable, String keyword,
-            UUID purchaseOrderId, UUID warehouseId, InboundReceiptStatus status) {
+            UUID purchaseOrderId, UUID warehouseId, InboundReceiptStatus status,
+            OffsetDateTime createdFrom, OffsetDateTime createdTo) {
         Specification<InboundReceipt> spec = InboundReceiptSpecification.hasKeyword(keyword)
                 .and(InboundReceiptSpecification.hasPurchaseOrderId(purchaseOrderId))
                 .and(InboundReceiptSpecification.hasWarehouseId(warehouseId))
-                .and(InboundReceiptSpecification.hasStatus(status));
+                .and(InboundReceiptSpecification.hasStatus(status))
+                .and(InboundReceiptSpecification.createdFrom(createdFrom))
+                .and(InboundReceiptSpecification.createdTo(createdTo));
         Page<InboundReceipt> page = receiptRepository.findAll(spec, pageable);
         Page<InboundReceiptResponse> mapped = page.map(receiptMapper::toResponse);
         return new PagedResponse<>(

@@ -40,14 +40,6 @@ public class AiService {
         try {
             log.info("AI ask start session={} question='{}'", sessionId, preview(userMessage));
             List<Map<String, String>> history = historyService.getMessages(sessionId);
-            // quick-return if same question was asked before in this session
-            String cached = historyService.findLastAnswerForQuestion(sessionId, userMessage);
-            if (cached != null) {
-                log.info("AI ask cache-hit session={} outputChars={} question='{}'",
-                        sessionId, cached.length(), preview(userMessage));
-                finalReply = cached;
-                return new AiAskResponse(cached, null);
-            }
             long routeStart = System.currentTimeMillis();
             AiIntentResult route = intentRouterService.route(userMessage, history);
             long toolStart = System.currentTimeMillis();
@@ -98,20 +90,27 @@ public class AiService {
         try {
             log.info("AI stream start session={} request={} question='{}'",
                     sessionId, requestId, preview(userMessage));
+            if (cancelService.isCancelled(requestId)) {
+                log.info("AI stream cancelled before history session={} request={}", sessionId, requestId);
+                return;
+            }
             List<Map<String, String>> history = historyService.getMessages(sessionId);
-            // quick-return if same question was asked before in this session
-            String cached = historyService.findLastAnswerForQuestion(sessionId, userMessage);
-            if (cached != null) {
-                log.info("AI stream cache-hit session={} request={} outputChars={} question='{}'",
-                        sessionId, requestId, cached.length(), preview(userMessage));
-                finalReply.append(cached);
-                fragmentConsumer.accept(cached);
+            if (cancelService.isCancelled(requestId)) {
+                log.info("AI stream cancelled before cache session={} request={}", sessionId, requestId);
                 return;
             }
             long routeStart = System.currentTimeMillis();
             AiIntentResult route = intentRouterService.route(userMessage, history);
+            if (cancelService.isCancelled(requestId)) {
+                log.info("AI stream cancelled after route session={} request={}", sessionId, requestId);
+                return;
+            }
             long toolStart = System.currentTimeMillis();
             AiToolResult toolResult = toolExecutorService.execute(route);
+            if (cancelService.isCancelled(requestId)) {
+                log.info("AI stream cancelled after tool session={} request={}", sessionId, requestId);
+                return;
+            }
             long composeStart = System.currentTimeMillis();
             rowsReturned = toolExecutorService.estimateRows(toolResult);
             auditPayload = toAuditPayload(route, toolResult);
@@ -120,6 +119,9 @@ public class AiService {
                     route.getIntent(), toolResult.toolName(), rowsReturned);
 
             answerComposerService.composeStream(userMessage, route, toolResult, history, fragment -> {
+                if (cancelService.isCancelled(requestId)) {
+                    return;
+                }
                 finalReply.append(fragment);
                 fragmentConsumer.accept(fragment);
             }, () -> cancelService.isCancelled(requestId));

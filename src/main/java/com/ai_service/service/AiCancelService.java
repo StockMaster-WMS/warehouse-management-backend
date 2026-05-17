@@ -13,14 +13,15 @@ public class AiCancelService {
 
     public void startSession(String sessionId) {
         if (sessionId == null) return;
-        tokens.put(sessionId, new AtomicBoolean(false));
+        tokens.compute(sessionId, (key, existing) -> existing == null ? new AtomicBoolean(false) : existing);
     }
 
     public void cancel(String sessionId) {
         if (sessionId == null) return;
-        tokens.computeIfPresent(sessionId, (k, v) -> {
-            v.set(true);
-            return v;
+        tokens.compute(sessionId, (key, existing) -> {
+            AtomicBoolean token = existing == null ? new AtomicBoolean(false) : existing;
+            token.set(true);
+            return token;
         });
     }
 

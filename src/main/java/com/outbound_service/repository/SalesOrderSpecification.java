@@ -5,6 +5,7 @@ import com.outbound_service.entity.SalesOrderStatus;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public class SalesOrderSpecification {
@@ -38,5 +39,17 @@ public class SalesOrderSpecification {
 
     public static Specification<SalesOrder> hasWarehouseId(UUID warehouseId) {
         return (root, query, cb) -> warehouseId == null ? null : cb.equal(root.get("warehouseId"), warehouseId);
+    }
+
+    public static Specification<SalesOrder> createdFrom(OffsetDateTime createdFrom) {
+        return (root, query, cb) -> createdFrom == null
+                ? null
+                : cb.greaterThanOrEqualTo(root.get("createdAt"), createdFrom);
+    }
+
+    public static Specification<SalesOrder> createdTo(OffsetDateTime createdTo) {
+        return (root, query, cb) -> createdTo == null
+                ? null
+                : cb.lessThanOrEqualTo(root.get("createdAt"), createdTo);
     }
 }

@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -22,6 +23,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 
+import java.time.OffsetDateTime;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -46,10 +48,12 @@ public class InboundReceiptController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) java.util.UUID purchaseOrderId,
             @RequestParam(required = false) java.util.UUID warehouseId,
-            @RequestParam(required = false) InboundReceiptStatus status) {
+            @RequestParam(required = false) InboundReceiptStatus status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách phiếu nhập thành công",
-                receiptService.findAll(pageable, keyword, purchaseOrderId, warehouseId, status));
+                receiptService.findAll(pageable, keyword, purchaseOrderId, warehouseId, status, createdFrom, createdTo));
     }
 
     @PostMapping

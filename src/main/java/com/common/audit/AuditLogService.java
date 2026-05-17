@@ -21,6 +21,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -72,7 +73,7 @@ public class AuditLogService {
 
     @Transactional(readOnly = true)
     public PagedResponse<AuditLogResponse> findAll(Pageable pageable, String module, String actionType,
-            String entityType, String keyword) {
+            String entityType, String keyword, OffsetDateTime createdFrom, OffsetDateTime createdTo) {
         Specification<AuditLog> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (StringUtils.hasText(module)) {
@@ -93,6 +94,12 @@ public class AuditLogService {
                         cb.like(cb.lower(root.get("actorEmail")), like),
                         cb.like(cb.lower(root.get("reason")), like)
                 ));
+            }
+            if (createdFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), createdFrom));
+            }
+            if (createdTo != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), createdTo));
             }
             return cb.and(predicates.toArray(Predicate[]::new));
         };

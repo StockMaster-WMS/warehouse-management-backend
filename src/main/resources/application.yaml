@@ -48,7 +48,7 @@ ai:
   ollama:
     api-url: ${AI_OLLAMA_API_URL:http://localhost:11434}
     model: ${AI_OLLAMA_MODEL:stockmaster-ai}
-    num-ctx: ${AI_OLLAMA_NUM_CTX:4096}
+    num-ctx: ${AI_OLLAMA_NUM_CTX:8192}
     connect-timeout-seconds: ${AI_OLLAMA_CONNECT_TIMEOUT_SECONDS:5}
     read-timeout-seconds: ${AI_OLLAMA_READ_TIMEOUT_SECONDS:120}
 
