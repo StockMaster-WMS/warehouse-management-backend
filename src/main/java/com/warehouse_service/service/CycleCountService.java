@@ -48,6 +48,7 @@ public class CycleCountService {
     private final LocationRepository locationRepository;
     private final WarehouseRepository warehouseRepository;
 
+
     // ─── Queries ─────────────────────────────────────────────────────────────
 
     /**
@@ -95,7 +96,6 @@ public class CycleCountService {
         // Validate warehouse exists
         warehouseRepository.findById(request.warehouseId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho"));
-
         CycleCount count = CycleCount.builder()
                 .warehouseId(request.warehouseId())
                 .description(request.description())
@@ -107,7 +107,6 @@ public class CycleCountService {
                 .build();
 
         CycleCount saved = cycleCountRepository.save(count);
-
         // Resolve stock levels and create items
         List<StockLevel> stockLevels;
         if (hasScope) {
@@ -138,7 +137,6 @@ public class CycleCountService {
                         .status(CycleCountItem.ItemStatus.PENDING)
                         .build()
         ).collect(Collectors.toList());
-
         cycleCountItemRepository.saveAll(items);
         saved.setItems(items);
 
@@ -171,6 +169,14 @@ public class CycleCountService {
         if (request.results() == null || request.results().isEmpty()) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Danh sách kết quả không được rỗng");
         }
+        if (request.countedQty() < 0) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng đếm được không được âm");
+        }
+
+        CycleCountItem item = count.getItems().stream()
+                .filter(line -> line.getId().equals(request.itemId()))
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng kiểm kê"));
 
         for (RecordCountRequest.ItemResult result : request.results()) {
             CycleCountItem item = count.getItems().stream()
@@ -180,7 +186,6 @@ public class CycleCountService {
                     .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
                             "Không tìm thấy dòng kiểm kê: product=" + result.productId()
                                     + ", location=" + result.locationId()));
-
             item.setCountedQty(result.actualQty());
             item.setDiscrepancy(result.actualQty() - item.getSystemQty());
             item.setNotes(result.notes());
@@ -188,7 +193,6 @@ public class CycleCountService {
 
             cycleCountItemRepository.save(item);
         }
-
         return toResponse(count);
     }
 
@@ -233,7 +237,7 @@ public class CycleCountService {
                         count.getWarehouseId(),
                         item.getLocationId(),
                         item.getProductId(),
-                        item.getLotNumber(),
+                        normalizeLot(item.getLotNumber()),
                         item.getDiscrepancy(),
                         "CYCLE_COUNT:" + count.getId() + ":" + item.getId(),
                         "CYCLE_COUNT",
@@ -275,7 +279,6 @@ public class CycleCountService {
         return cycleCountRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đợt kiểm kê"));
     }
-
     private void assertStatus(CycleCount count, CycleCountStatus expected, String message) {
         if (count.getStatus() != expected) {
             throw new AppException(ErrorCode.BAD_REQUEST,
@@ -345,7 +348,6 @@ public class CycleCountService {
     }
 
     // ─── Mapping ─────────────────────────────────────────────────────────────
-
     private CycleCountResponse toResponse(CycleCount count) {
         // Warehouse name
         String warehouseName = null;

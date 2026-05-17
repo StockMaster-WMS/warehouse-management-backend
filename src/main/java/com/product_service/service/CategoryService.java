@@ -19,6 +19,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -29,6 +30,7 @@ public class CategoryService {
     private static final String PREFIX = "DM";
 
     private final CategoryRepository repository;
+    private final com.product_service.repository.ProductRepository productRepository;
     private final CategoryMapper mapper;
 
 
@@ -97,8 +99,8 @@ public class CategoryService {
     @Transactional
     public CategoryResponse update(UUID id, UpdateCategoryRequest request) {
         Category entity = get(id);
-
         Category parent = resolveParent(request.parentId());
+        ensureValidParent(entity, parent);
         short level = computeLevel(parent);
         String path = computePath(parent, request.name());
 
@@ -108,7 +110,9 @@ public class CategoryService {
         entity.setPath(path);
         entity.setIsActive(request.isActive());
 
-        return mapper.toResponse(repository.save(entity));
+        Category saved = repository.save(entity);
+        updateChildrenPaths(saved);
+        return mapper.toResponse(saved);
     }
 
     // ================= DELETE =================
@@ -116,7 +120,14 @@ public class CategoryService {
     // Xóa danh mục theo id.
     @Transactional
     public void delete(UUID id) {
-        repository.delete(get(id));
+        Category category = get(id);
+        if (repository.existsByParentId(id)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không thể xóa danh mục đang có danh mục con");
+        }
+        if (productRepository.existsByCategoryId(id)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không thể xóa danh mục đang có sản phẩm");
+        }
+        repository.delete(category);
     }
 
     // ================= HELPER =================
@@ -130,6 +141,21 @@ public class CategoryService {
     // Resolve danh mục cha theo parentId.
     private Category resolveParent(UUID parentId) {
         return parentId == null ? null : get(parentId);
+    }
+
+    private void ensureValidParent(Category entity, Category parent) {
+        if (parent == null) {
+            return;
+        }
+        if (entity.getId().equals(parent.getId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Danh mục cha không được là chính danh mục hiện tại");
+        }
+        String currentPath = entity.getPath();
+        String parentPath = parent.getPath();
+        if (currentPath != null && parentPath != null
+                && (parentPath.equals(currentPath) || parentPath.startsWith(currentPath + "/"))) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không được chọn danh mục con làm danh mục cha");
+        }
     }
 
     // Tính cấp độ danh mục dựa trên danh mục cha.
@@ -160,5 +186,19 @@ public class CategoryService {
         if (parent == null) return slug;
         String parentPath = parent.getPath();
         return (parentPath == null || parentPath.isBlank()) ? slug : parentPath + "/" + slug;
+    }
+
+    private void updateChildrenPaths(Category parent) {
+        List<Category> children = repository.findByParentId(parent.getId());
+        if (children.isEmpty()) {
+            return;
+        }
+
+        for (Category child : children) {
+            child.setLevel(computeLevel(parent));
+            child.setPath(computePath(parent, child.getName()));
+            repository.save(child);
+            updateChildrenPaths(child);
+        }
     }
 }

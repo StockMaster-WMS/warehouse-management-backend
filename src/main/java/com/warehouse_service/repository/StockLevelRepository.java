@@ -38,6 +38,8 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 
 	List<StockLevel> findByProductId(UUID productId);
 
+	boolean existsByProductId(UUID productId);
+
 	List<StockLevel> findByWarehouseIdAndProductId(UUID warehouseId, UUID productId);
 
 	boolean existsByWarehouseId(UUID warehouseId);

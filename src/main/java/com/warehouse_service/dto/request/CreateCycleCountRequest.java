@@ -1,6 +1,7 @@
 package com.warehouse_service.dto.request;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.Valid;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -12,7 +13,6 @@ public record CreateCycleCountRequest(
     String description,
 
     OffsetDateTime scheduledAt,
-
     /**
      * SCOPE mode: WAREHOUSE, ZONE, LOCATION, PRODUCT
      * - If scope is set, items can be null/empty
@@ -34,6 +34,7 @@ public record CreateCycleCountRequest(
      * - Required if scope is null
      * - Ignored if scope is set
      */
+    @Valid
     List<ItemRequest> items
 ) {
     public record ItemRequest(

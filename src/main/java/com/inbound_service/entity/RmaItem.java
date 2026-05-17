@@ -31,6 +31,9 @@ public class RmaItem {
     @Column(name = "received_qty")
     private Integer receivedQty;
 
+    @Column(name = "received_location_id")
+    private UUID receivedLocationId;
+
     @Column(name = "lot_number", length = 50)
     private String lotNumber;
 

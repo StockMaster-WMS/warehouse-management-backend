@@ -131,7 +131,7 @@ public class PickingItemService {
     // Tạo mới picking item và cộng lượng reserved tương ứng.
     @Transactional
     public PickingItemResponse create(CreatePickingItemRequest request) {
-        SalesOrderItem line = salesOrderItemRepository.findByIdWithSalesOrder(request.soItemId())
+        SalesOrderItem line = salesOrderItemRepository.findByIdWithSalesOrderForUpdate(request.soItemId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn xuất"));
         if (!line.getProductId().equals(request.productId())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "productId không khớp với dòng đơn xuất");
@@ -187,7 +187,8 @@ public class PickingItemService {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không được chuyển picking sang dòng đơn xuất khác");
         }
 
-        SalesOrderItem line = existing.getSoItem();
+        SalesOrderItem line = salesOrderItemRepository.findByIdWithSalesOrderForUpdate(existing.getSoItem().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng đơn xuất"));
         if (!line.getProductId().equals(request.productId())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "productId không khớp với dòng đơn xuất");
         }
@@ -358,8 +359,8 @@ public class PickingItemService {
     // Kiểm tra trạng thái đơn xuất có cho phép chỉnh sửa nghiệp vụ picking hay không.
     private static void assertSalesOrderAllowsPickingMutation(SalesOrder so) {
         SalesOrderStatus status = so.getStatus();
-        // Chỉ cho phép thao tác picking khi đơn đang ở trạng thái chuẩn bị (DRAFT, PENDING) hoặc đang lấy hàng (PICKING).
-        if (status == SalesOrderStatus.DRAFT || status == SalesOrderStatus.PENDING || status == SalesOrderStatus.PICKING) {
+        // Chỉ cho phép thao tác picking khi đơn đã chuyển sang trạng thái lấy hàng.
+        if (status == SalesOrderStatus.PICKING) {
             return;
         }
         
