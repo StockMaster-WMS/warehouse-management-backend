@@ -29,6 +29,7 @@ services:
     environment:
       WAREHOUSE_APP_PORT: 9000
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      OPENAPI_SERVER_URL: ${OPENAPI_SERVER_URL:-}
       WAREHOUSE_DB_URL: jdbc:postgresql://postgres:5432/warehouse_management
       WAREHOUSE_DB_USERNAME: postgres
       WAREHOUSE_DB_PASSWORD: postgres
