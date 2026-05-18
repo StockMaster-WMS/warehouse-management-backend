@@ -1,5 +1,6 @@
 server:
   port: ${WAREHOUSE_APP_PORT:9000}
+  forward-headers-strategy: framework
 
 spring:
   application:
@@ -30,7 +31,9 @@ spring:
 
 app:
   cors:
-    allowed-origin: ${FRONTEND_ORIGIN:http://localhost:3000}
+    allowed-origin: ${FRONTEND_ORIGIN:http://localhost:3000, http://apiwarehouse.ryon.website, https://apiwarehouse.ryon.website}
+  openapi:
+    server-url: ${OPENAPI_SERVER_URL:}
 
 auth:
   mode: ${AUTH_MODE:public}
