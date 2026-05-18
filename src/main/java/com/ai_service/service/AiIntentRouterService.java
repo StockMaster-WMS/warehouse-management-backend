@@ -43,9 +43,9 @@ public class AiIntentRouterService {
     // Định tuyến câu hỏi người dùng thành intent và tham số.
     public AiIntentResult route(String userMessage, List<Map<String, String>> history) {
         long start = System.currentTimeMillis();
-        AiIntentResult deterministic = deterministic(userMessage, false);
+        AiIntentResult deterministic = deterministic(userMessage, history, false);
         if (deterministic != null) {
-            deterministic = finalizeRoute(userMessage, deterministic);
+            deterministic = finalizeRoute(userMessage, history, deterministic);
             log.info("AI route source=deterministic intent={} confidence={} reason={} question='{}' durationMs={}",
                     deterministic.getIntent(), deterministic.getConfidence(), deterministic.getReason(),
                     preview(userMessage), System.currentTimeMillis() - start);
@@ -54,8 +54,8 @@ public class AiIntentRouterService {
 
         String normalized = normalize(userMessage);
         if (!looksWarehouseRelated(normalized)) {
-            AiIntentResult result = finalizeRoute(userMessage, AiIntentResult.of(AiIntent.UNSUPPORTED,
-                    extractCommonParams(userMessage), 0.85, "fast unsupported outside WMS domain"));
+            AiIntentResult result = finalizeRoute(userMessage, history, AiIntentResult.of(AiIntent.UNSUPPORTED,
+                    extractCommonParams(userMessage, history), 0.85, "fast unsupported outside WMS domain"));
             log.info("AI route source=fast-unsupported intent={} reason={} question='{}' durationMs={}",
                     result.getIntent(), result.getReason(), preview(userMessage), System.currentTimeMillis() - start);
             return result;
@@ -66,7 +66,7 @@ public class AiIntentRouterService {
             log.info("AI route source=ollama start question='{}' historyMessages={}",
                     preview(userMessage), history == null ? 0 : history.size());
             String raw = ollamaClient.generateIntent(buildRouterPrompt(userMessage, history));
-            AiIntentResult parsed = finalizeRoute(userMessage, correctIntent(userMessage, parseIntent(raw)));
+            AiIntentResult parsed = finalizeRoute(userMessage, history, correctIntent(userMessage, history, parseIntent(raw)));
             if (parsed.getIntent() != AiIntent.UNSUPPORTED || looksUnsupported(userMessage)) {
                 log.info("AI route source=ollama intent={} confidence={} reason={} ollamaMs={} durationMs={}",
                         parsed.getIntent(), parsed.getConfidence(), parsed.getReason(),
@@ -77,7 +77,7 @@ public class AiIntentRouterService {
             log.warn("AI route source=ollama failed question='{}' durationMs={} error={}",
                     preview(userMessage), System.currentTimeMillis() - start, e.getMessage());
         }
-        AiIntentResult fallback = finalizeRoute(userMessage, heuristic(userMessage));
+        AiIntentResult fallback = finalizeRoute(userMessage, history, heuristic(userMessage, history));
         log.info("AI route source=heuristic intent={} confidence={} reason={} question='{}' durationMs={}",
                 fallback.getIntent(), fallback.getConfidence(), fallback.getReason(),
                 preview(userMessage), System.currentTimeMillis() - start);
@@ -124,6 +124,7 @@ public class AiIntentRouterService {
                 - SUPPLIER_LIST: hỏi danh sách nhà cung cấp.
                 - SUPPLIER_SEARCH: tìm kiếm nhà cung cấp theo tên/mã/sđt/email.
                 - SUPPLIER_DETAIL: hỏi chi tiết một nhà cung cấp.
+                - SUPPLIER_TOP: hỏi nhà cung cấp nào có nhiều phiếu nhập nhất/doanh số nhập cao nhất trong kỳ.
                 - CUSTOMER_LIST: hỏi danh sách khách hàng.
                 - CUSTOMER_SEARCH: tìm kiếm khách hàng theo tên/mã/sđt/email.
                 - CUSTOMER_DETAIL: hỏi chi tiết một khách hàng.
@@ -143,6 +144,7 @@ public class AiIntentRouterService {
                 - STOCK_MOVEMENT_HISTORY: hỏi lịch sử biến động tồn kho/stock movement.
                 - STOCK_TRANSFER: hỏi hướng dẫn/chuyển tồn giữa kho/vị trí; không tự thao tác.
                 - INVENTORY_ADJUSTMENT: hỏi hướng dẫn/điều chỉnh tồn thủ công; không tự thao tác.
+                - INVENTORY_VALUE: hỏi tổng giá trị hàng tồn kho hiện tại.
                 - PENDING_PUTAWAY: hỏi task putaway/chờ cất hàng/chưa đưa vào vị trí.
                 - PUTAWAY_BY_WAREHOUSE: hỏi kho nào có nhiều task putaway nhất.
                 - INBOUND_TODAY: hỏi hàng/phiếu nhập hôm nay.
@@ -150,6 +152,7 @@ public class AiIntentRouterService {
                 - PENDING_PO_RECEIPT: hỏi PO đang chờ nhận/chưa nhận đủ.
                 - PURCHASE_ORDER_STATUS: hỏi trạng thái đơn nhập/PO.
                 - PURCHASE_ORDER_DETAIL: hỏi chi tiết PO/dòng hàng trong PO.
+                - PURCHASE_ORDER_APPROVAL_AUDIT: hỏi ai đã duyệt phiếu nhập/PO và khi nào duyệt.
                 - OUTBOUND_PRIORITY: hỏi đơn xuất cần ưu tiên/xử lý gấp.
                 - PACKING_STATUS: hỏi đơn xuất đang chờ/trong bước packing.
                 - PICKING_TOP: hỏi sản phẩm được picking nhiều nhất.
@@ -166,6 +169,7 @@ public class AiIntentRouterService {
                 - INBOUND_REPORT: báo cáo nhập kho.
                 - OUTBOUND_REPORT: báo cáo xuất kho/bán hàng.
                 - MONTHLY_REPORT: báo cáo tháng này.
+                - MONTH_OVER_MONTH_FLOW: so sánh nhập/xuất tháng này với tháng trước.
                 - GLOBAL_SEARCH: tìm kiếm toàn hệ thống.
                 - AUDIT_LOG: hỏi lịch sử thao tác/audit log nghiệp vụ.
                 - AI_AUDIT_LOG: hỏi log/lịch sử hỏi đáp AI.
@@ -229,18 +233,18 @@ public class AiIntentRouterService {
     }
 
     // Dự phòng khi model lỗi hoặc không trả intent đáng tin.
-    private AiIntentResult heuristic(String userMessage) {
-        AiIntentResult deterministic = deterministic(userMessage, true);
+    private AiIntentResult heuristic(String userMessage, List<Map<String, String>> history) {
+        AiIntentResult deterministic = deterministic(userMessage, history, true);
         if (deterministic != null) {
             return deterministic;
         }
-        Map<String, Object> params = extractCommonParams(userMessage);
+        Map<String, Object> params = extractCommonParams(userMessage, history);
         return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.4, "heuristic unsupported");
     }
 
     // Sửa intent model bằng rule chắc chắn nếu có.
-    private AiIntentResult correctIntent(String userMessage, AiIntentResult parsed) {
-        AiIntentResult deterministic = deterministic(userMessage, false);
+    private AiIntentResult correctIntent(String userMessage, List<Map<String, String>> history, AiIntentResult parsed) {
+        AiIntentResult deterministic = deterministic(userMessage, history, false);
         if (deterministic == null) {
             return parsed;
         }
@@ -252,12 +256,12 @@ public class AiIntentRouterService {
     }
 
     // Chuẩn hóa output của model/dataset về key mà backend executor đang dùng.
-    private AiIntentResult finalizeRoute(String userMessage, AiIntentResult result) {
+    private AiIntentResult finalizeRoute(String userMessage, List<Map<String, String>> history, AiIntentResult result) {
         if (result == null) {
-            return AiIntentResult.of(AiIntent.UNSUPPORTED, extractCommonParams(userMessage), 0.0, "empty route");
+            return AiIntentResult.of(AiIntent.UNSUPPORTED, extractCommonParams(userMessage, history), 0.0, "empty route");
         }
         Map<String, Object> parameters = normalizeParameterAliases(result.safeParameters(), userMessage);
-        parameters.putAll(extractCommonParams(userMessage));
+        parameters.putAll(extractCommonParams(userMessage, history));
         return AiIntentResult.of(result.getIntent(), parameters,
                 result.getConfidence() == null ? 0.0 : result.getConfidence(), result.getReason());
     }
@@ -335,9 +339,9 @@ public class AiIntentRouterService {
     }
 
     // Bắt các intent rõ ràng bằng keyword trước khi gọi model.
-    private AiIntentResult deterministic(String userMessage, boolean includeFallback) {
+    private AiIntentResult deterministic(String userMessage, List<Map<String, String>> history, boolean includeFallback) {
         String normalized = normalize(userMessage);
-        Map<String, Object> params = extractCommonParams(userMessage);
+        Map<String, Object> params = extractCommonParams(userMessage, history);
 
         if (looksGreeting(normalized)) {
             return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.95, "deterministic greeting");
@@ -356,7 +360,7 @@ public class AiIntentRouterService {
 
         if (containsAny(normalized, "kho do", "san pham do", "san pham nay", "san pham kia",
                 "don do", "don nay", "don kia", "cai nay", "lo nay", "hang nay", "mat hang do",
-                "con nay")) {
+                "con nay") && !hasResolvedReference(params)) {
             return AiIntentResult.of(AiIntent.AMBIGUOUS, params, 0.9, "deterministic ambiguous reference");
         }
 
@@ -376,6 +380,46 @@ public class AiIntentRouterService {
 
         if (looksDomainGuide(normalized)) {
             return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.9, "deterministic guide");
+        }
+
+        if (containsAny(normalized, "nha cung cap nao", "ncc nao", "supplier nao")
+                && containsAny(normalized, "nhieu phieu nhap nhat", "nhieu po nhat", "nhieu don nhap nhat", "top nha cung cap")) {
+            params.putIfAbsent("dateRange", containsAny(normalized, "thang nay", "this month") ? "THIS_MONTH" : params.get("dateRange"));
+            return AiIntentResult.of(AiIntent.SUPPLIER_TOP, params, 0.92, "deterministic supplier top");
+        }
+
+        if (containsAny(normalized, "tong gia tri hang ton kho", "gia tri ton kho", "inventory value", "stock value")) {
+            return AiIntentResult.of(AiIntent.INVENTORY_VALUE, params, 0.92, "deterministic inventory value");
+        }
+
+        if (containsAny(normalized, "so sanh", "compare", "doi chieu")
+                && containsAny(normalized, "thang nay", "this month")
+                && containsAny(normalized, "thang truoc", "last month", "month before")
+                && containsAny(normalized, "nhap", "xuat", "inbound", "outbound")) {
+            return AiIntentResult.of(AiIntent.MONTH_OVER_MONTH_FLOW, params, 0.92, "deterministic month over month flow");
+        }
+
+        if (containsAny(normalized, "ai da duyet", "nguoi da duyet", "approved by", "who approved")
+                && containsAny(normalized, "phieu nhap", "don nhap", "purchase order", "po")) {
+            return AiIntentResult.of(AiIntent.PURCHASE_ORDER_APPROVAL_AUDIT, params, 0.92,
+                    "deterministic purchase order approval audit");
+        }
+
+        if (containsAny(normalized, "phieu xuat", "don xuat", "sales order", "so ")
+                && containsAny(normalized, "gan day nhat", "moi nhat", "recent", "latest")
+                && containsAny(normalized, "duyet", "approved", "da duyet")) {
+            params.put("status", "APPROVED");
+            params.put("latestOnly", true);
+            return AiIntentResult.of(AiIntent.SALES_ORDER_STATUS, params, 0.92, "deterministic latest approved outbound");
+        }
+
+        if (containsAny(normalized, "phieu nhap", "don nhap", "purchase order", "po")
+                && containsAny(normalized, "cho duyet", "chua duyet", "pending approval", "draft")
+                && containsAny(normalized, "bao nhieu", "may", "count", "so luong")) {
+            params.put("status", "DRAFT");
+            params.put("countOnly", true);
+            return AiIntentResult.of(AiIntent.PURCHASE_ORDER_STATUS, params, 0.92,
+                    "deterministic pending approval purchase order count");
         }
 
         if (containsAny(normalized, "ai audit", "log ai", "lich su hoi ai", "lich su ai", "ai log")) {
@@ -415,8 +459,15 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.INVENTORY_ADJUSTMENT, params, 0.9, "deterministic inventory adjustment");
         }
 
-        if (containsAny(normalized, "lich su ton", "lich su bien dong", "stock movement",
-                "bien dong ton", "movement history", "lich su nhap xuat ton")) {
+        if (containsAny(normalized,
+                "lich su ton",
+                "lich su bien dong",
+                "stock movement",
+                "bien dong ton",
+                "movement history",
+                "lich su nhap xuat ton",
+                "lich su nhap xuat",
+                "nhap xuat nhu the nao")) {
             return AiIntentResult.of(AiIntent.STOCK_MOVEMENT_HISTORY, params, 0.9, "deterministic stock movement");
         }
 
@@ -592,7 +643,7 @@ public class AiIntentRouterService {
         }
 
         if (containsAny(normalized, "ton thap", "gan het hang", "duoi dinh muc", "duoi muc an toan",
-                "can bo sung", "sap het hang", "low stock")) {
+                "can bo sung", "sap het hang", "low stock", "nhap them gap", "nen nhap them", "bo sung gap")) {
             return AiIntentResult.of(AiIntent.LOW_STOCK, params, 0.9, "deterministic low stock");
         }
 
@@ -688,6 +739,10 @@ public class AiIntentRouterService {
 
     // Trích các tham số chung như query, SKU, mã kho, số ngày.
     private Map<String, Object> extractCommonParams(String userMessage) {
+        return extractCommonParams(userMessage, List.of());
+    }
+
+    private Map<String, Object> extractCommonParams(String userMessage, List<Map<String, String>> history) {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("query", userMessage);
 
@@ -729,6 +784,7 @@ public class AiIntentRouterService {
         if (quotedKeywordMatcher.find()) {
             params.put("keyword", quotedKeywordMatcher.group(1).trim());
         }
+        mergeHistoryContext(params, history, userMessage);
         return params;
     }
 
@@ -759,13 +815,95 @@ public class AiIntentRouterService {
                 "ban la ai", "ban la ai gi", "ban la tro ly", "tro ly kho", "tro ly lam duoc gi")) {
             return true;
         }
+        if (containsAny(normalized,
+                "quen mat khau", "doi mat khau", "xuat excel", "excel", "download bao cao",
+                "toi la staff", "toi la manager", "toi la admin", "phan quyen", "vai tro",
+                "co duoc duyet", "co duoc tao tai khoan", "co the sua thong tin san pham",
+                "co huy duoc khong", "phai lam sao", "nen lam gi", "xu ly the nao",
+                "he thong bao loi", "bao gio duoc duyet", "tai chinh")) {
+            return true;
+        }
         boolean guideVerb = containsAny(normalized, "huong dan", "giai thich", "cach ", "lam sao",
                 "quy trinh", "nen xu ly ra sao", "duoc tinh the nao", " la gi");
         boolean warehouseTopic = containsAny(normalized,
                 "kho", "ton kho", "sku", "barcode", "putaway", "picking", "cycle count", "kiem ke",
                 "rma", "tra hang", "nhap kho", "xuat kho", "don nhap", "don xuat", "po", "so-",
-                "purchase order", "sales order", "lo hang", "vi tri", "location", "hang hong");
+                "purchase order", "sales order", "lo hang", "vi tri", "location", "hang hong",
+                "mat khau", "phan quyen", "excel", "bao cao");
         return guideVerb && warehouseTopic;
+    }
+
+    private void mergeHistoryContext(Map<String, Object> params, List<Map<String, String>> history, String userMessage) {
+        if (params == null || !refersToPreviousContext(userMessage)) {
+            return;
+        }
+        Map<String, Object> historyContext = extractHistoryContext(history);
+        historyContext.forEach(params::putIfAbsent);
+    }
+
+    private boolean refersToPreviousContext(String userMessage) {
+        String normalized = normalize(userMessage);
+        return containsAny(normalized,
+                "vua roi", "truoc do", "o tren", "ke tren",
+                "phieu do", "don do", "kho do", "san pham do", "mat hang do", "lo do",
+                "phieu nay", "don nay", "kho nay", "san pham nay", "mat hang nay", "lo nay");
+    }
+
+    private boolean hasResolvedReference(Map<String, Object> params) {
+        return params.containsKey("warehouseCode")
+                || params.containsKey("warehouse")
+                || params.containsKey("sku")
+                || params.containsKey("product")
+                || params.containsKey("code")
+                || params.containsKey("poId")
+                || params.containsKey("soId")
+                || params.containsKey("rmaId")
+                || params.containsKey("location");
+    }
+
+    private Map<String, Object> extractHistoryContext(List<Map<String, String>> history) {
+        Map<String, Object> context = new LinkedHashMap<>();
+        if (history == null || history.isEmpty()) {
+            return context;
+        }
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Map<String, String> message = history.get(i);
+            if (message == null) {
+                continue;
+            }
+            String content = message.getOrDefault("content", "");
+            applyHistoryMatch(context, "warehouseCode", WAREHOUSE_CODE_PATTERN.matcher(content),
+                    value -> value.toUpperCase(Locale.ROOT));
+            applyHistoryMatch(context, "code", BUSINESS_CODE_PATTERN.matcher(content),
+                    value -> value.toUpperCase(Locale.ROOT));
+            applyHistoryMatch(context, "sku", SKU_PATTERN.matcher(content.toUpperCase(Locale.ROOT)),
+                    value -> value.toUpperCase(Locale.ROOT));
+            if (context.containsKey("code") && !context.containsKey("poId")) {
+                String code = String.valueOf(context.get("code"));
+                if (PURCHASE_ORDER_CODE_PATTERN.matcher(code).matches()) {
+                    context.put("poId", code);
+                } else if (SALES_ORDER_CODE_PATTERN.matcher(code).matches()) {
+                    context.put("soId", code);
+                } else if (RMA_CODE_PATTERN.matcher(code).matches()) {
+                    context.put("rmaId", code);
+                }
+            }
+            if (hasResolvedReference(context)) {
+                return context;
+            }
+        }
+        return context;
+    }
+
+    private void applyHistoryMatch(Map<String, Object> context, String key, Matcher matcher,
+            java.util.function.Function<String, String> mapper) {
+        if (context.containsKey(key) || !matcher.find()) {
+            return;
+        }
+        String value = matcher.group();
+        if (value != null && !value.isBlank()) {
+            context.put(key, mapper.apply(value));
+        }
     }
 
     private boolean looksWarehouseRelated(String normalized) {

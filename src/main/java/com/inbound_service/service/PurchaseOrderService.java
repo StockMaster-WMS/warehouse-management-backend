@@ -227,15 +227,6 @@ public class PurchaseOrderService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
     }
 
-    // Kiểm tra đơn nhập chưa ở trạng thái kết thúc.
-    private void requirePoNotFinished(PurchaseOrder purchaseOrder) {
-        if (purchaseOrder.getStatus() == PurchaseOrderStatus.COMPLETED
-                || purchaseOrder.getStatus() == PurchaseOrderStatus.CANCELLED) {
-            throw new AppException(ErrorCode.BAD_REQUEST,
-                    "Đơn nhập đã kết thúc, không thể chỉnh sửa");
-        }
-    }
-
     private void requirePoDraft(PurchaseOrder purchaseOrder, String message) {
         if (purchaseOrder.getStatus() != PurchaseOrderStatus.DRAFT) {
             throw new AppException(ErrorCode.BAD_REQUEST, message);

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -60,5 +61,72 @@ class AiIntentRouterServiceTest {
         AiIntentResult result = router.route("Cho tôi tồn kho và đơn xuất ưu tiên", List.of());
 
         assertThat(result.getIntent()).isEqualTo(AiIntent.AMBIGUOUS);
+    }
+
+    @Test
+    void reusesHistoryForFollowUpReference() {
+        AiIntentResult result = router.route("Kho đó ở đâu?", List.of(
+                Map.of("role", "user", "content", "Thông tin kho WH-HCM-DC01"),
+                Map.of("role", "assistant", "content", "WH-HCM-DC01 - Kho Tổng HCM")
+        ));
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.WAREHOUSE_DETAIL);
+        assertThat(result.safeParameters()).containsEntry("warehouseCode", "WH-HCM-DC01");
+    }
+
+    @Test
+    void routesPendingApprovalPurchaseOrdersCount() {
+        AiIntentResult result = router.route("Hôm nay có bao nhiêu phiếu nhập đang chờ duyệt?", List.of());
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.PURCHASE_ORDER_STATUS);
+        assertThat(result.safeParameters()).containsEntry("status", "DRAFT");
+        assertThat(result.safeParameters()).containsEntry("dateRange", "TODAY");
+        assertThat(result.safeParameters()).containsEntry("countOnly", true);
+    }
+
+    @Test
+    void routesLatestApprovedOutbound() {
+        AiIntentResult result = router.route("Phiếu xuất kho gần đây nhất được duyệt là phiếu nào?", List.of());
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.SALES_ORDER_STATUS);
+        assertThat(result.safeParameters()).containsEntry("status", "APPROVED");
+        assertThat(result.safeParameters()).containsEntry("latestOnly", true);
+    }
+
+    @Test
+    void routesPasswordQuestionAsGuide() {
+        AiIntentResult result = router.route("Tôi quên mật khẩu thì phải làm sao?", List.of());
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.GENERAL_GUIDE);
+    }
+
+    @Test
+    void routesSupplierTopThisMonth() {
+        AiIntentResult result = router.route("Nhà cung cấp nào có nhiều phiếu nhập nhất trong tháng này?", List.of());
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.SUPPLIER_TOP);
+        assertThat(result.safeParameters()).containsEntry("dateRange", "THIS_MONTH");
+    }
+
+    @Test
+    void routesInventoryValueQuestion() {
+        AiIntentResult result = router.route("Tổng giá trị hàng tồn kho hiện tại là bao nhiêu?", List.of());
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.INVENTORY_VALUE);
+    }
+
+    @Test
+    void routesMonthOverMonthFlowQuestion() {
+        AiIntentResult result = router.route("So sánh số lượng nhập và xuất của tháng này với tháng trước?", List.of());
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.MONTH_OVER_MONTH_FLOW);
+    }
+
+    @Test
+    void routesPurchaseOrderApprovalAuditQuestion() {
+        AiIntentResult result = router.route("Ai là người đã duyệt phiếu nhập PO-2026-0001?", List.of());
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.PURCHASE_ORDER_APPROVAL_AUDIT);
+        assertThat(result.safeParameters()).containsEntry("code", "PO-2026-0001");
     }
 }

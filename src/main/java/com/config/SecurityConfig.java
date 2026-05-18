@@ -1,6 +1,5 @@
 package com.config;
 
-import com.auth_service.config.AuthProperties;
 import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,7 +25,6 @@ import java.util.List;
 @EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
-    private final AuthProperties authProperties;
     private final com.auth_service.security.JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Value("${app.cors.allowed-origin:http://localhost:3000}")

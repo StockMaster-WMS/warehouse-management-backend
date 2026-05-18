@@ -42,6 +42,7 @@ public class AiToolExecutorService {
             case SUPPLIER_LIST -> AiToolResult.data("SupplierTool.listSuppliers", listSuppliers(params));
             case SUPPLIER_SEARCH -> AiToolResult.data("SupplierTool.searchSuppliers", listSuppliers(params));
             case SUPPLIER_DETAIL -> AiToolResult.data("SupplierTool.getSupplierDetail", getSupplierDetail(params));
+            case SUPPLIER_TOP -> AiToolResult.data("SupplierTool.getTopSuppliers", getTopSuppliers(params));
             case CUSTOMER_LIST -> AiToolResult.data("CustomerTool.listCustomers", listCustomers(params));
             case CUSTOMER_SEARCH -> AiToolResult.data("CustomerTool.searchCustomers", listCustomers(params));
             case CUSTOMER_DETAIL -> AiToolResult.data("CustomerTool.getCustomerDetail", getCustomerDetail(params));
@@ -66,6 +67,7 @@ public class AiToolExecutorService {
             case STOCK_TRANSFER -> AiToolResult.message("StockTool.transferGuide", getStockTransferGuide(params));
             case INVENTORY_ADJUSTMENT ->
                 AiToolResult.message("StockTool.adjustmentGuide", getInventoryAdjustmentGuide(params));
+            case INVENTORY_VALUE -> AiToolResult.data("StockTool.getInventoryValue", getInventoryValue());
             case PENDING_PUTAWAY -> AiToolResult.data("InboundTool.getPendingPutaway", getPendingPutaway());
             case PUTAWAY_BY_WAREHOUSE ->
                 AiToolResult.data("InboundTool.getPutawayByWarehouse", getPutawayByWarehouse());
@@ -73,9 +75,13 @@ public class AiToolExecutorService {
             case LATEST_INBOUND -> AiToolResult.data("InboundTool.getLatestInbound", getLatestInbound());
             case PENDING_PO_RECEIPT -> AiToolResult.data("InboundTool.getPendingPoReceipt", getPendingPoReceipt());
             case PURCHASE_ORDER_STATUS ->
-                AiToolResult.data("InboundTool.getPurchaseOrderStatus", getPurchaseOrders(params));
+                countOnly(params)
+                        ? AiToolResult.data("InboundTool.getPurchaseOrderStatusCount", getPurchaseOrderCount(params))
+                        : AiToolResult.data("InboundTool.getPurchaseOrderStatus", getPurchaseOrders(params));
             case PURCHASE_ORDER_DETAIL ->
                 AiToolResult.data("InboundTool.getPurchaseOrderDetail", getPurchaseOrderDetail(params));
+            case PURCHASE_ORDER_APPROVAL_AUDIT ->
+                AiToolResult.data("InboundTool.getPurchaseOrderApprovalAudit", getPurchaseOrderApprovalAudit(params));
             case OUTBOUND_PRIORITY ->
                 AiToolResult.data("OutboundTool.getPrioritySalesOrders", getPrioritySalesOrders());
             case PACKING_STATUS -> AiToolResult.data("OutboundTool.getPackingStatus", getPackingStatus());
@@ -95,6 +101,7 @@ public class AiToolExecutorService {
             case INBOUND_REPORT -> AiToolResult.data("ReportTool.getInboundReport", getInboundReport(params));
             case OUTBOUND_REPORT -> AiToolResult.data("ReportTool.getOutboundReport", getOutboundReport(params));
             case MONTHLY_REPORT -> AiToolResult.data("ReportTool.getMonthlyReport", getMonthlyReport());
+            case MONTH_OVER_MONTH_FLOW -> AiToolResult.data("ReportTool.getMonthOverMonthFlow", getMonthOverMonthFlow());
             case GLOBAL_SEARCH -> AiToolResult.data("SearchTool.globalSearch", getGlobalSearch(params));
             case AUDIT_LOG -> {
                 if (!hasAuthority("ADMIN")) {
@@ -111,8 +118,7 @@ public class AiToolExecutorService {
             case GENERAL_GUIDE -> AiToolResult.message("GeneralGuide", getGuide(params));
             case AMBIGUOUS -> AiToolResult.message("Clarification",
                     "Bạn vui lòng nói rõ thêm mã kho, SKU, đơn hàng hoặc khoảng thời gian cần kiểm tra.");
-            case UNSUPPORTED -> AiToolResult.message("Unsupported",
-                    "Chào bạn. Tôi là trợ lý AI vận hành kho StockMaster-WMS. Tôi hiện chỉ hỗ trợ các câu hỏi liên quan đến kho, tồn kho, nhập/xuất, putaway, picking, kiểm kê, RMA và báo cáo vận hành.");
+            case UNSUPPORTED -> AiToolResult.message("Unsupported", getUnsupportedReply(params));
             default -> AiToolResult.message("UnsupportedIntent",
                     "Intent này đã được khai báo nhưng backend chưa có tool xử lý dữ liệu tương ứng.");
         };
@@ -331,6 +337,31 @@ public class AiToolExecutorService {
                 ORDER BY updated_at DESC NULLS LAST, name ASC
                 LIMIT 10
                 """, keyword, like, keyword, like, like);
+    }
+
+    private List<Map<String, Object>> getTopSuppliers(Map<String, Object> params) {
+        String dateRange = firstText(params, "dateRange");
+        if (!StringUtils.hasText(dateRange)) {
+            dateRange = "THIS_MONTH";
+        }
+        List<Object> args = new ArrayList<>();
+        StringBuilder filter = new StringBuilder(" WHERE 1 = 1 ");
+        appendDateRange(filter, args, "po.created_at", dateRange);
+        return jdbcTemplate.queryForList((""" 
+                SELECT
+                    s.code AS supplier_code,
+                    s.name AS supplier_name,
+                    COUNT(DISTINCT po.id) AS purchase_order_count,
+                    COALESCE(SUM(po.total_amount), 0) AS total_amount,
+                    COALESCE(SUM(pi.ordered_qty), 0) AS ordered_qty
+                FROM purchase_orders po
+                JOIN suppliers s ON s.id = po.supplier_id
+                LEFT JOIN po_items pi ON pi.po_id = po.id
+                %s
+                GROUP BY s.code, s.name
+                ORDER BY purchase_order_count DESC, total_amount DESC, s.name ASC
+                LIMIT 10
+                """.formatted(filter)), args.toArray());
     }
 
     private Map<String, Object> listCustomers(Map<String, Object> params) {
@@ -958,6 +989,70 @@ public class AiToolExecutorService {
                 """.trim();
     }
 
+    private Map<String, Object> getInventoryValue() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("summary", jdbcTemplate.queryForMap("""
+                WITH product_stock AS (
+                    SELECT sl.product_id,
+                           COALESCE(SUM(sl.qty_on_hand), 0) AS qty_on_hand,
+                           COALESCE(SUM(sl.qty_available), 0) AS qty_available
+                    FROM stock_levels sl
+                    GROUP BY sl.product_id
+                ),
+                product_cost AS (
+                    SELECT pi.product_id,
+                           CASE
+                               WHEN COALESCE(SUM(pi.ordered_qty), 0) > 0
+                                   THEN COALESCE(SUM(pi.unit_price * pi.ordered_qty), 0) / SUM(pi.ordered_qty)
+                               ELSE COALESCE(AVG(pi.unit_price), 0)
+                           END AS avg_unit_cost
+                    FROM po_items pi
+                    WHERE pi.unit_price IS NOT NULL
+                    GROUP BY pi.product_id
+                )
+                SELECT
+                    COUNT(*) AS valued_products,
+                    COALESCE(SUM(ps.qty_on_hand), 0) AS qty_on_hand,
+                    COALESCE(SUM(ps.qty_available), 0) AS qty_available,
+                    COALESCE(SUM(ps.qty_on_hand * COALESCE(pc.avg_unit_cost, 0)), 0) AS inventory_value
+                FROM product_stock ps
+                LEFT JOIN product_cost pc ON pc.product_id = ps.product_id
+                """));
+        result.put("top_products", jdbcTemplate.queryForList("""
+                WITH product_stock AS (
+                    SELECT sl.product_id,
+                           COALESCE(SUM(sl.qty_on_hand), 0) AS qty_on_hand,
+                           COALESCE(SUM(sl.qty_available), 0) AS qty_available
+                    FROM stock_levels sl
+                    GROUP BY sl.product_id
+                ),
+                product_cost AS (
+                    SELECT pi.product_id,
+                           CASE
+                               WHEN COALESCE(SUM(pi.ordered_qty), 0) > 0
+                                   THEN COALESCE(SUM(pi.unit_price * pi.ordered_qty), 0) / SUM(pi.ordered_qty)
+                               ELSE COALESCE(AVG(pi.unit_price), 0)
+                           END AS avg_unit_cost
+                    FROM po_items pi
+                    WHERE pi.unit_price IS NOT NULL
+                    GROUP BY pi.product_id
+                )
+                SELECT
+                    p.sku,
+                    p.name AS product_name,
+                    ps.qty_on_hand,
+                    ps.qty_available,
+                    COALESCE(pc.avg_unit_cost, 0) AS avg_unit_cost,
+                    ps.qty_on_hand * COALESCE(pc.avg_unit_cost, 0) AS inventory_value
+                FROM product_stock ps
+                JOIN products p ON p.id = ps.product_id
+                LEFT JOIN product_cost pc ON pc.product_id = ps.product_id
+                ORDER BY inventory_value DESC, p.name ASC
+                LIMIT 5
+                """));
+        return result;
+    }
+
     // Lấy các task putaway đang chờ xử lý.
     private List<Map<String, Object>> getPendingPutaway() {
         return jdbcTemplate.queryForList("""
@@ -1056,6 +1151,8 @@ public class AiToolExecutorService {
     // Tra cứu đơn nhập theo mã hoặc trạng thái chưa hoàn thành.
     private List<Map<String, Object>> getPurchaseOrders(Map<String, Object> params) {
         String code = firstText(params, "code", "query");
+        String status = firstText(params, "status");
+        String dateRange = firstText(params, "dateRange");
         List<Object> args = new ArrayList<>();
         StringBuilder sql = new StringBuilder("""
                 SELECT
@@ -1076,11 +1173,44 @@ public class AiToolExecutorService {
         if (StringUtils.hasText(code)) {
             sql.append(" AND LOWER(po.po_number) LIKE ?");
             args.add(like(code));
-        } else {
+        }
+        if (StringUtils.hasText(status)) {
+            sql.append(" AND LOWER(po.status) = LOWER(?)");
+            args.add(status);
+        } else if (!StringUtils.hasText(code)) {
             sql.append(" AND po.status <> 'COMPLETED'");
         }
+        appendDateRange(sql, args, "po.created_at", dateRange);
         sql.append(" ORDER BY po.expected_date ASC NULLS LAST, po.order_date DESC LIMIT ").append(DEFAULT_LIMIT);
         return jdbcTemplate.queryForList(sql.toString(), args.toArray());
+    }
+
+    private Map<String, Object> getPurchaseOrderCount(Map<String, Object> params) {
+        String code = firstText(params, "code", "query");
+        String status = firstText(params, "status");
+        String dateRange = firstText(params, "dateRange");
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("""
+                SELECT COUNT(*) AS total
+                FROM purchase_orders po
+                WHERE 1 = 1
+                """);
+        if (StringUtils.hasText(code)) {
+            sql.append(" AND LOWER(po.po_number) LIKE ?");
+            args.add(like(code));
+        }
+        if (StringUtils.hasText(status)) {
+            sql.append(" AND LOWER(po.status) = LOWER(?)");
+            args.add(status);
+        } else if (!StringUtils.hasText(code)) {
+            sql.append(" AND po.status <> 'COMPLETED'");
+        }
+        appendDateRange(sql, args, "po.created_at", dateRange);
+        Map<String, Object> row = jdbcTemplate.queryForMap(sql.toString(), args.toArray());
+        Map<String, Object> result = new LinkedHashMap<>(row);
+        result.put("status", status);
+        result.put("dateRange", dateRange);
+        return result;
     }
 
     private List<Map<String, Object>> getPurchaseOrderDetail(Map<String, Object> params) {
@@ -1116,6 +1246,30 @@ public class AiToolExecutorService {
                 """, like(code));
     }
 
+    private List<Map<String, Object>> getPurchaseOrderApprovalAudit(Map<String, Object> params) {
+        String code = firstText(params, "code", "poId", "query");
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    entity_name AS po_number,
+                    actor_name,
+                    actor_email,
+                    reason,
+                    created_at,
+                    module,
+                    action_type
+                FROM audit_logs
+                WHERE LOWER(entity_type) = 'purchaseorder'
+                  AND LOWER(action_type) = 'approve'
+                """);
+        if (StringUtils.hasText(code)) {
+            sql.append(" AND LOWER(entity_name) LIKE ?");
+            args.add(like(code));
+        }
+        sql.append(" ORDER BY created_at DESC LIMIT ").append(StringUtils.hasText(code) ? 10 : 20);
+        return jdbcTemplate.queryForList(sql.toString(), args.toArray());
+    }
+
     // Lấy các đơn xuất đang cần ưu tiên xử lý.
     private List<Map<String, Object>> getPrioritySalesOrders() {
         return jdbcTemplate.queryForList("""
@@ -1137,6 +1291,8 @@ public class AiToolExecutorService {
 
     private List<Map<String, Object>> getSalesOrderStatus(Map<String, Object> params) {
         String code = firstText(params, "code", "query");
+        String status = firstText(params, "status");
+        String dateRange = firstText(params, "dateRange");
         List<Object> args = new ArrayList<>();
         StringBuilder sql = new StringBuilder("""
                 SELECT
@@ -1157,15 +1313,24 @@ public class AiToolExecutorService {
         if (StringUtils.hasText(code)) {
             sql.append(" AND LOWER(so.so_number) LIKE ?");
             args.add(like(code));
-        } else {
+        }
+        if (StringUtils.hasText(status)) {
+            sql.append(" AND LOWER(so.status) = LOWER(?)");
+            args.add(status);
+        } else if (!StringUtils.hasText(code)) {
             sql.append(" AND so.status <> 'CANCELLED'");
         }
+        appendDateRange(sql, args, "so.created_at", dateRange);
         sql.append("""
                 GROUP BY so.id, so.so_number, so.customer_name, so.priority, so.status,
                          so.created_at, w.code, w.name
-                ORDER BY so.priority ASC, so.created_at DESC
-                LIMIT 50
+                ORDER BY
+                    CASE WHEN LOWER(?) = 'true' THEN 0 ELSE so.priority END ASC,
+                    so.created_at DESC
+                LIMIT ?
                 """);
+        args.add(Boolean.toString(Boolean.TRUE.equals(params.get("latestOnly"))));
+        args.add(Boolean.TRUE.equals(params.get("latestOnly")) ? 1 : DEFAULT_LIMIT);
         return jdbcTemplate.queryForList(sql.toString(), args.toArray());
     }
 
@@ -1350,6 +1515,54 @@ public class AiToolExecutorService {
                 FROM stock_movements
                 WHERE created_at >= date_trunc('month', CURRENT_DATE)
                 """));
+        return report;
+    }
+
+    private Map<String, Object> getMonthOverMonthFlow() {
+        Map<String, Object> report = new LinkedHashMap<>();
+        Map<String, Object> currentInbound = jdbcTemplate.queryForMap("""
+                SELECT COUNT(DISTINCT ir.id) AS receipts,
+                       COALESCE(SUM(iri.received_qty), 0) AS received_qty
+                FROM inbound_receipts ir
+                LEFT JOIN inbound_receipt_items iri ON iri.receipt_id = ir.id
+                WHERE ir.received_date >= date_trunc('month', CURRENT_DATE)
+                """);
+        Map<String, Object> previousInbound = jdbcTemplate.queryForMap("""
+                SELECT COUNT(DISTINCT ir.id) AS receipts,
+                       COALESCE(SUM(iri.received_qty), 0) AS received_qty
+                FROM inbound_receipts ir
+                LEFT JOIN inbound_receipt_items iri ON iri.receipt_id = ir.id
+                WHERE ir.received_date >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+                  AND ir.received_date < date_trunc('month', CURRENT_DATE)
+                """);
+        Map<String, Object> currentOutbound = jdbcTemplate.queryForMap("""
+                SELECT COUNT(DISTINCT so.id) AS sales_orders,
+                       COALESCE(SUM(soi.ordered_qty), 0) AS ordered_qty,
+                       COALESCE(SUM(soi.shipped_qty), 0) AS shipped_qty
+                FROM sales_orders so
+                LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+                WHERE so.status <> 'CANCELLED'
+                  AND so.created_at >= date_trunc('month', CURRENT_DATE)
+                """);
+        Map<String, Object> previousOutbound = jdbcTemplate.queryForMap("""
+                SELECT COUNT(DISTINCT so.id) AS sales_orders,
+                       COALESCE(SUM(soi.ordered_qty), 0) AS ordered_qty,
+                       COALESCE(SUM(soi.shipped_qty), 0) AS shipped_qty
+                FROM sales_orders so
+                LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+                WHERE so.status <> 'CANCELLED'
+                  AND so.created_at >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+                  AND so.created_at < date_trunc('month', CURRENT_DATE)
+                """);
+        report.put("current_inbound", currentInbound);
+        report.put("previous_inbound", previousInbound);
+        report.put("current_outbound", currentOutbound);
+        report.put("previous_outbound", previousOutbound);
+        report.put("delta", Map.of(
+                "received_qty", numeric(currentInbound.get("received_qty")) - numeric(previousInbound.get("received_qty")),
+                "ordered_qty", numeric(currentOutbound.get("ordered_qty")) - numeric(previousOutbound.get("ordered_qty")),
+                "shipped_qty", numeric(currentOutbound.get("shipped_qty")) - numeric(previousOutbound.get("shipped_qty"))
+        ));
         return report;
     }
 
@@ -1657,6 +1870,11 @@ public class AiToolExecutorService {
                     Tôi có thể giúp bạn tra cứu tồn kho, kho/vị trí, nhập kho, putaway, xuất kho, picking, kiểm kê, RMA và báo cáo vận hành. Bạn muốn kiểm tra nội dung nào?
                     """.trim();
         }
+        if ((query.contains("tao") && query.contains("phieu nhap")) || query.contains("tao don nhap")) {
+            return """
+                    Để tạo phiếu nhập hoặc purchase order mới, bạn vào màn hình Đơn nhập/Purchase Orders, khai báo nhà cung cấp, kho nhận, ngày dự kiến và thêm các dòng hàng. Theo quyền hiện tại của hệ thống, thao tác tạo mới dành cho ADMIN hoặc WAREHOUSE_MANAGER.
+                    """.trim();
+        }
         if (query.contains("nhap") && (query.contains("lo hang") || query.contains("hang moi"))) {
             return """
                     Cách nhập lô hàng mới:
@@ -1673,6 +1891,55 @@ public class AiToolExecutorService {
                     2. Tạo phiếu nhập, nhập ngày nhận, kho nhận và vị trí staging/receiving.
                     3. Khai báo số lượng thực nhận, lot number và hạn dùng nếu có.
                     4. Lưu phiếu để hệ thống cập nhật trạng thái nhận hàng và sinh dữ liệu putaway.
+                    """.trim();
+        }
+        if ((query.contains("xem") || query.contains("kiem tra")) && query.contains("ton kho")) {
+            return """
+                    Để xem tồn kho hiện tại, bạn vào màn hình Tồn kho hoặc hỏi trực tiếp theo SKU/tên sản phẩm, mã kho hay vị trí. Nếu cần số liệu chính xác hơn, nên nêu rõ thêm kho hoặc khoảng thời gian.
+                    """.trim();
+        }
+        if (query.contains("excel") || (query.contains("xuat") && query.contains("bao cao"))) {
+            return """
+                    Hệ thống có các màn hình hỗ trợ export Excel như sản phẩm và đơn xuất. Bạn mở đúng màn hình nghiệp vụ, áp dụng bộ lọc cần thiết rồi dùng chức năng Export/Xuất Excel nếu màn hình đó có hỗ trợ.
+                    """.trim();
+        }
+        if (query.contains("quen mat khau") || query.contains("doi mat khau")) {
+            return """
+                    Nếu quên mật khẩu, bạn cần đi qua luồng đăng nhập/khôi phục tài khoản hoặc liên hệ ADMIN để được đặt lại. Trợ lý AI không thể xem hay cấp lại mật khẩu qua chat.
+                    """.trim();
+        }
+        if ((query.contains("cho duyet") || query.contains("duyet")) && query.contains("phieu nhap")
+                && (query.contains("bao gio") || query.contains("khi nao"))) {
+            return """
+                    Trợ lý AI không thể cam kết thời điểm duyệt phiếu nhập. Bạn nên kiểm tra trạng thái PO, người phụ trách duyệt và các điều kiện còn thiếu như dòng hàng, số lượng hoặc chứng từ trước khi liên hệ ADMIN/WAREHOUSE_MANAGER.
+                    """.trim();
+        }
+        if ((query.contains("toi la staff") || query.contains("nhan vien kho"))
+                && query.contains("duyet") && query.contains("phieu nhap")) {
+            return """
+                    Theo phân quyền hiện tại, WAREHOUSE_STAFF không có quyền duyệt phiếu nhập. Quyền duyệt đơn nhập thuộc ADMIN hoặc WAREHOUSE_MANAGER.
+                    """.trim();
+        }
+        if ((query.contains("toi la manager") || query.contains("warehouse_manager") || query.contains("quan ly"))
+                && query.contains("tao tai khoan")) {
+            return """
+                    Theo phân quyền hiện tại, việc tạo tài khoản mới thuộc API quản lý người dùng dành riêng cho ADMIN. WAREHOUSE_MANAGER không có quyền tạo người dùng mới.
+                    """.trim();
+        }
+        if (query.contains("bao cao tai chinh") || query.contains("tai chinh")) {
+            return """
+                    Trợ lý AI hiện tập trung vào dữ liệu vận hành kho. Tôi chưa có tool riêng cho báo cáo tài chính trong hệ thống này, nên không nên trả số liệu tài chính qua chat nếu chưa có module hoặc API tương ứng.
+                    """.trim();
+        }
+        if (query.contains("sua thong tin san pham")) {
+            return """
+                    Theo phân quyền hiện tại, cập nhật thông tin sản phẩm là thao tác dành cho ADMIN hoặc WAREHOUSE_MANAGER. WAREHOUSE_STAFF chỉ có quyền tra cứu và đọc dữ liệu sản phẩm.
+                    """.trim();
+        }
+        if ((query.contains("ai") || query.contains("nguoi nao")) && query.contains("duyet")
+                && query.contains("phieu nhap")) {
+            return """
+                    Tôi chưa có tool trực tiếp để trả người đã duyệt phiếu nhập từ cuộc chat này. Nếu cần truy vết, bạn nên kiểm tra audit log hoặc chi tiết nghiệp vụ của phiếu nhập bằng tài khoản có quyền phù hợp.
                     """.trim();
         }
         if (query.contains("putaway")) {
@@ -1695,6 +1962,11 @@ public class AiToolExecutorService {
                     """.trim();
         }
         if (query.contains("cycle count") || query.contains("kiem ke")) {
+            if (query.contains("chenh lech am") || query.contains("lech am")) {
+                return """
+                        Nếu phiếu kiểm kê lệch âm, bạn nên kiểm tra lại vị trí, lot, giao dịch xuất gần nhất và lịch sử điều chỉnh trước khi duyệt. Chỉ khi đã xác nhận nguyên nhân thực tế thì ADMIN hoặc WAREHOUSE_MANAGER mới nên phê duyệt và điều chỉnh tồn.
+                        """.trim();
+            }
             return """
                     Cách bắt đầu cycle count mới:
                     1. Chọn kho và phạm vi kiểm kê như vị trí, SKU hoặc zone.
@@ -1710,6 +1982,22 @@ public class AiToolExecutorService {
                     2. Nhận hàng trả về tại kho và kiểm tra tình trạng.
                     3. Phân loại: nhập lại tồn tốt, cách ly hàng lỗi hoặc tạo xử lý hủy/sửa chữa.
                     4. Cập nhật trạng thái RMA đến khi hoàn tất.
+                    """.trim();
+        }
+        if ((query.contains("100") || query.contains("xuat")) && query.contains("ton kho")
+                && (query.contains("chi co") || query.contains("khong du") || query.contains("chi con"))) {
+            return """
+                    Nếu nhu cầu xuất vượt tồn khả dụng, bạn nên kiểm tra lại tồn khả dụng, lượng đang giữ chỗ và khả năng nhập bù trước. Không nên bỏ qua kiểm tra tồn; hãy tách đơn, giảm số lượng xuất hoặc chờ bổ sung hàng.
+                    """.trim();
+        }
+        if (query.contains("duyet nham") && query.contains("phieu nhap")) {
+            return """
+                    Nếu đã duyệt nhầm phiếu nhập, hãy kiểm tra phiếu đó đang ở trạng thái nào. Theo API hiện tại, ADMIN hoặc WAREHOUSE_MANAGER có thể hủy PO khi trạng thái còn DRAFT, APPROVED hoặc PARTIAL; nếu đã phát sinh nhận hàng thì cần rà soát tác động trước khi hủy.
+                    """.trim();
+        }
+        if (query.contains("bao loi") && query.contains("san pham") && query.contains("phieu nhap")) {
+            return """
+                    Khi thêm sản phẩm vào phiếu nhập bị lỗi, bạn nên kiểm tra quyền hiện tại, trạng thái PO, dữ liệu dòng hàng bắt buộc như SKU, số lượng, đơn giá và tính hợp lệ của sản phẩm. Nếu lỗi vẫn lặp lại, hãy kiểm tra log backend hoặc payload request tại màn hình PO/PO items.
                     """.trim();
         }
         if (query.contains("barcode")) {
@@ -1755,6 +2043,29 @@ public class AiToolExecutorService {
                 .trim();
     }
 
+    private String getUnsupportedReply(Map<String, Object> params) {
+        String query = normalize(firstText(params, "query"));
+        if (query.contains("mat khau") || query.contains("password")) {
+            return "Tôi không thể cung cấp, suy đoán hoặc khôi phục mật khẩu qua chat.";
+        }
+        if ((query.contains("xoa") || query.contains("delete") || query.contains("drop"))
+                && (query.contains("tat ca") || query.contains("toan bo"))) {
+            return "Tôi không thể hỗ trợ xóa hàng loạt dữ liệu hoặc hướng dẫn thao tác phá hủy qua chat.";
+        }
+        if (query.contains("bo qua") && query.contains("kiem tra ton kho")) {
+            return "Không nên bỏ qua kiểm tra tồn kho khi xuất hàng. Bạn cần giữ bước kiểm tra tồn khả dụng để tránh âm tồn và sai lệch vận hành.";
+        }
+        if (query.contains("tu dong duyet") || (query.contains("duyet tat ca") && query.contains("cho"))) {
+            return "Tôi không thể tự động duyệt hàng loạt chứng từ qua chat. Các thao tác duyệt cần được thực hiện trong luồng nghiệp vụ và theo đúng phân quyền.";
+        }
+        if (query.contains("sua so luong ton kho") || query.contains("thanh 99999")) {
+            return "Tôi không thể hỗ trợ chỉnh sửa tùy tiện số lượng tồn kho. Nếu cần điều chỉnh, hãy dùng luồng inventory adjustment với lý do và quyền duyệt phù hợp.";
+        }
+        return """
+                Tôi hiện chỉ hỗ trợ các câu hỏi liên quan đến vận hành kho như tồn kho, nhập/xuất, putaway, picking, kiểm kê, RMA và báo cáo vận hành. Tôi không thực hiện thao tác phá hủy, vượt quyền hoặc truy xuất bí mật qua chat.
+                """.trim();
+    }
+
     // Lấy chuỗi đầu tiên có giá trị từ danh sách key.
     private String firstText(Map<String, Object> params, String... keys) {
         for (String key : keys) {
@@ -1771,6 +2082,25 @@ public class AiToolExecutorService {
         return authentication != null
                 && authentication.getAuthorities().stream()
                 .anyMatch(granted -> authority.equals(granted.getAuthority()));
+    }
+
+    private boolean countOnly(Map<String, Object> params) {
+        Object value = params == null ? null : params.get("countOnly");
+        return value instanceof Boolean bool ? bool : Boolean.parseBoolean(String.valueOf(value));
+    }
+
+    private double numeric(Object value) {
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (value == null) {
+            return 0.0;
+        }
+        try {
+            return Double.parseDouble(value.toString());
+        } catch (NumberFormatException ignored) {
+            return 0.0;
+        }
     }
 
     private void appendDateRange(StringBuilder sql, List<Object> args, String column, String dateRange) {
