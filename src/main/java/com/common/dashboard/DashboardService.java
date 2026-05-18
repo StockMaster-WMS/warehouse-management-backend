@@ -12,7 +12,6 @@ import com.warehouse_service.dto.response.StockSummaryResponse;
 import com.warehouse_service.repository.StockMovementRepository;
 import com.warehouse_service.service.StockLevelService;
 import com.outbound_service.repository.CustomerRepository;
-import com.outbound_service.repository.SalesOrderItemRepository;
 import com.common.audit.AuditLogRepository;
 import com.common.dashboard.dto.DashboardActivityResponse;
 import lombok.RequiredArgsConstructor;
