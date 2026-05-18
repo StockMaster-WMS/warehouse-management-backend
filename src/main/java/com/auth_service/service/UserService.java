@@ -9,6 +9,10 @@ import com.auth_service.repository.RoleRepository;
 import com.auth_service.repository.UserRepository;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.common.notification.CreateNotificationCommand;
+import com.common.notification.NotificationService;
+import com.common.notification.NotificationSeverity;
+import com.common.notification.NotificationType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,6 +31,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final NotificationService notificationService;
 
     public List<UserResponse> getAllUsers() {
         return userRepository.findAll().stream()
@@ -77,7 +82,16 @@ public class UserService {
                 .collect(Collectors.toSet());
 
         user.setRoles(roles);
-        return toUserResponse(userRepository.save(user));
+        UserResponse response = toUserResponse(userRepository.save(user));
+        notificationService.create(new CreateNotificationCommand(
+                user.getId(),
+                NotificationType.ROLE_CHANGED,
+                NotificationSeverity.WARNING,
+                "Quyen tai khoan da thay doi",
+                "Vai tro hien tai cua ban: " + response.roles(),
+                "USER",
+                user.getId()));
+        return response;
     }
 
     @Transactional
@@ -86,7 +100,16 @@ public class UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy người dùng"));
 
         user.setIsActive(!Boolean.TRUE.equals(user.getIsActive()));
-        return toUserResponse(userRepository.save(user));
+        UserResponse response = toUserResponse(userRepository.save(user));
+        notificationService.create(new CreateNotificationCommand(
+                user.getId(),
+                NotificationType.SYSTEM_ALERT,
+                NotificationSeverity.WARNING,
+                "Trang thai tai khoan da thay doi",
+                Boolean.TRUE.equals(response.isActive()) ? "Tai khoan cua ban da duoc kich hoat" : "Tai khoan cua ban da bi tam khoa",
+                "USER",
+                user.getId()));
+        return response;
     }
 
     private UserResponse toUserResponse(UserAccount user) {

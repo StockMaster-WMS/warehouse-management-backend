@@ -7,6 +7,9 @@ import com.common.api.stock.StockReserveCommand;
 import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.common.notification.NotificationService;
+import com.common.notification.NotificationSeverity;
+import com.common.notification.NotificationType;
 import com.common.util.CodeGenerator;
 import com.warehouse_service.service.StockLevelService;
 import com.outbound_service.dto.request.CreateSalesOrderRequest;
@@ -50,6 +53,7 @@ public class SalesOrderService {
     private final StockLevelService stockLevelService;
     private final SalesOrderMapper salesOrderMapper;
     private final AuditLogService auditLogService;
+    private final NotificationService notificationService;
 
     // Lấy danh sách đơn xuất có phân trang và bộ lọc.
     public PagedResponse<SalesOrderResponse> findAll(Pageable pageable, String keyword, String status,
@@ -91,6 +95,14 @@ public class SalesOrderService {
         auditLogService.record("SALES_ORDER", "CREATE", "Tạo đơn xuất",
                 "SALES_ORDER", saved.getId(), saved.getSoNumber(), null, response,
                 null, orderMetadata(saved));
+        notificationService.createForRoles(
+                List.of("ADMIN", "WAREHOUSE_MANAGER"),
+                NotificationType.SYSTEM_ALERT,
+                NotificationSeverity.INFO,
+                "Co don xuat moi",
+                "Don xuat " + saved.getSoNumber() + " vua duoc tao",
+                "SALES_ORDER",
+                saved.getId());
         return response;
     }
 

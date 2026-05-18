@@ -3,6 +3,9 @@ package com.inbound_service.service;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.common.notification.NotificationService;
+import com.common.notification.NotificationSeverity;
+import com.common.notification.NotificationType;
 import com.common.util.CodeGenerator;
 import com.inbound_service.dto.request.CreateRmaRequest;
 import com.inbound_service.dto.request.ReceiveRmaRequest;
@@ -31,6 +34,7 @@ public class RmaService {
 
     private final RmaRepository rmaRepository;
     private final StockLevelService stockLevelService;
+    private final NotificationService notificationService;
 
     public List<RmaResponse> getAll(String keyword, String status, String reason, UUID warehouseId,
             OffsetDateTime createdFrom, OffsetDateTime createdTo) {
@@ -88,7 +92,16 @@ public class RmaService {
                 .build()).collect(Collectors.toList());
 
         rma.setItems(items);
-        return toResponse(rmaRepository.save(rma));
+        Rma saved = rmaRepository.save(rma);
+        notificationService.createForRoles(
+                List.of("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+                NotificationType.RMA_RECEIVED,
+                NotificationSeverity.INFO,
+                "Co RMA moi can xu ly",
+                "RMA " + saved.getRmaNumber() + " vua duoc tao cho khach " + saved.getCustomerName(),
+                "RMA",
+                saved.getId());
+        return toResponse(saved);
     }
 
     @Transactional
@@ -132,7 +145,18 @@ public class RmaService {
             rma.setStatus(Rma.RmaStatus.REQUESTED);
         }
 
-        return toResponse(rmaRepository.save(rma));
+        Rma saved = rmaRepository.save(rma);
+        if (newReceivedQty > oldReceivedQty) {
+            notificationService.createForRoles(
+                    List.of("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+                    NotificationType.RMA_RECEIVED,
+                    NotificationSeverity.INFO,
+                    "Da nhan hang tra RMA",
+                    "RMA " + saved.getRmaNumber() + " vua nhan " + newReceivedQty + "/" + expectedQty + " san pham",
+                    "RMA",
+                    saved.getId());
+        }
+        return toResponse(saved);
     }
 
     @Transactional

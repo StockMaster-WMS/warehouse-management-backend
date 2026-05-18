@@ -4,6 +4,9 @@ import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.common.notification.NotificationService;
+import com.common.notification.NotificationSeverity;
+import com.common.notification.NotificationType;
 import com.product_service.dto.response.ProductSummaryResponse;
 import com.product_service.service.ProductService;
 import com.warehouse_service.dto.request.CreateCycleCountRequest;
@@ -47,6 +50,7 @@ public class CycleCountService {
     private final ProductService productService;
     private final LocationRepository locationRepository;
     private final WarehouseRepository warehouseRepository;
+    private final NotificationService notificationService;
 
 
     // ─── Queries ─────────────────────────────────────────────────────────────
@@ -140,7 +144,16 @@ public class CycleCountService {
         cycleCountItemRepository.saveAll(items);
         saved.setItems(items);
 
-        return toResponse(saved);
+        CycleCountResponse response = toResponse(saved);
+        notificationService.createForRoles(
+                List.of("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+                NotificationType.CYCLE_COUNT_CREATED,
+                NotificationSeverity.INFO,
+                "Co phieu kiem ke moi",
+                "Phieu kiem ke " + displayCycleCount(saved) + " da duoc tao",
+                "CYCLE_COUNT",
+                saved.getId());
+        return response;
     }
 
     /**
@@ -212,7 +225,9 @@ public class CycleCountService {
         }
 
         count.setStatus(CycleCountStatus.COMPLETED);
-        return toResponse(cycleCountRepository.save(count));
+        CycleCount saved = cycleCountRepository.save(count);
+        notifyStockDiscrepancies(saved);
+        return toResponse(saved);
     }
 
     /**
@@ -420,5 +435,26 @@ public class CycleCountService {
 
     private String normalizeLot(String lotNumber) {
         return lotNumber == null ? "" : lotNumber.trim();
+    }
+
+    private String displayCycleCount(CycleCount count) {
+        return StringUtils.hasText(count.getCountNumber()) ? count.getCountNumber() : count.getId().toString();
+    }
+
+    private void notifyStockDiscrepancies(CycleCount count) {
+        long discrepancyCount = count.getItems() == null ? 0 : count.getItems().stream()
+                .filter(item -> item.getDiscrepancy() != null && item.getDiscrepancy() != 0)
+                .count();
+        if (discrepancyCount == 0) {
+            return;
+        }
+        notificationService.createForRoles(
+                List.of("ADMIN", "WAREHOUSE_MANAGER"),
+                NotificationType.STOCK_DISCREPANCY,
+                NotificationSeverity.CRITICAL,
+                "Phat hien chenh lech ton kho",
+                "Phieu kiem ke " + displayCycleCount(count) + " co " + discrepancyCount + " dong chenh lech",
+                "CYCLE_COUNT",
+                count.getId());
     }
 }
