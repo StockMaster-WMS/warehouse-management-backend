@@ -31,7 +31,7 @@ spring:
 
 app:
   cors:
-    allowed-origin: ${FRONTEND_ORIGIN:http://localhost:3000, http://apiwarehouse.ryon.website, https://apiwarehouse.ryon.website}
+    allowed-origin: ${FRONTEND_ORIGIN:http://localhost:3000, https://warehouse.ryon.website, http://warehouse.ryon.website, https://apiwarehouse.ryon.website, http://apiwarehouse.ryon.website}
   openapi:
     server-url: ${OPENAPI_SERVER_URL:}
 
