@@ -4,6 +4,9 @@ import com.common.api.PagedResponse;
 import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.common.notification.NotificationService;
+import com.common.notification.NotificationSeverity;
+import com.common.notification.NotificationType;
 import com.common.util.CodeGenerator;
 import com.inbound_service.dto.request.CreatePurchaseOrderRequest;
 import com.inbound_service.dto.request.UpdatePurchaseOrderRequest;
@@ -52,6 +55,7 @@ public class PurchaseOrderService {
     private final PutawayTaskMapper putawayTaskMapper;
     private final InboundReceiptMapper receiptMapper;
     private final AuditLogService auditLogService;
+    private final NotificationService notificationService;
 
     // Lấy danh sách đơn nhập có phân trang và bộ lọc.
     public PagedResponse<PurchaseOrderResponse> findAll(Pageable pageable, String keyword, String status,
@@ -131,6 +135,14 @@ public class PurchaseOrderService {
         auditLogService.record("PURCHASE_ORDER", "CREATE", "Tạo đơn nhập",
                 "PURCHASE_ORDER", saved.getId(), saved.getPoNumber(), null, response,
                 null, Map.of("poNumber", saved.getPoNumber()));
+        notificationService.createForRoles(
+                List.of("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
+                NotificationType.PURCHASE_ORDER_CREATED,
+                NotificationSeverity.INFO,
+                "Co don nhap moi",
+                "Don nhap " + saved.getPoNumber() + " vua duoc tao",
+                "PURCHASE_ORDER",
+                saved.getId());
         return response;
     }
 

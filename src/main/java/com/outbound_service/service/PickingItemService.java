@@ -5,6 +5,10 @@ import com.common.api.stock.StockReserveCommand;
 import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.common.notification.CreateNotificationCommand;
+import com.common.notification.NotificationService;
+import com.common.notification.NotificationSeverity;
+import com.common.notification.NotificationType;
 import com.product_service.entity.Product;
 import com.product_service.repository.ProductRepository;
 import com.product_service.service.ProductService;
@@ -62,6 +66,7 @@ public class PickingItemService {
     private final ProductService productService;
     private final LocationService locationService;
     private final AuditLogService auditLogService;
+    private final NotificationService notificationService;
 
     // Lấy danh sách picking item có phân trang và bộ lọc.
     @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
@@ -318,7 +323,11 @@ public class PickingItemService {
         assertSalesOrderAllowsPickingMutation(so);
 
         item.setAssigneeId(assigneeId);
+        boolean shouldNotifyAssignee = assigneeId != null && !assigneeId.equals(before.assigneeId());
         PickingItem saved = pickingItemRepository.save(item);
+        if (shouldNotifyAssignee) {
+            notifyPickingAssigned(saved);
+        }
         
         PickingItemResponse after = pickingItemMapper.toResponse(saved);
         auditLogService.record("PICKING", "ASSIGN", "Phân công nhiệm vụ picking",
@@ -346,6 +355,14 @@ public class PickingItemService {
         
         Map<String, Object> meta = pickingMetadata(saved);
         meta.put("exceptionReason", reason);
+        notificationService.createForRoles(
+                List.of("ADMIN", "WAREHOUSE_MANAGER"),
+                NotificationType.PICKING_EXCEPTION,
+                NotificationSeverity.WARNING,
+                "Co loi picking can xu ly",
+                "Picking item " + saved.getId() + " vua duoc bao loi: " + (reason == null ? "" : reason),
+                "PICKING_ITEM",
+                saved.getId());
 
         auditLogService.record("PICKING", "EXCEPTION", "Báo lỗi lấy hàng: " + reason,
                 "PICKING_ITEM", saved.getId(), pickingEntityName(saved), before, after,
@@ -508,6 +525,23 @@ public class PickingItemService {
         metadata.put("qtyPicked", item.getQtyPicked());
         metadata.put("status", item.getStatus() == null ? null : item.getStatus().name());
         return metadata;
+    }
+
+    private void notifyPickingAssigned(PickingItem item) {
+        if (item.getAssigneeId() == null) {
+            return;
+        }
+        String salesOrderNumber = item.getSoItem() == null || item.getSoItem().getSalesOrder() == null
+                ? "don xuat"
+                : item.getSoItem().getSalesOrder().getSoNumber();
+        notificationService.create(new CreateNotificationCommand(
+                item.getAssigneeId(),
+                NotificationType.PICKING_ASSIGNED,
+                NotificationSeverity.INFO,
+                "Ban duoc giao nhiem vu picking",
+                "Ban duoc giao picking cho " + salesOrderNumber + ", productId=" + item.getProductId(),
+                "PICKING_ITEM",
+                item.getId()));
     }
 
     // Lấy chi tiết picking item đầy đủ dữ liệu cho giao diện picker.

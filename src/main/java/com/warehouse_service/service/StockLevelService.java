@@ -6,6 +6,9 @@ import com.common.api.stock.StockReserveCommand;
 import com.common.audit.AuditLogService;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.common.notification.NotificationService;
+import com.common.notification.NotificationSeverity;
+import com.common.notification.NotificationType;
 import com.product_service.service.ProductService;
 import com.warehouse_service.dto.request.CreateStockLevelRequest;
 import com.warehouse_service.dto.request.UpdateStockLevelRequest;
@@ -61,6 +64,7 @@ public class StockLevelService {
     private final ProductService productService;
     private final StockMovementRepository stockMovementRepository;
     private final AuditLogService auditLogService;
+    private final NotificationService notificationService;
 
     // Lấy danh sách tồn kho có phân trang và bộ lọc cơ bản.
     public PagedResponse<StockLevelResponse> findAll(Pageable pageable, UUID warehouseId, UUID locationId, UUID productId) {
@@ -160,6 +164,7 @@ public class StockLevelService {
         auditLogService.record("STOCK", "CREATE", "Tạo tồn kho",
                 "STOCK_LEVEL", saved.getId(), stockEntityName(saved), null, response,
                 null, stockMetadata(saved, null, null, null, null));
+        notifyLowStockIfNeeded(response);
         return response;
     }
 
@@ -187,6 +192,7 @@ public class StockLevelService {
         auditLogService.record("STOCK", "UPDATE", "Cập nhật tồn kho",
                 "STOCK_LEVEL", saved.getId(), stockEntityName(saved), before, after,
                 null, stockMetadata(saved, null, null, null, null));
+        notifyLowStockIfNeeded(after);
         return after;
     }
 
@@ -304,6 +310,7 @@ public class StockLevelService {
                         "STOCK_LEVEL", saved.getId(), stockEntityName(saved), before, after,
                         cmd.referenceType(), stockMetadata(saved, 0, cmd.reservedDelta(),
                                 cmd.referenceType(), cmd.referenceId()));
+                notifyLowStockIfNeeded(after);
                 return after;
             } catch (ObjectOptimisticLockingFailureException e) {
                 if (attempt == MAX_RETRY - 1) {
@@ -341,6 +348,7 @@ public class StockLevelService {
         auditLogService.record("STOCK", "STOCK_ADJUST", "Điều chỉnh tồn kho",
                 "STOCK_LEVEL", saved.getId(), stockEntityName(saved), null, after,
                 cmd.referenceType(), stockMetadata(saved, cmd.qtyDelta(), 0, cmd.referenceType(), cmd.referenceId()));
+        notifyLowStockIfNeeded(after);
         return after;
     }
 
@@ -365,6 +373,7 @@ public class StockLevelService {
         auditLogService.record("STOCK", "STOCK_ADJUST", "Điều chỉnh tồn kho",
                 "STOCK_LEVEL", saved.getId(), stockEntityName(saved), before, after,
                 cmd.referenceType(), stockMetadata(saved, qtyDelta, 0, cmd.referenceType(), cmd.referenceId()));
+        notifyLowStockIfNeeded(after);
         return after;
     }
 
@@ -712,5 +721,34 @@ public class StockLevelService {
         int onHand = stock.getQtyOnHand() == null ? 0 : stock.getQtyOnHand();
         int reserved = stock.getQtyReserved() == null ? 0 : stock.getQtyReserved();
         return onHand - reserved < product.minQty();
+    }
+
+    private void notifyLowStockIfNeeded(StockLevelResponse stock) {
+        if (stock == null || stock.id() == null || stock.productId() == null) {
+            return;
+        }
+        Map<UUID, ProductSummaryResponse> productMap = loadProductsSummary(Set.of(stock.productId()));
+        ProductSummaryResponse product = productMap.get(stock.productId());
+        if (product == null || product.minQty() == null) {
+            return;
+        }
+
+        int onHand = stock.qtyOnHand() == null ? 0 : stock.qtyOnHand();
+        int available = stock.qtyAvailable() == null
+                ? onHand - (stock.qtyReserved() == null ? 0 : stock.qtyReserved())
+                : stock.qtyAvailable();
+        if (available >= product.minQty()) {
+            return;
+        }
+
+        String productLabel = StringUtils.hasText(product.sku()) ? product.sku() : stock.productId().toString();
+        notificationService.createForRolesIfNoUnread(
+                List.of("ADMIN", "WAREHOUSE_MANAGER", "REPORT_VIEWER"),
+                NotificationType.LOW_STOCK,
+                NotificationSeverity.WARNING,
+                "Canh bao ton kho thap",
+                "San pham " + productLabel + " chi con kha dung " + available + ", duoi muc toi thieu " + product.minQty(),
+                "STOCK_LEVEL",
+                stock.id());
     }
 }
