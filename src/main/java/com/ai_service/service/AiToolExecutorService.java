@@ -28,6 +28,7 @@ public class AiToolExecutorService {
     private static final String WAREHOUSE_MANAGER = "WAREHOUSE_MANAGER";
     private static final String WAREHOUSE_STAFF = "WAREHOUSE_STAFF";
     private static final String REPORT_VIEWER = "REPORT_VIEWER";
+    private static final Pattern SALES_ORDER_CODE_PATTERN = Pattern.compile("\\bSO-?\\d+[A-Z0-9-]*\\b", Pattern.CASE_INSENSITIVE);
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -71,13 +72,14 @@ public class AiToolExecutorService {
                 AiToolResult.data("StockTool.getWarehouseStockSummary", getWarehouseStockSummary(params));
             case LOW_STOCK -> AiToolResult.data("StockTool.getLowStock", getLowStock());
             case NEAR_EXPIRY -> AiToolResult.data("StockTool.getNearExpiry", getNearExpiry(params));
+            case SLOW_MOVING_STOCK -> AiToolResult.data("StockTool.getSlowMovingStock", getSlowMovingStock());
             case STOCK_MOVEMENT_HISTORY ->
                 AiToolResult.data("StockTool.getMovementHistory", getStockMovementHistory(params));
             case STOCK_TRANSFER -> AiToolResult.message("StockTool.transferGuide", getStockTransferGuide(params));
             case INVENTORY_ADJUSTMENT ->
                 AiToolResult.message("StockTool.adjustmentGuide", getInventoryAdjustmentGuide(params));
             case INVENTORY_VALUE -> AiToolResult.data("StockTool.getInventoryValue", getInventoryValue());
-            case PENDING_PUTAWAY -> AiToolResult.data("InboundTool.getPendingPutaway", getPendingPutaway());
+            case PENDING_PUTAWAY -> AiToolResult.data("InboundTool.getPendingPutaway", getPendingPutaway(params));
             case PUTAWAY_BY_WAREHOUSE ->
                 AiToolResult.data("InboundTool.getPutawayByWarehouse", getPutawayByWarehouse());
             case INBOUND_TODAY -> AiToolResult.data("InboundTool.getInboundToday", getInboundToday());
@@ -91,6 +93,10 @@ public class AiToolExecutorService {
                 AiToolResult.data("InboundTool.getPurchaseOrderDetail", getPurchaseOrderDetail(params));
             case PURCHASE_ORDER_APPROVAL_AUDIT ->
                 AiToolResult.data("InboundTool.getPurchaseOrderApprovalAudit", getPurchaseOrderApprovalAudit(params));
+            case INBOUND_RECEIPT_STATUS ->
+                AiToolResult.data("InboundTool.getInboundReceiptStatus", getInboundReceiptDetail(params));
+            case INBOUND_RECEIPT_DETAIL ->
+                AiToolResult.data("InboundTool.getInboundReceiptDetail", getInboundReceiptDetail(params));
             case OUTBOUND_PRIORITY ->
                 AiToolResult.data("OutboundTool.getPrioritySalesOrders", getPrioritySalesOrders());
             case PACKING_STATUS -> AiToolResult.data("OutboundTool.getPackingStatus", getPackingStatus());
@@ -104,7 +110,8 @@ public class AiToolExecutorService {
             case FLOW_REPORT -> AiToolResult.data("ReportTool.getFlowReport", getFlowReport());
             case ACTIVE_CYCLE_COUNTS -> AiToolResult.data("CycleCountTool.getActive", getActiveCycleCounts());
             case CYCLE_COUNT_VARIANCE -> AiToolResult.data("CycleCountTool.getVariance", getCycleCountVariance(params));
-            case RMA_PENDING -> AiToolResult.data("InboundTool.getPendingRma", getPendingRma());
+            case CYCLE_COUNT_STATUS -> AiToolResult.data("CycleCountTool.getStatus", getCycleCountStatus(params));
+            case RMA_PENDING -> AiToolResult.data("InboundTool.getPendingRma", getPendingRma(params));
             case DAILY_TASKS -> AiToolResult.data("ReportTool.getDailyTasks", getDailyTasks());
             case REPORT_SUMMARY -> AiToolResult.data("ReportTool.getOperationalSummary", getOperationalSummary());
             case INBOUND_REPORT -> AiToolResult.data("ReportTool.getInboundReport", getInboundReport(params));
@@ -124,6 +131,7 @@ public class AiToolExecutorService {
                 }
                 yield AiToolResult.data("AuditTool.getAiAuditLogs", getAiAuditLogs(params));
             }
+            case USER_PERMISSION -> AiToolResult.message("Authorization.permission", getUserPermissionAnswer(params));
             case GENERAL_GUIDE -> AiToolResult.message("GeneralGuide", getGuide(params));
             case AMBIGUOUS -> AiToolResult.message("Clarification",
                     "Bạn vui lòng nói rõ thêm mã kho, SKU, đơn hàng hoặc khoảng thời gian cần kiểm tra.");
@@ -814,9 +822,10 @@ public class AiToolExecutorService {
                 """);
 
         if (StringUtils.hasText(sku)) {
-            sql.append(" AND (LOWER(p.sku) = LOWER(?) OR LOWER(p.sku) LIKE LOWER(?))");
+            sql.append(" AND (LOWER(p.sku) = LOWER(?) OR LOWER(p.sku) LIKE LOWER(?) OR LOWER(p.sku) LIKE LOWER(?))");
             args.add(sku);
             args.add(sku + "%");
+            args.add("%" + sku);
         } else if (StringUtils.hasText(product)) {
             sql.append("""
                      AND (
@@ -862,9 +871,9 @@ public class AiToolExecutorService {
                         NULL AS updated_at
                     FROM products p
                     JOIN warehouses w ON LOWER(w.code) = LOWER(?)
-                    WHERE LOWER(p.sku) = LOWER(?) OR LOWER(p.sku) LIKE LOWER(?)
+                    WHERE LOWER(p.sku) = LOWER(?) OR LOWER(p.sku) LIKE LOWER(?) OR LOWER(p.sku) LIKE LOWER(?)
                     LIMIT 1
-                    """, warehouse, sku, sku + "%");
+                    """, warehouse, sku, sku + "%", "%" + sku);
         }
         return jdbcTemplate.queryForList("""
                 SELECT
@@ -881,10 +890,10 @@ public class AiToolExecutorService {
                     MAX(sl.updated_at) AS updated_at
                 FROM products p
                 LEFT JOIN stock_levels sl ON sl.product_id = p.id
-                WHERE LOWER(p.sku) = LOWER(?) OR LOWER(p.sku) LIKE LOWER(?)
+                WHERE LOWER(p.sku) = LOWER(?) OR LOWER(p.sku) LIKE LOWER(?) OR LOWER(p.sku) LIKE LOWER(?)
                 GROUP BY p.id, p.sku, p.name
                 LIMIT 1
-                """, sku, sku + "%");
+                """, sku, sku + "%", "%" + sku);
     }
 
     // Lấy danh sách SKU đang dưới mức tồn tối thiểu.
@@ -905,6 +914,46 @@ public class AiToolExecutorService {
                 HAVING COALESCE(SUM(sl.qty_available), 0) < COALESCE(p.min_stock_qty, 0)
                 ORDER BY qty_available ASC, p.name ASC
                 LIMIT 50
+                """);
+    }
+
+    // Lấy SKU quay vòng chậm theo lần phát sinh stock movement gần nhất.
+    private List<Map<String, Object>> getSlowMovingStock() {
+        return jdbcTemplate.queryForList("""
+                WITH stock AS (
+                    SELECT
+                        product_id,
+                        COALESCE(SUM(qty_on_hand), 0) AS qty_on_hand,
+                        COALESCE(SUM(qty_available), 0) AS qty_available
+                    FROM stock_levels
+                    GROUP BY product_id
+                ),
+                movements AS (
+                    SELECT product_id, MAX(created_at) AS last_movement_at
+                    FROM stock_movements
+                    GROUP BY product_id
+                )
+                SELECT
+                    p.sku,
+                    p.name AS product_name,
+                    COALESCE(stock.qty_on_hand, 0) AS qty_on_hand,
+                    COALESCE(stock.qty_available, 0) AS qty_available,
+                    movements.last_movement_at,
+                    CASE
+                        WHEN movements.last_movement_at IS NULL THEN NULL
+                        ELSE CURRENT_DATE - movements.last_movement_at::date
+                    END AS days_without_movement
+                FROM products p
+                LEFT JOIN stock ON stock.product_id = p.id
+                LEFT JOIN movements ON movements.product_id = p.id
+                WHERE p.status = 'ACTIVE'
+                ORDER BY
+                    CASE
+                        WHEN movements.last_movement_at IS NULL THEN 999999
+                        ELSE CURRENT_DATE - movements.last_movement_at::date
+                    END DESC,
+                    p.name ASC
+                LIMIT 10
                 """);
     }
 
@@ -998,6 +1047,22 @@ public class AiToolExecutorService {
                 """.trim();
     }
 
+    private String getUserPermissionAnswer(Map<String, Object> params) {
+        if ("STOCK_ADJUSTMENT".equalsIgnoreCase(firstText(params, "permission"))) {
+            if (hasAuthority(ADMIN) || hasAuthority(WAREHOUSE_MANAGER)) {
+                return "Vai trò hiện tại có quyền tạo hoặc duyệt stock adjustment theo phân quyền hệ thống.";
+            }
+            if (hasAuthority(WAREHOUSE_STAFF)) {
+                return "Vai trò WAREHOUSE_STAFF không có quyền stock adjustment.";
+            }
+            if (hasAuthority(REPORT_VIEWER)) {
+                return "Vai trò REPORT_VIEWER chỉ được xem báo cáo, không có quyền stock adjustment.";
+            }
+            return "Tôi chưa xác định được vai trò hiện tại nên không thể xác nhận quyền stock adjustment.";
+        }
+        return "Tôi chưa xác định được quyền nghiệp vụ bạn muốn kiểm tra.";
+    }
+
     private Map<String, Object> getInventoryValue() {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("summary", jdbcTemplate.queryForMap("""
@@ -1062,28 +1127,53 @@ public class AiToolExecutorService {
         return result;
     }
 
-    // Lấy các task putaway đang chờ xử lý.
-    private List<Map<String, Object>> getPendingPutaway() {
-        return jdbcTemplate.queryForList("""
-                SELECT
-                    pt.id,
-                    pt.status,
-                    pt.qty_to_putaway,
-                    ir.receipt_number,
-                    COALESCE(p.sku, pt.product_id::text) AS sku,
-                    COALESCE(p.name, 'Sản phẩm ' || pt.product_id::text) AS product_name,
-                    suggested.code AS suggested_location,
-                    actual.code AS actual_location,
-                    pt.completed_at
-                FROM putaway_tasks pt
-                LEFT JOIN products p ON p.id = pt.product_id
-                LEFT JOIN inbound_receipts ir ON ir.id = pt.inbound_receipt_id
-                LEFT JOIN locations suggested ON suggested.id = pt.suggested_location_id
-                LEFT JOIN locations actual ON actual.id = pt.actual_location_id
-                WHERE pt.status IN ('PENDING', 'IN_PROGRESS', 'ASSIGNED')
-                ORDER BY pt.status ASC, pt.id ASC
+    // Lấy các task putaway đang chờ xử lý hoặc một task cụ thể theo mã.
+    private List<Map<String, Object>> getPendingPutaway(Map<String, Object> params) {
+        String taskCode = firstText(params, "putawayTaskCode", "taskCode", "code");
+        List<Object> args = new ArrayList<>();
+        StringBuilder baseFilter = new StringBuilder(" WHERE 1 = 1 ");
+        if (!StringUtils.hasText(taskCode)) {
+            baseFilter.append(" AND pt.status IN ('PENDING', 'IN_PROGRESS', 'ASSIGNED')");
+        }
+        StringBuilder outerFilter = new StringBuilder(" WHERE 1 = 1 ");
+        if (StringUtils.hasText(taskCode)) {
+            outerFilter.append(" AND (LOWER(task_code) = LOWER(?) OR id::text = ?)");
+            args.add(taskCode);
+            args.add(taskCode);
+        }
+        return jdbcTemplate.queryForList((""" 
+                WITH task_rows AS (
+                    SELECT
+                        pt.id,
+                        'PT-' || COALESCE(to_char(ir.received_date, 'YYYY'), to_char(CURRENT_DATE, 'YYYY'))
+                            || '-' || lpad(row_number() OVER (ORDER BY pt.id)::text, 3, '0') AS task_code,
+                        pt.status,
+                        pt.qty_to_putaway,
+                        ir.receipt_number,
+                        COALESCE(p.sku, pt.product_id::text) AS sku,
+                        COALESCE(p.name, 'Sản phẩm ' || pt.product_id::text) AS product_name,
+                        suggested.code AS suggested_location,
+                        suggested_w.code AS suggested_warehouse_code,
+                        actual.code AS actual_location,
+                        actual_w.code AS actual_warehouse_code,
+                        COALESCE(assignee.username, assignee.full_name) AS assignee_username,
+                        pt.completed_at
+                    FROM putaway_tasks pt
+                    LEFT JOIN products p ON p.id = pt.product_id
+                    LEFT JOIN inbound_receipts ir ON ir.id = pt.inbound_receipt_id
+                    LEFT JOIN locations suggested ON suggested.id = pt.suggested_location_id
+                    LEFT JOIN warehouses suggested_w ON suggested_w.id = suggested.warehouse_id
+                    LEFT JOIN locations actual ON actual.id = pt.actual_location_id
+                    LEFT JOIN warehouses actual_w ON actual_w.id = actual.warehouse_id
+                    LEFT JOIN users assignee ON assignee.id = pt.assigned_to
+                    %s
+                )
+                SELECT *
+                FROM task_rows
+                %s
+                ORDER BY status ASC, id ASC
                 LIMIT 50
-                """);
+                """.formatted(baseFilter, outerFilter)), args.toArray());
     }
 
     // Lấy phiếu nhập/dòng hàng nhập gần nhất cùng nhà cung cấp.
@@ -1132,6 +1222,55 @@ public class AiToolExecutorService {
                 ORDER BY ir.created_at DESC, ir.receipt_number DESC
                 LIMIT 50
                 """);
+    }
+
+    private List<Map<String, Object>> getInboundReceiptDetail(Map<String, Object> params) {
+        String receiptCode = firstText(params, "receiptCode", "code", "query");
+        List<Object> args = new ArrayList<>();
+        StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
+        if (StringUtils.hasText(receiptCode)) {
+            where.append(" AND LOWER(ir.receipt_number) LIKE ?");
+            args.add(like(receiptCode));
+        }
+        return jdbcTemplate.queryForList((""" 
+                SELECT
+                    ir.receipt_number,
+                    ir.status AS receipt_status,
+                    ir.received_date,
+                    po.po_number,
+                    po.status AS po_status,
+                    w.code AS warehouse_code,
+                    w.name AS warehouse_name,
+                    receiving.code AS receiving_location,
+                    COALESCE(receiver.username, receiver.full_name) AS received_by_username,
+                    COALESCE(p.sku, iri.product_sku) AS sku,
+                    COALESCE(p.name, iri.product_sku) AS product_name,
+                    iri.received_qty,
+                    pt.status AS putaway_status,
+                    pt.qty_to_putaway,
+                    suggested.code AS suggested_location,
+                    suggested_w.code AS suggested_warehouse_code,
+                    actual.code AS actual_location,
+                    actual_w.code AS actual_warehouse_code,
+                    COALESCE(assignee.username, assignee.full_name) AS assignee_username
+                FROM inbound_receipts ir
+                JOIN purchase_orders po ON po.id = ir.po_id
+                LEFT JOIN warehouses w ON w.id = ir.warehouse_id
+                LEFT JOIN locations receiving ON receiving.id = ir.location_id
+                LEFT JOIN users receiver ON receiver.id = ir.received_by
+                LEFT JOIN inbound_receipt_items iri ON iri.receipt_id = ir.id
+                LEFT JOIN products p ON p.id = iri.product_id
+                LEFT JOIN putaway_tasks pt ON pt.inbound_receipt_id = ir.id
+                    AND (pt.product_id = iri.product_id OR iri.product_id IS NULL)
+                LEFT JOIN locations suggested ON suggested.id = pt.suggested_location_id
+                LEFT JOIN warehouses suggested_w ON suggested_w.id = suggested.warehouse_id
+                LEFT JOIN locations actual ON actual.id = pt.actual_location_id
+                LEFT JOIN warehouses actual_w ON actual_w.id = actual.warehouse_id
+                LEFT JOIN users assignee ON assignee.id = pt.assigned_to
+                %s
+                ORDER BY ir.received_date DESC, ir.receipt_number DESC, sku ASC
+                LIMIT 50
+                """.formatted(where)), args.toArray());
     }
 
     private List<Map<String, Object>> getPendingPoReceipt() {
@@ -1486,9 +1625,14 @@ public class AiToolExecutorService {
 
     private Map<String, Object> getOutboundReport(Map<String, Object> params) {
         String dateRange = firstText(params, "dateRange");
+        ResolvedWarehouse warehouse = resolveWarehouse(params);
         List<Object> args = new ArrayList<>();
         StringBuilder filter = new StringBuilder(" WHERE so.status <> 'CANCELLED' ");
         appendDateRange(filter, args, "so.created_at", dateRange);
+        if (warehouse != null) {
+            filter.append(" AND LOWER(w.code) = LOWER(?)");
+            args.add(warehouse.code());
+        }
 
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("summary", jdbcTemplate.queryForMap((""" 
@@ -1497,6 +1641,7 @@ public class AiToolExecutorService {
                        COALESCE(SUM(soi.shipped_qty), 0) AS shipped_qty
                 FROM sales_orders so
                 LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+                LEFT JOIN warehouses w ON w.id = so.warehouse_id
                 %s
                 """.formatted(filter)), args.toArray()));
         report.put("by_status", jdbcTemplate.queryForList((""" 
@@ -1505,10 +1650,18 @@ public class AiToolExecutorService {
                        COALESCE(SUM(soi.shipped_qty), 0) AS shipped_qty
                 FROM sales_orders so
                 LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+                LEFT JOIN warehouses w ON w.id = so.warehouse_id
                 %s
                 GROUP BY so.status
                 ORDER BY sales_orders DESC, so.status ASC
                 """.formatted(filter)), args.toArray()));
+        if (warehouse != null) {
+            report.put("warehouse_code", warehouse.code());
+            report.put("warehouse_name", warehouse.name());
+        }
+        if (StringUtils.hasText(dateRange)) {
+            report.put("dateRange", dateRange);
+        }
         return report;
     }
 
@@ -1578,37 +1731,76 @@ public class AiToolExecutorService {
     // Lấy tình trạng các dòng picking chưa hoàn tất.
     private List<Map<String, Object>> getPickingStatus(Map<String, Object> params) {
         String query = normalize(firstText(params, "query"));
+        String salesOrderCode = firstText(params, "soId");
+        String code = firstText(params, "code");
+        if (!StringUtils.hasText(salesOrderCode) && StringUtils.hasText(code)
+                && SALES_ORDER_CODE_PATTERN.matcher(code).matches()) {
+            salesOrderCode = code;
+        }
+        String pickingTaskCode = firstText(params, "pickingTaskCode", "taskCode");
         boolean pendingOnly = query.contains("pending") || query.contains("cho picking") || query.contains("cho pick")
-                || query.contains("dang cho");
-        String statusFilter = pendingOnly ? "pi.status = 'PENDING'" : "pi.status <> 'COMPLETED'";
-        return jdbcTemplate.queryForList("""
-                SELECT
-                    so.so_number,
-                    so.customer_name,
-                    pi.status,
-                    pi.qty_to_pick,
-                    pi.qty_picked,
-                    pi.pick_sequence,
-                    pi.lot_number,
-                    COALESCE(p.sku, pi.product_id::text) AS sku,
-                    COALESCE(p.name, 'Sản phẩm ' || pi.product_id::text) AS product_name,
-                    l.code AS location_code
-                FROM picking_items pi
-                LEFT JOIN sales_order_items soi ON soi.id = pi.so_item_id
-                LEFT JOIN sales_orders so ON so.id = soi.sales_order_id
-                LEFT JOIN products p ON p.id = pi.product_id
-                LEFT JOIN locations l ON l.id = pi.location_id
-                WHERE %s
-                ORDER BY pi.status ASC, pi.pick_sequence ASC NULLS LAST
+                || query.contains("dang cho") || query.contains("chua lay") || query.contains("chua hoan tat");
+        boolean hasSpecificCode = StringUtils.hasText(salesOrderCode) || StringUtils.hasText(pickingTaskCode);
+
+        List<Object> args = new ArrayList<>();
+        StringBuilder baseFilter = new StringBuilder(" WHERE 1 = 1 ");
+        if (!hasSpecificCode) {
+            baseFilter.append(pendingOnly ? " AND pi.status = 'PENDING'" : " AND pi.status <> 'PICKED'");
+        }
+        StringBuilder outerFilter = new StringBuilder(" WHERE 1 = 1 ");
+        if (StringUtils.hasText(salesOrderCode)) {
+            outerFilter.append(" AND LOWER(so_number) LIKE ?");
+            args.add(like(salesOrderCode));
+        }
+        if (StringUtils.hasText(pickingTaskCode)) {
+            outerFilter.append(" AND (LOWER(task_code) = LOWER(?) OR id::text = ?)");
+            args.add(pickingTaskCode);
+            args.add(pickingTaskCode);
+        }
+        return jdbcTemplate.queryForList((""" 
+                WITH task_rows AS (
+                    SELECT
+                        pi.id,
+                        'PK-' || COALESCE(to_char(so.created_at, 'YYYY'), to_char(CURRENT_DATE, 'YYYY'))
+                            || '-' || lpad(row_number() OVER (
+                                ORDER BY so.created_at NULLS LAST, pi.pick_sequence NULLS LAST, pi.id
+                            )::text, 3, '0') AS task_code,
+                        so.so_number,
+                        so.customer_name,
+                        so.priority,
+                        pi.status,
+                        pi.qty_to_pick,
+                        pi.qty_picked,
+                        GREATEST(pi.qty_to_pick - COALESCE(pi.qty_picked, 0), 0) AS remaining_qty,
+                        pi.pick_sequence,
+                        pi.lot_number,
+                        COALESCE(p.sku, pi.product_id::text) AS sku,
+                        COALESCE(p.name, 'Sản phẩm ' || pi.product_id::text) AS product_name,
+                        l.code AS location_code,
+                        w.code AS warehouse_code,
+                        COALESCE(assignee.username, assignee.full_name) AS assignee_username
+                    FROM picking_items pi
+                    LEFT JOIN sales_order_items soi ON soi.id = pi.so_item_id
+                    LEFT JOIN sales_orders so ON so.id = soi.sales_order_id
+                    LEFT JOIN products p ON p.id = pi.product_id
+                    LEFT JOIN locations l ON l.id = pi.location_id
+                    LEFT JOIN warehouses w ON w.id = l.warehouse_id
+                    LEFT JOIN users assignee ON assignee.id = pi.assignee_id
+                    %s
+                )
+                SELECT *
+                FROM task_rows
+                %s
+                ORDER BY status ASC, pick_sequence ASC NULLS LAST
                 LIMIT 50
-                """.formatted(statusFilter));
+                """.formatted(baseFilter, outerFilter)), args.toArray());
     }
 
     // Lấy các cycle count đang mở.
     private List<Map<String, Object>> getActiveCycleCounts() {
         return jdbcTemplate.queryForList("""
                 SELECT
-                    cc.id AS cycle_count_id,
+                    COALESCE(cc.count_number, cc.id::text) AS cycle_count_id,
                     cc.status,
                     cc.description,
                     cc.scheduled_at,
@@ -1619,7 +1811,7 @@ public class AiToolExecutorService {
                 LEFT JOIN warehouses w ON w.id = cc.warehouse_id
                 LEFT JOIN cycle_count_items cci ON cci.cycle_count_id = cc.id
                 WHERE cc.status IN ('PENDING', 'IN_PROGRESS')
-                GROUP BY cc.id, cc.status, cc.description, cc.scheduled_at, w.code, w.name
+                GROUP BY cc.id, cc.count_number, cc.status, cc.description, cc.scheduled_at, w.code, w.name
                 ORDER BY cc.scheduled_at ASC NULLS LAST, cc.created_at DESC
                 LIMIT 50
                 """);
@@ -1631,10 +1823,12 @@ public class AiToolExecutorService {
         if (warehouse == null && hasWarehouseHint(params)) {
             return List.of();
         }
+        String cycleCountCode = firstText(params, "cycleCountCode", "code");
+        String sku = firstText(params, "sku");
         List<Object> args = new ArrayList<>();
         StringBuilder sql = new StringBuilder("""
                 SELECT
-                    cc.id AS cycle_count_id,
+                    COALESCE(cc.count_number, cc.id::text) AS cycle_count_id,
                     cc.status AS cycle_count_status,
                     w.code AS warehouse_code,
                     w.name AS warehouse_name,
@@ -1651,18 +1845,61 @@ public class AiToolExecutorService {
                 LEFT JOIN warehouses w ON w.id = cc.warehouse_id
                 LEFT JOIN products p ON p.id = cci.product_id
                 LEFT JOIN locations l ON l.id = cci.location_id
-                WHERE COALESCE(cci.discrepancy, 0) <> 0
-                   OR cci.status IN ('PENDING', 'COUNTING')
+                WHERE (
+                    COALESCE(cci.discrepancy, 0) <> 0
+                    OR cci.status IN ('PENDING', 'COUNTING')
+                )
                 """);
         if (warehouse != null) {
             sql.append(" AND LOWER(w.code) = LOWER(?)");
             args.add(warehouse.code());
+        }
+        if (StringUtils.hasText(cycleCountCode)) {
+            sql.append(" AND (LOWER(cc.count_number) LIKE ? OR cc.id::text = ?)");
+            args.add(like(cycleCountCode));
+            args.add(cycleCountCode);
+        }
+        if (StringUtils.hasText(sku)) {
+            sql.append(" AND LOWER(p.sku) = LOWER(?)");
+            args.add(sku);
         }
         sql.append("""
                 ORDER BY ABS(COALESCE(cci.discrepancy, 0)) DESC, cc.created_at DESC
                 LIMIT 50
                 """);
         return jdbcTemplate.queryForList(sql.toString(), args.toArray());
+    }
+
+    private List<Map<String, Object>> getCycleCountStatus(Map<String, Object> params) {
+        String cycleCountCode = firstText(params, "cycleCountCode", "code");
+        List<Object> args = new ArrayList<>();
+        StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
+        if (StringUtils.hasText(cycleCountCode)) {
+            where.append(" AND (LOWER(cc.count_number) LIKE ? OR cc.id::text = ?)");
+            args.add(like(cycleCountCode));
+            args.add(cycleCountCode);
+        }
+        return jdbcTemplate.queryForList((""" 
+                SELECT
+                    COALESCE(cc.count_number, cc.id::text) AS cycle_count_id,
+                    cc.status,
+                    cc.description,
+                    cc.scheduled_at,
+                    cc.started_at,
+                    cc.completed_at,
+                    w.code AS warehouse_code,
+                    w.name AS warehouse_name,
+                    COUNT(cci.id) AS item_count,
+                    COUNT(cci.id) FILTER (WHERE COALESCE(cci.discrepancy, 0) <> 0) AS variance_count
+                FROM cycle_counts cc
+                LEFT JOIN warehouses w ON w.id = cc.warehouse_id
+                LEFT JOIN cycle_count_items cci ON cci.cycle_count_id = cc.id
+                %s
+                GROUP BY cc.id, cc.count_number, cc.status, cc.description, cc.scheduled_at,
+                         cc.started_at, cc.completed_at, w.code, w.name
+                ORDER BY cc.created_at DESC
+                LIMIT 50
+                """.formatted(where)), args.toArray());
     }
 
     private List<Map<String, Object>> getPutawayByWarehouse() {
@@ -1682,9 +1919,18 @@ public class AiToolExecutorService {
                 """);
     }
 
-    // Lấy các yêu cầu trả hàng đang chờ xử lý.
-    private List<Map<String, Object>> getPendingRma() {
-        return jdbcTemplate.queryForList("""
+    // Lấy các yêu cầu trả hàng đang chờ xử lý hoặc một return/RMA cụ thể.
+    private List<Map<String, Object>> getPendingRma(Map<String, Object> params) {
+        String returnCode = firstText(params, "returnCode", "rmaId", "code");
+        List<Object> args = new ArrayList<>();
+        StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
+        if (StringUtils.hasText(returnCode)) {
+            where.append(" AND LOWER(r.rma_number) LIKE ?");
+            args.add(like(returnCode));
+        } else {
+            where.append(" AND r.status IN ('REQUESTED', 'RECEIVED')");
+        }
+        return jdbcTemplate.queryForList((""" 
                 SELECT
                     r.rma_number,
                     r.customer_name,
@@ -1692,13 +1938,19 @@ public class AiToolExecutorService {
                     r.reason,
                     w.code AS warehouse_code,
                     w.name AS warehouse_name,
-                    r.created_at
+                    r.created_at,
+                    r.completed_at,
+                    COALESCE(SUM(ri.expected_qty), 0) AS expected_qty,
+                    COALESCE(SUM(ri.received_qty), 0) AS received_qty
                 FROM rma_headers r
                 LEFT JOIN warehouses w ON w.id = r.warehouse_id
-                WHERE r.status IN ('REQUESTED', 'RECEIVED')
+                LEFT JOIN rma_items ri ON ri.rma_id = r.id
+                %s
+                GROUP BY r.id, r.rma_number, r.customer_name, r.status, r.reason,
+                         w.code, w.name, r.created_at, r.completed_at
                 ORDER BY r.created_at ASC
                 LIMIT 50
-                """);
+                """.formatted(where)), args.toArray());
     }
 
     // Tổng hợp các việc vận hành cần chú ý trong ngày.

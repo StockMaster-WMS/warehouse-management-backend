@@ -10,7 +10,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.text.Normalizer;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -101,9 +105,10 @@ public class AiAnswerComposerService {
                 case STOCK_BY_PRODUCT -> "Tôi chưa tìm thấy tồn kho phù hợp với sản phẩm hoặc SKU bạn hỏi.";
                 case STOCK_LOWEST -> "Hiện chưa có dữ liệu tồn kho để xác định sản phẩm thấp nhất.";
                 case STOCK_HIGHEST -> "Hiện chưa có dữ liệu tồn kho để xác định sản phẩm cao nhất.";
-                case PRODUCT_BY_BARCODE -> "Tôi chưa tìm thấy sản phẩm hoặc tồn kho theo barcode bạn hỏi.";
+                case PRODUCT_BY_BARCODE -> "Barcode chưa được đăng ký hoặc không tồn tại.";
                 case STOCK_BELOW_THRESHOLD -> "Hiện chưa có sản phẩm nào dưới ngưỡng tồn kho bạn hỏi.";
                 case WAREHOUSE_STOCK_SUMMARY -> "Hiện chưa có dữ liệu tồn kho phù hợp với câu hỏi này.";
+                case SLOW_MOVING_STOCK -> "Hiện chưa có dữ liệu giao dịch tồn kho để xác định sản phẩm quay vòng chậm.";
                 case LOCATION_SEARCH -> "Tôi chưa tìm thấy vị trí kho phù hợp với điều kiện này.";
                 case BEST_HEAVY_LOCATION -> "Hiện chưa có vị trí phù hợp cho hàng nặng theo dữ liệu hiện tại.";
                 case SUPPLIER_TOP -> "Hiện chưa có dữ liệu đơn nhập phù hợp để xếp hạng nhà cung cấp.";
@@ -111,6 +116,7 @@ public class AiAnswerComposerService {
                 case PUTAWAY_BY_WAREHOUSE -> "Hiện chưa có putaway task đang chờ để tổng hợp theo kho.";
                 case INBOUND_TODAY -> "Hôm nay chưa có lô hàng/phiếu nhập kho nào được ghi nhận.";
                 case LATEST_INBOUND -> "Hiện chưa có phiếu nhập kho nào trong dữ liệu.";
+                case INBOUND_RECEIPT_STATUS, INBOUND_RECEIPT_DETAIL -> "Tôi chưa tìm thấy phiếu nhận hàng phù hợp.";
                 case PENDING_PO_RECEIPT -> "Hiện chưa có PO nào đang chờ nhận hàng.";
                 case PURCHASE_ORDER_STATUS -> "Tôi chưa tìm thấy đơn nhập phù hợp.";
                 case PURCHASE_ORDER_APPROVAL_AUDIT -> "Tôi chưa tìm thấy bản ghi phê duyệt phiếu nhập phù hợp.";
@@ -120,6 +126,7 @@ public class AiAnswerComposerService {
                 case PICKING_STATUS -> "Hiện chưa có dòng picking nào đang mở.";
                 case ACTIVE_CYCLE_COUNTS -> "Hiện không có lịch kiểm kê cycle count nào đang diễn ra.";
                 case CYCLE_COUNT_VARIANCE -> "Hiện chưa ghi nhận dòng kiểm kê đang lệch tồn hoặc đang chờ đếm.";
+                case CYCLE_COUNT_STATUS -> "Tôi chưa tìm thấy session kiểm kê phù hợp.";
                 case RMA_PENDING -> "Hiện không có yêu cầu trả hàng RMA nào đang chờ xử lý.";
                 default -> "Tôi chưa tìm thấy dữ liệu phù hợp với câu hỏi này.";
             };
@@ -137,7 +144,7 @@ public class AiAnswerComposerService {
             }
             return switch (route.getIntent()) {
                 case PRODUCT_COUNT -> productCountReply(map);
-                case LOCATION_COUNT -> locationCountReply(map);
+                case LOCATION_COUNT -> locationCountReply(map, route);
                 case PRODUCT_LIST -> productListReply(map);
                 case SUPPLIER_LIST, SUPPLIER_SEARCH -> supplierListReply(map);
                 case CUSTOMER_LIST, CUSTOMER_SEARCH -> customerListReply(map);
@@ -152,7 +159,7 @@ public class AiAnswerComposerService {
                 case REPORT_SUMMARY -> reportSummaryReply(map);
                 case FLOW_REPORT -> flowReportReply(map);
                 case INBOUND_REPORT -> inboundReportReply(map);
-                case OUTBOUND_REPORT -> outboundReportReply(map);
+                case OUTBOUND_REPORT -> outboundReportReply(map, route);
                 case MONTHLY_REPORT -> monthlyReportReply(map);
                 case INVENTORY_VALUE -> inventoryValueReply(map);
                 case MONTH_OVER_MONTH_FLOW -> monthOverMonthFlowReply(map);
@@ -170,19 +177,22 @@ public class AiAnswerComposerService {
                 case SUPPLIER_DETAIL -> supplierDetailReply(list);
                 case SUPPLIER_TOP -> supplierTopReply(list);
                 case CUSTOMER_DETAIL -> customerDetailReply(list);
-                case STOCK_BY_PRODUCT -> stockByProductReply(list);
+                case STOCK_BY_PRODUCT -> stockByProductReply(list, route);
                 case STOCK_LOWEST -> stockLowestReply(list);
                 case STOCK_HIGHEST -> stockHighestReply(list);
-                case PRODUCT_BY_BARCODE -> productByBarcodeReply(list);
+                case PRODUCT_BY_BARCODE -> productByBarcodeReply(list, route);
                 case STOCK_BELOW_THRESHOLD -> stockBelowThresholdReply(list);
                 case LOW_STOCK -> lowStockReply(list);
+                case SLOW_MOVING_STOCK -> slowMovingStockReply(list);
                 case WAREHOUSE_STOCK_SUMMARY -> warehouseStockSummaryReply(list);
                 case BEST_HEAVY_LOCATION -> heavyLocationReply(list);
                 case NEAR_EXPIRY -> nearExpiryReply(list);
-                case PENDING_PUTAWAY -> putawayReply(list);
+                case PENDING_PUTAWAY -> putawayReply(list, route);
                 case PUTAWAY_BY_WAREHOUSE -> putawayByWarehouseReply(list);
                 case INBOUND_TODAY -> inboundTodayReply(list);
                 case LATEST_INBOUND -> latestInboundReply(list);
+                case INBOUND_RECEIPT_STATUS -> inboundReceiptStatusReply(list);
+                case INBOUND_RECEIPT_DETAIL -> inboundReceiptDetailReply(list, route);
                 case PENDING_PO_RECEIPT -> pendingPoReceiptReply(list);
                 case PURCHASE_ORDER_STATUS -> purchaseOrderReply(list);
                 case PURCHASE_ORDER_DETAIL -> purchaseOrderDetailReply(list);
@@ -190,14 +200,15 @@ public class AiAnswerComposerService {
                 case OUTBOUND_PRIORITY -> outboundPriorityReply(list);
                 case PACKING_STATUS -> packingReply(list);
                 case PICKING_TOP -> pickingTopReply(list);
-                case PICKING_STATUS -> pickingReply(list);
+                case PICKING_STATUS -> pickingReply(list, route);
                 case SALES_TOP -> salesTopReply(list);
-                case SALES_ORDER_STATUS -> salesOrderStatusReply(list);
-                case SALES_ORDER_DETAIL -> salesOrderDetailReply(list);
+                case SALES_ORDER_STATUS -> salesOrderStatusReply(list, route);
+                case SALES_ORDER_DETAIL -> salesOrderDetailReply(list, route);
                 case STOCK_MOVEMENT_HISTORY -> stockMovementReply(list);
                 case ACTIVE_CYCLE_COUNTS -> activeCycleCountReply(list);
-                case CYCLE_COUNT_VARIANCE -> cycleVarianceReply(list);
-                case RMA_PENDING -> rmaReply(list);
+                case CYCLE_COUNT_VARIANCE -> cycleVarianceReply(list, route);
+                case CYCLE_COUNT_STATUS -> cycleCountStatusReply(list);
+                case RMA_PENDING -> rmaReply(list, route);
                 case LOCATION_SEARCH -> locationReply(list);
                 case AUDIT_LOG -> auditLogReply(list);
                 case AI_AUDIT_LOG -> aiAuditLogReply(list);
@@ -218,9 +229,15 @@ public class AiAnswerComposerService {
                 + ", trạng thái: " + activeText(value(row, "is_active")));
     }
 
-    private String locationCountReply(Map<?, ?> map) {
+    private String locationCountReply(Map<?, ?> map, AiIntentResult route) {
         if ("false".equalsIgnoreCase(value(map, "warehouse_found"))) {
             return "Tôi chưa tìm thấy kho phù hợp với thông tin bạn nêu.";
+        }
+        String query = routeQuery(route);
+        if (map.containsKey("warehouse_code")
+                && containsAny(query, "slot trong", "vi tri trong", "con slot", "cho trong", "empty slot")) {
+            return value(map, "warehouse_code") + " hiện còn " + formatNumber(value(map, "available"))
+                    + " vị trí lưu trữ trống.";
         }
         if (map.containsKey("warehouse_code")) {
             return "Kho " + value(map, "warehouse_code") + " có " + value(map, "storage")
@@ -304,11 +321,55 @@ public class AiAnswerComposerService {
                 + ", trạng thái " + activeText(value(row, "is_active")));
     }
 
-    private String stockByProductReply(List<?> list) {
-        return "Tìm thấy " + list.size() + " dòng tồn kho: " + joinRows(list, row ->
-                value(row, "product_name") + " tại " + value(row, "warehouse_code")
-                        + " còn " + value(row, "qty_on_hand") + ", giữ chỗ "
-                        + value(row, "qty_reserved") + ", khả dụng " + value(row, "qty_available"));
+    private String stockByProductReply(List<?> list, AiIntentResult route) {
+        Object first = list.get(0);
+        String query = routeQuery(route);
+        String productLabel = productLabel(first);
+        long totalOnHand = sumLong(list, "qty_on_hand");
+        long totalReserved = sumLong(list, "qty_reserved");
+        long totalAvailable = sumLong(list, "qty_available");
+        Map<String, long[]> byWarehouse = stockByWarehouse(list);
+
+        if (containsAny(query, "o kho nao", "tai kho nao", "kho nao co", "nam o kho nao")
+                && !(query.contains("nhieu") && query.contains("nhat"))) {
+            String warehouses = byWarehouse.keySet().stream()
+                    .filter(code -> !"N/A".equals(code))
+                    .reduce((a, b) -> a + ", " + b)
+                    .orElse("chưa xác định kho");
+            return productLabel + " hiện có tại " + warehouses + ".";
+        }
+
+        if (containsAny(query, "giu cho", "reserved", "bi hold", "dang giu")) {
+            if (totalReserved > 0) {
+                return "Có, hiện đang giữ chỗ " + formatNumber(totalReserved) + " đơn vị.";
+            }
+            return "Không, hiện chưa ghi nhận số lượng giữ chỗ cho " + productLabel + ".";
+        }
+
+        if (containsAny(query, "xuat duoc", "xuat toi da", "co the xuat", "ban duoc bao nhieu")) {
+            return "Bạn có thể xuất tối đa " + formatNumber(totalAvailable) + " đơn vị.";
+        }
+
+        if (query.contains("kho nao") && query.contains("nhieu") && query.contains("nhat")) {
+            Map.Entry<String, long[]> max = byWarehouse.entrySet().stream()
+                    .max((a, b) -> Long.compare(a.getValue()[0], b.getValue()[0]))
+                    .orElse(null);
+            if (max != null) {
+                return max.getKey() + " hiện có tồn kho cao nhất cho SKU " + value(first, "sku") + ".";
+            }
+        }
+
+        String warehouseCode = singleWarehouseCode(byWarehouse);
+        if (warehouseCode != null) {
+            String availableText = totalAvailable == totalOnHand
+                    ? "khả dụng toàn bộ"
+                    : "khả dụng " + formatNumber(totalAvailable);
+            return "Kho " + warehouseCode + " hiện còn " + formatNumber(totalOnHand)
+                    + " đơn vị, " + availableText + ".";
+        }
+
+        return productLabel + " hiện còn tổng " + formatNumber(totalOnHand)
+                + " đơn vị, khả dụng " + formatNumber(totalAvailable) + ".";
     }
 
     private String stockLowestReply(List<?> list) {
@@ -326,10 +387,12 @@ public class AiAnswerComposerService {
                 + joinRows(limit(list, 5), row -> value(row, "product_name") + " tồn " + value(row, "qty_on_hand"));
     }
 
-    private String productByBarcodeReply(List<?> list) {
-        return joinRows(list, row -> "Barcode " + value(row, "barcode_ean13") + " là "
-                + value(row, "product_name") + ", tồn hiện có " + value(row, "qty_on_hand")
-                + ", giữ chỗ " + value(row, "qty_reserved") + ", khả dụng " + value(row, "qty_available"));
+    private String productByBarcodeReply(List<?> list, AiIntentResult route) {
+        if (containsAny(routeQuery(route), "khong ra", "khong nhan", "scan loi", "scan khong")) {
+            return "Barcode chưa được đăng ký hoặc không tồn tại.";
+        }
+        return joinRows(list, row -> "Barcode " + value(row, "barcode_ean13") + " thuộc SKU "
+                + value(row, "sku") + " - " + value(row, "product_name") + ".");
     }
 
     private String stockBelowThresholdReply(List<?> list) {
@@ -338,9 +401,17 @@ public class AiAnswerComposerService {
     }
 
     private String lowStockReply(List<?> list) {
-        return "Có " + list.size() + " sản phẩm đang dưới định mức. Một số dòng thấp nhất: "
-                + joinRows(limit(list, 5), row -> value(row, "product_name") + " khả dụng "
-                + value(row, "qty_available") + " / định mức " + value(row, "min_stock_qty"));
+        return "Có " + list.size() + " SKU dưới reorder point, bao gồm "
+                + joinRows(limit(list, 5), row -> "SKU " + value(row, "sku")) + ".";
+    }
+
+    private String slowMovingStockReply(List<?> list) {
+        Object first = list.get(0);
+        String days = value(first, "days_without_movement");
+        if ("N/A".equals(days)) {
+            return "SKU " + value(first, "sku") + " chưa từng phát sinh giao dịch tồn kho theo dữ liệu hiện tại.";
+        }
+        return "SKU " + value(first, "sku") + " không phát sinh giao dịch " + formatNumber(days) + " ngày.";
     }
 
     private String purchaseOrderCountReply(Map<?, ?> map) {
@@ -375,7 +446,20 @@ public class AiAnswerComposerService {
                         + ", hạn " + value(row, "expiry_date") + ", còn " + value(row, "days_left") + " ngày");
     }
 
-    private String putawayReply(List<?> list) {
+    private String putawayReply(List<?> list, AiIntentResult route) {
+        String query = routeQuery(route);
+        Object first = list.get(0);
+        String taskCode = routeParam(route, "putawayTaskCode", "taskCode", "code");
+        if (taskCode != null) {
+            if (containsAny(query, "dua hang di dau", "di dau", "de hang", "cat vao dau", "vao bin nao")) {
+                return "Chuyển SKU " + value(first, "sku") + " vào " + value(first, "suggested_location") + ".";
+            }
+            if (containsAny(query, "xong chua", "hoan tat chua", "done", "completed")) {
+                return taskCode + " đang ở trạng thái " + statusLabel(value(first, "status")) + ".";
+            }
+            return taskCode + " trạng thái " + statusLabel(value(first, "status"))
+                    + ", vị trí gợi ý " + value(first, "suggested_location") + ".";
+        }
         return "Có " + list.size() + " putaway task đang chờ/xử lý: " + joinRows(limit(list, 6), row ->
                 value(row, "product_name") + " số lượng " + value(row, "qty_to_putaway")
                         + ", trạng thái " + value(row, "status")
@@ -405,6 +489,32 @@ public class AiAnswerComposerService {
                 + ", nhà cung cấp " + value(first, "supplier_name")
                 + ". Dòng hàng gần nhất: " + joinRows(limit(list, 5), row -> value(row, "product_name")
                 + " số lượng " + value(row, "received_qty"));
+    }
+
+    private String inboundReceiptStatusReply(List<?> list) {
+        Object first = list.get(0);
+        String receipt = value(first, "receipt_number");
+        String status = value(first, "receipt_status");
+        boolean waitingPutaway = list.stream()
+                .map(row -> value(row, "putaway_status"))
+                .anyMatch(statusValue -> List.of("PENDING", "IN_PROGRESS", "ASSIGNED").contains(statusValue));
+        if ("RECEIVED".equalsIgnoreCase(status) && waitingPutaway) {
+            return "Goods Receipt " + receipt + " đã hoàn tất nhận hàng, chờ putaway.";
+        }
+        return "Goods Receipt " + receipt + " đang ở trạng thái " + statusLabel(status) + ".";
+    }
+
+    private String inboundReceiptDetailReply(List<?> list, AiIntentResult route) {
+        String query = routeQuery(route);
+        Object first = list.get(0);
+        String receipt = value(first, "receipt_number");
+        if (containsAny(query, "ai dang", "ai xu ly", "nguoi xu ly", "assigned", "gan cho ai")) {
+            String assignee = firstNonBlank(list, "assignee_username");
+            return "Task được gán cho " + ("N/A".equals(assignee) ? "N/A" : assignee) + ".";
+        }
+        String location = firstNonBlank(list, "suggested_location");
+        String warehouse = firstNonBlank(list, "suggested_warehouse_code");
+        return "Hệ thống đề xuất putaway vào " + location + ", " + warehouse + ".";
     }
 
     private String purchaseOrderReply(List<?> list) {
@@ -445,7 +555,25 @@ public class AiAnswerComposerService {
                 + ", trạng thái " + value(first, "status") + ".";
     }
 
-    private String salesOrderStatusReply(List<?> list) {
+    private String salesOrderStatusReply(List<?> list, AiIntentResult route) {
+        String query = routeQuery(route);
+        Object first = list.get(0);
+        if (list.size() == 1 || routeParam(route, "soId", "code") != null) {
+            String status = value(first, "status");
+            if (containsAny(query, "hoan tat", "xong chua", "da xong", "da hoan thanh")) {
+                if (containsAny(normalize(status), "shipped", "completed")) {
+                    return "Đã, đơn " + value(first, "so_number") + " đã hoàn tất.";
+                }
+                if ("PICKING".equalsIgnoreCase(status)) {
+                    return "Chưa, đơn vẫn đang ở bước picking.";
+                }
+                return "Chưa, đơn hiện ở trạng thái " + statusLabel(status) + ".";
+            }
+            if (containsAny(query, "trang thai", "tinh trang", "status", "dang o trang thai")) {
+                return "Sales order " + value(first, "so_number") + " đang ở trạng thái "
+                        + statusLabel(status) + ".";
+            }
+        }
         return "Tìm thấy " + list.size() + " đơn xuất: " + joinRows(limit(list, 6), row ->
                 value(row, "so_number") + " trạng thái " + value(row, "status")
                         + ", khách " + value(row, "customer_name")
@@ -461,8 +589,25 @@ public class AiAnswerComposerService {
                 + ", tạo lúc " + value(first, "created_at") + ".";
     }
 
-    private String salesOrderDetailReply(List<?> list) {
+    private String salesOrderDetailReply(List<?> list, AiIntentResult route) {
+        String query = routeQuery(route);
         Object first = list.get(0);
+        if (containsAny(query, "con thieu", "thieu gi", "thieu bao nhieu", "chua du")) {
+            List<String> missing = list.stream()
+                    .map(row -> {
+                        long remaining = Math.max(longValue(row, "ordered_qty") - longValue(row, "shipped_qty"), 0);
+                        if (remaining <= 0) {
+                            return null;
+                        }
+                        return formatNumber(remaining) + " đơn vị SKU " + value(row, "sku");
+                    })
+                    .filter(item -> item != null)
+                    .toList();
+            if (missing.isEmpty()) {
+                return "Đơn " + value(first, "so_number") + " không còn thiếu số lượng theo dữ liệu hiện tại.";
+            }
+            return "Đơn còn thiếu " + String.join("; ", missing) + ".";
+        }
         return "SO " + value(first, "so_number") + " trạng thái " + value(first, "status")
                 + ", khách " + value(first, "customer_name") + ", kho " + value(first, "warehouse_code")
                 + ". Dòng hàng: " + joinRows(limit(list, 8), row -> "#" + value(row, "line_number")
@@ -491,7 +636,31 @@ public class AiAnswerComposerService {
                         + ", số đơn " + value(row, "order_count"));
     }
 
-    private String pickingReply(List<?> list) {
+    private String pickingReply(List<?> list, AiIntentResult route) {
+        String query = routeQuery(route);
+        Object first = list.get(0);
+        if (containsAny(query, "con bao nhieu mon", "bao nhieu mon chua", "chua lay", "chua hoan tat")) {
+            long remainingSku = list.stream()
+                    .filter(row -> longValue(row, "remaining_qty") > 0 || !"PICKED".equalsIgnoreCase(value(row, "status")))
+                    .map(row -> value(row, "sku"))
+                    .distinct()
+                    .count();
+            return "Còn " + formatNumber(remainingSku) + " SKU chưa hoàn tất picking.";
+        }
+        if (containsAny(query, "uu tien", "priority")) {
+            long priority = longValue(first, "priority");
+            if (priority > 0 && priority <= 2) {
+                return "Đây là task ưu tiên cao do đơn giao gấp.";
+            }
+            return "Task này không nằm trong nhóm ưu tiên cao theo dữ liệu hiện tại.";
+        }
+        if (containsAny(query, "ai dang", "ai pick", "ai lay hang", "nguoi pick", "assigned")) {
+            return "Task đang được xử lý bởi " + value(first, "assignee_username") + ".";
+        }
+        if (containsAny(query, "lay hang o dau", "lay tu dau", "lay hang tai dau", "bin nao", "vi tri nao")) {
+            return "Lấy " + formatNumber(value(first, "qty_to_pick")) + " đơn vị SKU " + value(first, "sku")
+                    + " từ " + value(first, "location_code") + ", " + value(first, "warehouse_code") + ".";
+        }
         return "Có " + list.size() + " picking task/dòng picking phù hợp: " + joinRows(limit(list, 6), row ->
                 value(row, "so_number") + " - " + value(row, "product_name")
                         + ", cần pick " + value(row, "qty_to_pick")
@@ -515,7 +684,16 @@ public class AiAnswerComposerService {
                         + ", số dòng " + value(row, "item_count"));
     }
 
-    private String cycleVarianceReply(List<?> list) {
+    private String cycleVarianceReply(List<?> list, AiIntentResult route) {
+        String query = routeQuery(route);
+        if (containsAny(query, "co lech", "lech sku", "chenh lech") && routeParam(route, "sku") != null) {
+            Object first = list.get(0);
+            long discrepancy = longValue(first, "discrepancy");
+            if (discrepancy != 0) {
+                return "Có, chênh lệch " + formatNumber(discrepancy) + " đơn vị.";
+            }
+            return "Không, SKU này chưa ghi nhận chênh lệch trong session kiểm kê.";
+        }
         return "Có " + list.size() + " dòng kiểm kê đang lệch hoặc chờ đếm: " + joinRows(limit(list, 6), row ->
                 value(row, "cycle_count_id") + " - " + value(row, "product_name")
                         + ", hệ thống " + value(row, "system_qty")
@@ -523,7 +701,29 @@ public class AiAnswerComposerService {
                         + ", chênh lệch " + value(row, "discrepancy"));
     }
 
-    private String rmaReply(List<?> list) {
+    private String cycleCountStatusReply(List<?> list) {
+        Object first = list.get(0);
+        String status = value(first, "status");
+        boolean locked = containsAny(normalize(status), "locked", "completed", "approved", "cancelled");
+        if (locked) {
+            return "Session kiểm kê " + value(first, "cycle_count_id") + " hiện đã khóa.";
+        }
+        return "Session kiểm kê " + value(first, "cycle_count_id") + " chưa khóa, trạng thái "
+                + statusLabel(status) + ".";
+    }
+
+    private String rmaReply(List<?> list, AiIntentResult route) {
+        String query = routeQuery(route);
+        Object first = list.get(0);
+        if (routeParam(route, "returnCode", "rmaId", "code") != null) {
+            if (containsAny(query, "cong ton", "da cong ton", "nhap lai ton")) {
+                if (containsAny(normalize(value(first, "status")), "completed", "closed")) {
+                    return "Đã, hàng trả đã hoàn tất kiểm định và được cộng tồn.";
+                }
+                return "Chưa, hàng chưa hoàn tất kiểm định.";
+            }
+            return "Return đang " + returnStatusLabel(value(first, "status")) + ".";
+        }
         return "Có " + list.size() + " yêu cầu RMA đang chờ xử lý: " + joinRows(limit(list, 5), row ->
                 value(row, "rma_number") + " - " + value(row, "customer_name")
                         + ", trạng thái " + value(row, "status"));
@@ -584,7 +784,15 @@ public class AiAnswerComposerService {
                 value(row, "supplier_name") + " nhận " + value(row, "received_qty"));
     }
 
-    private String outboundReportReply(Map<?, ?> map) {
+    private String outboundReportReply(Map<?, ?> map, AiIntentResult route) {
+        String query = routeQuery(route);
+        if (map.containsKey("warehouse_code")
+                && containsAny(query, "xuat bao nhieu don", "xuat may don", "xu ly bao nhieu don",
+                "don xuat hom nay", "hom nay xuat")) {
+            String scope = "TODAY".equalsIgnoreCase(value(map, "dateRange")) ? "hôm nay" : "trong phạm vi bạn hỏi";
+            return value(map, "warehouse_code") + " đã xử lý "
+                    + formatNumber(nestedValue(map, "summary", "sales_orders")) + " đơn xuất " + scope + ".";
+        }
         return "Báo cáo xuất kho: đơn bán " + nestedValue(map, "summary", "sales_orders")
                 + ", số lượng đặt " + nestedValue(map, "summary", "ordered_qty")
                 + ", đã giao " + nestedValue(map, "summary", "shipped_qty")
@@ -624,6 +832,155 @@ public class AiAnswerComposerService {
                 + ", khách hàng " + listSize(map, "customers")
                 + ", PO " + listSize(map, "purchase_orders")
                 + ", SO " + listSize(map, "sales_orders") + ".";
+    }
+
+    private String routeQuery(AiIntentResult route) {
+        return normalize(routeParam(route, "query"));
+    }
+
+    private String routeParam(AiIntentResult route, String... keys) {
+        if (route == null) {
+            return null;
+        }
+        for (String key : keys) {
+            Object value = route.safeParameters().get(key);
+            if (value != null && !"null".equalsIgnoreCase(String.valueOf(value))) {
+                String text = String.valueOf(value).trim();
+                if (!text.isEmpty()) {
+                    return text;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean containsAny(String text, String... candidates) {
+        if (text == null) {
+            return false;
+        }
+        for (String candidate : candidates) {
+            if (text.contains(candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String productLabel(Object row) {
+        String sku = value(row, "sku");
+        String name = value(row, "product_name");
+        if (!"N/A".equals(sku) && !"N/A".equals(name)) {
+            return "SKU " + sku + " - " + name;
+        }
+        return !"N/A".equals(name) ? name : "Sản phẩm";
+    }
+
+    private Map<String, long[]> stockByWarehouse(List<?> rows) {
+        Map<String, long[]> grouped = new LinkedHashMap<>();
+        for (Object row : rows) {
+            String code = value(row, "warehouse_code");
+            long[] sums = grouped.computeIfAbsent(code, ignored -> new long[3]);
+            sums[0] += longValue(row, "qty_on_hand");
+            sums[1] += longValue(row, "qty_reserved");
+            sums[2] += longValue(row, "qty_available");
+        }
+        return grouped;
+    }
+
+    private String singleWarehouseCode(Map<String, long[]> byWarehouse) {
+        List<String> codes = byWarehouse.keySet().stream()
+                .filter(code -> !"N/A".equals(code))
+                .toList();
+        return codes.size() == 1 ? codes.get(0) : null;
+    }
+
+    private long sumLong(List<?> rows, String key) {
+        return rows.stream().mapToLong(row -> longValue(row, key)).sum();
+    }
+
+    private long longValue(Object row, String key) {
+        if (row instanceof Map<?, ?> map) {
+            return longValue(map.get(key));
+        }
+        return 0;
+    }
+
+    private long longValue(Object value) {
+        if (value instanceof Number number) {
+            return Math.round(number.doubleValue());
+        }
+        if (value == null) {
+            return 0;
+        }
+        try {
+            return new BigDecimal(String.valueOf(value).replace(",", "")).longValue();
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private String firstNonBlank(List<?> rows, String key) {
+        return rows.stream()
+                .map(row -> value(row, key))
+                .filter(value -> value != null && !value.isBlank() && !"N/A".equals(value))
+                .findFirst()
+                .orElse("N/A");
+    }
+
+    private String statusLabel(String status) {
+        if (status == null) {
+            return "N/A";
+        }
+        return switch (status.toUpperCase(Locale.ROOT)) {
+            case "PICKING" -> "Picking In Progress";
+            case "PENDING" -> "Pending";
+            case "IN_PROGRESS" -> "In Progress";
+            case "ASSIGNED" -> "Assigned";
+            case "PICKED" -> "Picked";
+            case "RECEIVED" -> "Received";
+            case "PUTAWAY_IN_PROGRESS" -> "Putaway In Progress";
+            case "COMPLETED" -> "Completed";
+            case "APPROVED" -> "Approved";
+            case "CANCELLED" -> "Cancelled";
+            case "SHIPPED" -> "Shipped";
+            case "PACKED" -> "Packed";
+            default -> status;
+        };
+    }
+
+    private String returnStatusLabel(String status) {
+        if (status == null) {
+            return "ở trạng thái N/A";
+        }
+        return switch (status.toUpperCase(Locale.ROOT)) {
+            case "RECEIVED", "QC_PENDING", "PENDING_QC" -> "chờ QC approval";
+            case "REQUESTED" -> "chờ tiếp nhận";
+            case "APPROVED" -> "đã được duyệt";
+            case "COMPLETED", "CLOSED" -> "đã hoàn tất";
+            default -> "ở trạng thái " + statusLabel(status);
+        };
+    }
+
+    private String formatNumber(String value) {
+        return formatNumber(longValue(value));
+    }
+
+    private String formatNumber(long value) {
+        return String.format(Locale.GERMANY, "%,d", value);
+    }
+
+    private String normalize(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD);
+        normalized = normalized.replaceAll("\\p{M}", "")
+                .replace('đ', 'd')
+                .replace('Đ', 'D')
+                .toLowerCase(Locale.ROOT);
+        return normalized
+                .replaceAll("\\bko\\b", "khong")
+                .replaceAll("\\bk\\b", "khong");
     }
 
     private String joinRows(List<?> rows, java.util.function.Function<Object, String> formatter) {

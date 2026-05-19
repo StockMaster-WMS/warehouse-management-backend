@@ -29,12 +29,19 @@ public class AiIntentRouterService {
     private static final Pattern DAYS_PATTERN = Pattern.compile("(\\d+)\\s*(?:ngay|ngày|day|days)", Pattern.CASE_INSENSITIVE);
     private static final Pattern QUOTED_KEYWORD_PATTERN = Pattern.compile("[\"'“”‘’]([^\"'“”‘’]{2,80})[\"'“”‘’]");
     private static final Pattern SKU_PATTERN = Pattern.compile("\\b[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+\\b");
+    private static final Pattern LABELED_SKU_PATTERN = Pattern.compile("\\bSKU\\s*[:#-]?\\s*([A-Z0-9][A-Z0-9-]{1,49})\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern NUMERIC_SKU_PATTERN = Pattern.compile("\\b(?!20\\d{2}\\b)\\d{4,8}\\b");
     private static final Pattern WAREHOUSE_CODE_PATTERN = Pattern.compile("\\bWH-[A-Z0-9-]+\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern BUSINESS_CODE_PATTERN = Pattern.compile(
-            "\\b(?:(?:PO|SO|RMA)-?\\d+[A-Z0-9-]*|(?:SUP|CUS|CUST|KH|NCC)-?[A-Z0-9-]+)\\b",
+            "\\b(?:(?:PO|SO|GR|PT|PK|SC|RT|RMA)-?\\d+[A-Z0-9-]*|(?:SUP|CUS|CUST|KH|NCC)-?\\d+[A-Z0-9-]*)\\b",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern PURCHASE_ORDER_CODE_PATTERN = Pattern.compile("\\bPO-?\\d+[A-Z0-9-]*\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern SALES_ORDER_CODE_PATTERN = Pattern.compile("\\bSO-?\\d+[A-Z0-9-]*\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern RECEIPT_CODE_PATTERN = Pattern.compile("\\bGR-?\\d+[A-Z0-9-]*\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern PUTAWAY_TASK_CODE_PATTERN = Pattern.compile("\\bPT-?\\d+[A-Z0-9-]*\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern PICKING_TASK_CODE_PATTERN = Pattern.compile("\\bPK-?\\d+[A-Z0-9-]*\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CYCLE_COUNT_CODE_PATTERN = Pattern.compile("\\bSC-?\\d+[A-Z0-9-]*\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern RETURN_CODE_PATTERN = Pattern.compile("\\bRT-?\\d+[A-Z0-9-]*\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern RMA_CODE_PATTERN = Pattern.compile("\\bRMA-?\\d+[A-Z0-9-]*\\b", Pattern.CASE_INSENSITIVE);
 
     private final OllamaClient ollamaClient;
@@ -141,6 +148,7 @@ public class AiIntentRouterService {
                 - WAREHOUSE_STOCK_SUMMARY: hỏi kho nào nhiều tồn nhất hoặc tồn nhiều nhóm hàng trong một kho.
                 - LOW_STOCK: hỏi hàng tồn thấp, gần hết hàng, dưới định mức.
                 - NEAR_EXPIRY: hỏi hàng sắp hết hạn/hết hạn trong N ngày.
+                - SLOW_MOVING_STOCK: hỏi sản phẩm quay vòng chậm, lâu không phát sinh giao dịch.
                 - STOCK_MOVEMENT_HISTORY: hỏi lịch sử biến động tồn kho/stock movement.
                 - STOCK_TRANSFER: hỏi hướng dẫn/chuyển tồn giữa kho/vị trí; không tự thao tác.
                 - INVENTORY_ADJUSTMENT: hỏi hướng dẫn/điều chỉnh tồn thủ công; không tự thao tác.
@@ -153,6 +161,8 @@ public class AiIntentRouterService {
                 - PURCHASE_ORDER_STATUS: hỏi trạng thái đơn nhập/PO.
                 - PURCHASE_ORDER_DETAIL: hỏi chi tiết PO/dòng hàng trong PO.
                 - PURCHASE_ORDER_APPROVAL_AUDIT: hỏi ai đã duyệt phiếu nhập/PO và khi nào duyệt.
+                - INBOUND_RECEIPT_STATUS: hỏi trạng thái phiếu nhận hàng/GR.
+                - INBOUND_RECEIPT_DETAIL: hỏi vị trí putaway hoặc người xử lý của phiếu nhận hàng/GR.
                 - OUTBOUND_PRIORITY: hỏi đơn xuất cần ưu tiên/xử lý gấp.
                 - PACKING_STATUS: hỏi đơn xuất đang chờ/trong bước packing.
                 - PICKING_TOP: hỏi sản phẩm được picking nhiều nhất.
@@ -163,6 +173,7 @@ public class AiIntentRouterService {
                 - FLOW_REPORT: báo cáo luồng nhập - xuất gần đây.
                 - ACTIVE_CYCLE_COUNTS: hỏi lịch kiểm kê/cycle count đang diễn ra.
                 - CYCLE_COUNT_VARIANCE: hỏi kiểm kê, lệch tồn, chênh lệch kiểm đếm.
+                - CYCLE_COUNT_STATUS: hỏi trạng thái session kiểm kê/cycle count theo mã.
                 - RMA_PENDING: hỏi yêu cầu trả hàng/RMA đang chờ xử lý.
                 - DAILY_TASKS: hỏi hôm nay cần làm gì, việc cần xử lý.
                 - REPORT_SUMMARY: hỏi tổng quan/tóm tắt dashboard/báo cáo vận hành.
@@ -173,6 +184,7 @@ public class AiIntentRouterService {
                 - GLOBAL_SEARCH: tìm kiếm toàn hệ thống.
                 - AUDIT_LOG: hỏi lịch sử thao tác/audit log nghiệp vụ.
                 - AI_AUDIT_LOG: hỏi log/lịch sử hỏi đáp AI.
+                - USER_PERMISSION: hỏi quyền của người dùng/vai trò với thao tác kho.
                 - GENERAL_GUIDE: chào hỏi hoặc hỏi trợ lý làm được gì.
                 - AMBIGUOUS: thiếu thông tin quan trọng cần hỏi lại.
                 - UNSUPPORTED: ngoài phạm vi hệ thống kho.
@@ -375,6 +387,73 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.AMBIGUOUS, params, 0.9, "deterministic multi-intent question");
         }
 
+        if (containsAny(normalized, "co quyen", "quyen ")
+                && containsAny(normalized, "chinh ton", "dieu chinh ton", "stock adjustment", "sua ton")) {
+            params.put("permission", "STOCK_ADJUSTMENT");
+            return AiIntentResult.of(AiIntent.USER_PERMISSION, params, 0.92, "deterministic user permission");
+        }
+
+        if (hasBusinessCode(userMessage, RECEIPT_CODE_PATTERN)) {
+            if (containsAny(normalized, "de hang", "de o dau", "dua vao dau", "putaway", "cat hang",
+                    "ai dang", "ai xu ly", "nguoi xu ly", "assigned", "gan cho ai")) {
+                return AiIntentResult.of(AiIntent.INBOUND_RECEIPT_DETAIL, params, 0.93,
+                        "deterministic inbound receipt detail by code");
+            }
+            return AiIntentResult.of(AiIntent.INBOUND_RECEIPT_STATUS, params, 0.93,
+                    "deterministic inbound receipt status by code");
+        }
+
+        if (hasBusinessCode(userMessage, PUTAWAY_TASK_CODE_PATTERN)) {
+            return AiIntentResult.of(AiIntent.PENDING_PUTAWAY, params, 0.93,
+                    "deterministic putaway task by code");
+        }
+
+        if (hasBusinessCode(userMessage, PICKING_TASK_CODE_PATTERN)) {
+            return AiIntentResult.of(AiIntent.PICKING_STATUS, params, 0.93,
+                    "deterministic picking task by code");
+        }
+
+        if (hasBusinessCode(userMessage, CYCLE_COUNT_CODE_PATTERN)) {
+            if (containsAny(normalized, "lech", "chenh lech", "variance", "discrepancy")) {
+                return AiIntentResult.of(AiIntent.CYCLE_COUNT_VARIANCE, params, 0.93,
+                        "deterministic cycle count variance by code");
+            }
+            return AiIntentResult.of(AiIntent.CYCLE_COUNT_STATUS, params, 0.93,
+                    "deterministic cycle count status by code");
+        }
+
+        if (hasBusinessCode(userMessage, RETURN_CODE_PATTERN) || hasBusinessCode(userMessage, RMA_CODE_PATTERN)) {
+            return AiIntentResult.of(AiIntent.RMA_PENDING, params, 0.93, "deterministic return by code");
+        }
+
+        if (params.containsKey("warehouseCode")
+                && containsAny(normalized, "xuat bao nhieu don", "xuat may don", "xu ly bao nhieu don",
+                "da xu ly bao nhieu don", "hom nay xuat", "don xuat hom nay")) {
+            params.putIfAbsent("dateRange", "TODAY");
+            return AiIntentResult.of(AiIntent.OUTBOUND_REPORT, params, 0.92,
+                    "deterministic outbound count by warehouse");
+        }
+
+        if (params.containsKey("warehouseCode")
+                && containsAny(normalized, "slot trong", "vi tri trong", "con slot", "con cho trong", "empty slot")) {
+            return AiIntentResult.of(AiIntent.LOCATION_COUNT, params, 0.92,
+                    "deterministic available slots by warehouse");
+        }
+
+        if (params.containsKey("sku") && (params.containsKey("warehouseCode")
+                || containsAny(normalized, "kho nao", "o kho nao", "tai kho nao",
+                "con bao nhieu", "con khong", "con hang", "giu cho", "reserved", "xuat duoc", "xuat toi da",
+                "ton", "stock", "available", "kha dung"))) {
+            return AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, params, 0.92,
+                    "deterministic stock by product code");
+        }
+
+        if (containsAny(normalized, "quay vong cham", "cham nhat", "slow moving", "khong phat sinh giao dich",
+                "it giao dich", "lau khong giao dich")) {
+            return AiIntentResult.of(AiIntent.SLOW_MOVING_STOCK, params, 0.92,
+                    "deterministic slow moving stock");
+        }
+
         if (containsAny(normalized, "ton kho thap nhat", "ton thap nhat", "hang ton thap nhat",
                 "hang ton thap", "san pham nao dang co ton kho thap nhat")) {
             return AiIntentResult.of(AiIntent.STOCK_LOWEST, params, 0.9, "deterministic stock lowest");
@@ -489,13 +568,24 @@ public class AiIntentRouterService {
         }
 
         if (hasBusinessCode(userMessage, SALES_ORDER_CODE_PATTERN)) {
+            if (containsAny(normalized, "ai dang pick", "ai pick", "ai lay hang", "nguoi pick",
+                    "dang duoc xu ly boi ai", "assigned", "lay hang o dau", "lay tu dau",
+                    "lay hang tai dau", "bin nao", "vi tri nao")) {
+                return AiIntentResult.of(AiIntent.PICKING_STATUS, params, 0.9,
+                        "deterministic picking detail by sales order code");
+            }
+            if (containsAny(normalized, "con thieu", "thieu gi", "chua du", "thieu bao nhieu",
+                    "con lai bao nhieu")) {
+                return AiIntentResult.of(AiIntent.SALES_ORDER_DETAIL, params, 0.9,
+                        "deterministic sales order remaining by code");
+            }
             if (containsAny(normalized, "dong hang", "mat hang", "chi tiet", "detail", "doc ",
                     "dia chi giao", "shipping method", "kh nao", "khach nao", "ngay giao", "tong tien")) {
                 return AiIntentResult.of(AiIntent.SALES_ORDER_DETAIL, params, 0.9,
                         "deterministic sales order detail by code");
             }
             if (containsAny(normalized, "status", "trang thai", "tinh trang", "da giao", "giao chua",
-                    "sao roi", "hien tai", "packed", "ship chua")) {
+                    "sao roi", "hien tai", "packed", "ship chua", "hoan tat", "xong chua")) {
                 return AiIntentResult.of(AiIntent.SALES_ORDER_STATUS, params, 0.9,
                         "deterministic sales order status by code");
             }
@@ -643,7 +733,8 @@ public class AiIntentRouterService {
         }
 
         if (containsAny(normalized, "ton thap", "gan het hang", "duoi dinh muc", "duoi muc an toan",
-                "can bo sung", "sap het hang", "low stock", "nhap them gap", "nen nhap them", "bo sung gap")) {
+                "can bo sung", "sap het hang", "sku nao sap het", "sap het trong tuan",
+                "low stock", "nhap them gap", "nen nhap them", "bo sung gap")) {
             return AiIntentResult.of(AiIntent.LOW_STOCK, params, 0.9, "deterministic low stock");
         }
 
@@ -759,16 +850,41 @@ public class AiIntentRouterService {
                 params.put("poId", code);
             } else if (SALES_ORDER_CODE_PATTERN.matcher(code).matches()) {
                 params.put("soId", code);
+            } else if (RECEIPT_CODE_PATTERN.matcher(code).matches()) {
+                params.put("receiptCode", code);
+            } else if (PUTAWAY_TASK_CODE_PATTERN.matcher(code).matches()) {
+                params.put("taskCode", code);
+                params.put("putawayTaskCode", code);
+            } else if (PICKING_TASK_CODE_PATTERN.matcher(code).matches()) {
+                params.put("taskCode", code);
+                params.put("pickingTaskCode", code);
+            } else if (CYCLE_COUNT_CODE_PATTERN.matcher(code).matches()) {
+                params.put("cycleCountCode", code);
+            } else if (RETURN_CODE_PATTERN.matcher(code).matches()) {
+                params.put("returnCode", code);
             } else if (RMA_CODE_PATTERN.matcher(code).matches()) {
                 params.put("rmaId", code);
             }
         }
 
+        Matcher labeledSkuMatcher = LABELED_SKU_PATTERN.matcher(userMessage == null ? "" : userMessage);
+        if (labeledSkuMatcher.find()) {
+            params.put("sku", labeledSkuMatcher.group(1).toUpperCase(Locale.ROOT));
+        }
+
         Matcher skuMatcher = SKU_PATTERN.matcher(userMessage == null ? "" : userMessage.toUpperCase(Locale.ROOT));
-        if (skuMatcher.find()) {
+        if (!params.containsKey("sku") && skuMatcher.find()) {
             String code = skuMatcher.group();
-            if (!code.startsWith("WH-") && !code.startsWith("PO-") && !code.startsWith("SO-")) {
+            if (!code.startsWith("WH-") && !code.startsWith("PO-") && !code.startsWith("SO-")
+                    && !code.startsWith("GR-") && !code.startsWith("PT-") && !code.startsWith("PK-")
+                    && !code.startsWith("SC-") && !code.startsWith("RT-") && !code.startsWith("RMA-")) {
                 params.put("sku", code);
+            }
+        }
+        if (!params.containsKey("sku")) {
+            String numericSku = extractNumericSku(userMessage, params);
+            if (numericSku != null) {
+                params.put("sku", numericSku);
             }
         }
 
@@ -788,10 +904,36 @@ public class AiIntentRouterService {
         return params;
     }
 
+    private String extractNumericSku(String userMessage, Map<String, Object> params) {
+        String normalized = normalize(userMessage);
+        if (normalized.contains("barcode") || normalized.contains("ma vach")
+                || params.containsKey("code") || params.containsKey("receiptCode")
+                || params.containsKey("taskCode") || params.containsKey("cycleCountCode")
+                || params.containsKey("returnCode") || params.containsKey("soId")
+                || params.containsKey("poId") || params.containsKey("rmaId")) {
+            return null;
+        }
+        boolean productQuestion = containsAny(normalized,
+                "sku", "ton", "stock", "san pham", "mat hang", "hang", "con bao nhieu",
+                "con hang", "o kho nao", "tai kho nao", "giu cho", "reserved", "xuat duoc",
+                "kha dung");
+        if (!productQuestion) {
+            return null;
+        }
+        Matcher matcher = NUMERIC_SKU_PATTERN.matcher(userMessage == null ? "" : userMessage);
+        String candidate = null;
+        while (matcher.find()) {
+            candidate = matcher.group();
+        }
+        return candidate;
+    }
+
     // Kiểm tra câu hỏi có nằm ngoài phạm vi hoặc nguy hiểm không.
     private boolean looksUnsupported(String userMessage) {
         String normalized = normalize(userMessage);
-        return Pattern.compile("\\d+\\s*[+\\-*/x:]\\s*\\d+").matcher(normalized).find()
+        boolean arithmeticQuestion = Pattern.compile("\\d+\\s*[+\\-*/x:]\\s*\\d+").matcher(normalized).find()
+                && !hasBusinessCode(userMessage, BUSINESS_CODE_PATTERN);
+        return arithmeticQuestion
                 || containsAny(normalized,
                 "thoi tiet", "bong da", "chung khoan", "nau an", "nau pho", "cong thuc",
                 "viet code", "python", "react", "vue", "windows 11", "lap trinh",
@@ -858,6 +1000,10 @@ public class AiIntentRouterService {
                 || params.containsKey("poId")
                 || params.containsKey("soId")
                 || params.containsKey("rmaId")
+                || params.containsKey("receiptCode")
+                || params.containsKey("taskCode")
+                || params.containsKey("cycleCountCode")
+                || params.containsKey("returnCode")
                 || params.containsKey("location");
     }
 
@@ -878,12 +1024,28 @@ public class AiIntentRouterService {
                     value -> value.toUpperCase(Locale.ROOT));
             applyHistoryMatch(context, "sku", SKU_PATTERN.matcher(content.toUpperCase(Locale.ROOT)),
                     value -> value.toUpperCase(Locale.ROOT));
+            Object sku = context.get("sku");
+            if (sku != null && isBusinessOrWarehouseCode(String.valueOf(sku))) {
+                context.remove("sku");
+            }
             if (context.containsKey("code") && !context.containsKey("poId")) {
                 String code = String.valueOf(context.get("code"));
                 if (PURCHASE_ORDER_CODE_PATTERN.matcher(code).matches()) {
                     context.put("poId", code);
                 } else if (SALES_ORDER_CODE_PATTERN.matcher(code).matches()) {
                     context.put("soId", code);
+                } else if (RECEIPT_CODE_PATTERN.matcher(code).matches()) {
+                    context.put("receiptCode", code);
+                } else if (PUTAWAY_TASK_CODE_PATTERN.matcher(code).matches()) {
+                    context.put("taskCode", code);
+                    context.put("putawayTaskCode", code);
+                } else if (PICKING_TASK_CODE_PATTERN.matcher(code).matches()) {
+                    context.put("taskCode", code);
+                    context.put("pickingTaskCode", code);
+                } else if (CYCLE_COUNT_CODE_PATTERN.matcher(code).matches()) {
+                    context.put("cycleCountCode", code);
+                } else if (RETURN_CODE_PATTERN.matcher(code).matches()) {
+                    context.put("returnCode", code);
                 } else if (RMA_CODE_PATTERN.matcher(code).matches()) {
                     context.put("rmaId", code);
                 }
@@ -914,14 +1076,15 @@ public class AiIntentRouterService {
                 "kho", "warehouse", "ton", "ton kho", "stock", "sku", "san pham", "hang",
                 "barcode", "lot", "expiry", "het han", "sap het han",
                 "putaway", "cat hang", "nhap", "nhap kho", "inbound", "receipt",
-                "don nhap", "purchase order", "po-", " po ",
+                "don nhap", "purchase order", "po-", " po ", "gr-", "phieu gr",
                 "xuat", "xuat kho", "outbound", "sales order", "so-", " don so",
-                "picking", "pick", "packing", "lay hang",
-                "kiem ke", "cycle count", "lech", "chenh lech",
-                "rma", "tra hang", "vi tri", "location", "zone", "aisle", "rack", "bin",
+                "picking", "pick", "packing", "lay hang", "pk-", "pt-", "task",
+                "kiem ke", "cycle count", "lech", "chenh lech", "sc-",
+                "rma", "return", "rt-", "tra hang", "vi tri", "location", "slot", "cho trong",
+                "zone", "aisle", "rack", "bin",
                 "nha cung cap", "supplier", "ncc", "khach hang", "customer",
                 "audit", "log", "lich su thao tac", "global search", "tim kiem",
-                "bao cao", "dashboard", "van hanh", "hom nay co gi can lam",
+                "bao cao", "dashboard", "van hanh", "quyen", "vai tro", "hom nay co gi can lam",
                 "my tasks", "tasks today", "daily tasks");
     }
 
@@ -999,6 +1162,16 @@ public class AiIntentRouterService {
 
     private boolean hasBusinessCode(String text, Pattern pattern) {
         return text != null && pattern.matcher(text).find();
+    }
+
+    private boolean isBusinessOrWarehouseCode(String value) {
+        if (value == null) {
+            return false;
+        }
+        String code = value.toUpperCase(Locale.ROOT);
+        return code.startsWith("WH-") || code.startsWith("PO-") || code.startsWith("SO-")
+                || code.startsWith("GR-") || code.startsWith("PT-") || code.startsWith("PK-")
+                || code.startsWith("SC-") || code.startsWith("RT-") || code.startsWith("RMA-");
     }
 
     // Chuẩn hóa text để so khớp không dấu và không phân biệt hoa thường.
