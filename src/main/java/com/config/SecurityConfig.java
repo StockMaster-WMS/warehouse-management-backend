@@ -49,9 +49,12 @@ public class SecurityConfig {
                                     "/api/auth/me",
                                     "/api/auth/refresh",
                                     "/api/auth/logout",
-                                    "/actuator/health/**")
-                            .permitAll()
-                            .anyRequest()
+                                    "/actuator/health/**",
+                                    "/v3/api-docs/**",
+                                    "/swagger-ui/**",
+                                    "/swagger-ui.html")
+                            .permitAll();
+                    auth.anyRequest()
                             .authenticated();
                 })
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
