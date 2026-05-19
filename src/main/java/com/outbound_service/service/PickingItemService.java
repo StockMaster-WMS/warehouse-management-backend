@@ -72,10 +72,17 @@ public class PickingItemService {
     @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
     public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId,
             UUID locationId, String status, OffsetDateTime createdFrom, OffsetDateTime createdTo) {
+        return findAll(pageable, soItemId, productId, locationId, status, createdFrom, createdTo, null);
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
+    public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId,
+            UUID locationId, String status, OffsetDateTime createdFrom, OffsetDateTime createdTo, UUID assigneeId) {
         PickingItemStatus pickingStatus = parseOptionalPickingStatus(status);
         Specification<PickingItem> spec = PickingItemSpecification.hasSoItemId(soItemId)
                 .and(PickingItemSpecification.hasProductId(productId))
                 .and(PickingItemSpecification.hasLocationId(locationId))
+                .and(PickingItemSpecification.hasAssigneeId(assigneeId))
                 .and(PickingItemSpecification.hasStatus(pickingStatus))
                 .and(PickingItemSpecification.salesOrderCreatedFrom(createdFrom))
                 .and(PickingItemSpecification.salesOrderCreatedTo(createdTo));
@@ -338,8 +345,14 @@ public class PickingItemService {
 
     @Transactional
     public PickingItemResponse reportException(UUID id, String reason) {
+        return reportException(id, reason, null, true);
+    }
+
+    @Transactional
+    public PickingItemResponse reportException(UUID id, String reason, UUID actorId, boolean canBypassAssignment) {
         PickingItem item = pickingItemRepository.findByIdWithSoAndOrder(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy picking item"));
+        assertPickingAssignmentAllowed(item, actorId, canBypassAssignment);
         PickingItemResponse before = pickingItemMapper.toResponse(item);
 
         SalesOrder so = item.getSoItem().getSalesOrder();
@@ -359,8 +372,8 @@ public class PickingItemService {
                 List.of("ADMIN", "WAREHOUSE_MANAGER"),
                 NotificationType.PICKING_EXCEPTION,
                 NotificationSeverity.WARNING,
-                "Co loi picking can xu ly",
-                "Picking item " + saved.getId() + " vua duoc bao loi: " + (reason == null ? "" : reason),
+                "Có lỗi picking cần xử lý",
+                "Picking item " + saved.getId() + " vừa được báo lỗi: " + (reason == null ? "" : reason),
                 "PICKING_ITEM",
                 saved.getId());
 
@@ -372,9 +385,15 @@ public class PickingItemService {
 
     @Transactional
     public PickingItemResponse completeMobile(UUID id) {
+        return completeMobile(id, null, true);
+    }
+
+    @Transactional
+    public PickingItemResponse completeMobile(UUID id, UUID actorId, boolean canBypassAssignment) {
         PickingItem item = pickingItemRepository.findByIdWithSoAndOrder(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy picking item"));
         
+        assertPickingAssignmentAllowed(item, actorId, canBypassAssignment);
         if (item.getStatus() == PickingItemStatus.PICKED) {
             return pickingItemMapper.toResponse(item); // Đã hoàn tất
         }
@@ -532,23 +551,28 @@ public class PickingItemService {
             return;
         }
         String salesOrderNumber = item.getSoItem() == null || item.getSoItem().getSalesOrder() == null
-                ? "don xuat"
+                ? "đơn xuất"
                 : item.getSoItem().getSalesOrder().getSoNumber();
         notificationService.create(new CreateNotificationCommand(
                 item.getAssigneeId(),
                 NotificationType.PICKING_ASSIGNED,
                 NotificationSeverity.INFO,
-                "Ban duoc giao nhiem vu picking",
-                "Ban duoc giao picking cho " + salesOrderNumber + ", productId=" + item.getProductId(),
+                "Bạn được giao nhiệm vụ picking",
+                "Bạn được giao picking cho " + salesOrderNumber + ", productId=" + item.getProductId(),
                 "PICKING_ITEM",
                 item.getId()));
     }
 
     // Lấy chi tiết picking item đầy đủ dữ liệu cho giao diện picker.
     public PickingItemDetailResponse findDetailForPicker(UUID id) {
+        return findDetailForPicker(id, null, true);
+    }
+
+    public PickingItemDetailResponse findDetailForPicker(UUID id, UUID actorId, boolean canBypassAssignment) {
         PickingItem item = pickingItemRepository.findByIdWithSoAndOrder(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy picking item"));
 
+        assertPickingAssignmentAllowed(item, actorId, canBypassAssignment);
         SalesOrderItem soItem = item.getSoItem();
         SalesOrder so = soItem.getSalesOrder();
 
@@ -622,5 +646,14 @@ public class PickingItemService {
 
                 item.getStatus().name(),
                 item.getPickSequence());
+    }
+
+    private void assertPickingAssignmentAllowed(PickingItem item, UUID actorId, boolean canBypassAssignment) {
+        if (canBypassAssignment) {
+            return;
+        }
+        if (actorId == null || item.getAssigneeId() == null || !actorId.equals(item.getAssigneeId())) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Bạn chỉ được thao tác nhiệm vụ picking được phân công cho bạn");
+        }
     }
 }

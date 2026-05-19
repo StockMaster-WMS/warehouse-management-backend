@@ -149,8 +149,8 @@ public class CycleCountService {
                 List.of("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
                 NotificationType.CYCLE_COUNT_CREATED,
                 NotificationSeverity.INFO,
-                "Co phieu kiem ke moi",
-                "Phieu kiem ke " + displayCycleCount(saved) + " da duoc tao",
+                "Có phiếu kiểm kê mới",
+                "Phiếu kiểm kê " + displayCycleCount(saved) + " đã được tạo",
                 "CYCLE_COUNT",
                 saved.getId());
         return response;
@@ -452,8 +452,8 @@ public class CycleCountService {
                 List.of("ADMIN", "WAREHOUSE_MANAGER"),
                 NotificationType.STOCK_DISCREPANCY,
                 NotificationSeverity.CRITICAL,
-                "Phat hien chenh lech ton kho",
-                "Phieu kiem ke " + displayCycleCount(count) + " co " + discrepancyCount + " dong chenh lech",
+                "Phát hiện chênh lệch tồn kho",
+                "Phiếu kiểm kê " + displayCycleCount(count) + " có " + discrepancyCount + " dòng chênh lệch",
                 "CYCLE_COUNT",
                 count.getId());
     }

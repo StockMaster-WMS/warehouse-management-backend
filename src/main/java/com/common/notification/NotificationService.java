@@ -45,7 +45,7 @@ public class NotificationService {
     @Transactional
     public NotificationResponse markAsRead(UUID userId, UUID notificationId) {
         Notification notification = notificationRepository.findByIdAndRecipient_Id(notificationId, userId)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Khong tim thay thong bao"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy thông báo"));
         if (!notification.isRead()) {
             notification.setRead(true);
             notification.setReadAt(OffsetDateTime.now());
@@ -61,17 +61,17 @@ public class NotificationService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public NotificationResponse create(CreateNotificationCommand command) {
         if (command.recipientUserId() == null) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "recipientUserId la bat buoc");
+            throw new AppException(ErrorCode.BAD_REQUEST, "recipientUserId là bắt buộc");
         }
         UserAccount recipient = userRepository.findById(command.recipientUserId())
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Khong tim thay nguoi nhan thong bao"));
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy người nhận thông báo"));
 
         Notification notification = Notification.builder()
                 .recipient(recipient)
                 .type(command.type() == null ? NotificationType.SYSTEM_ALERT : command.type())
                 .severity(command.severity() == null ? NotificationSeverity.INFO : command.severity())
-                .title(requiredText(command.title(), "Thong bao"))
-                .message(requiredText(command.message(), "Ban co thong bao moi"))
+                .title(requiredText(command.title(), "Thông báo"))
+                .message(requiredText(command.message(), "Bạn có thông báo mới"))
                 .targetType(blankToNull(command.targetType()))
                 .targetId(command.targetId())
                 .build();

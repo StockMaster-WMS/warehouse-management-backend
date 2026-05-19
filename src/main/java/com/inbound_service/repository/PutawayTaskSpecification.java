@@ -13,6 +13,10 @@ public class PutawayTaskSpecification {
         return (root, query, cb) -> poItemId == null ? null : cb.equal(root.join("poItem").get("id"), poItemId);
     }
 
+    public static Specification<PutawayTask> hasAssignedTo(UUID assignedTo) {
+        return (root, query, cb) -> assignedTo == null ? null : cb.equal(root.get("assignedTo"), assignedTo);
+    }
+
     public static Specification<PutawayTask> hasStatus(String status) {
         return (root, query, cb) -> {
             if (!StringUtils.hasText(status)) {

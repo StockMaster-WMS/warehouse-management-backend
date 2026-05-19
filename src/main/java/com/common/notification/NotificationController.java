@@ -26,7 +26,7 @@ import java.util.UUID;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/notifications")
-@Tag(name = "Notification", description = "Quan ly thong bao trong he thong")
+@Tag(name = "Thông báo", description = "Quản lý thông báo trong hệ thống")
 @SecurityRequirement(name = "bearerAuth")
 public class NotificationController {
 
@@ -34,39 +34,39 @@ public class NotificationController {
 
     @GetMapping
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Lay danh sach thong bao cua nguoi dung hien tai")
+    @Operation(summary = "Lấy danh sách thông báo của người dùng hiện tại")
     public ApiResponse<PagedResponse<NotificationResponse>> getMine(
             Authentication authentication,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "false") boolean unreadOnly) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        return ApiResponse.success("Lay danh sach thong bao thanh cong",
+        return ApiResponse.success("Lấy danh sách thông báo thành công",
                 notificationService.findMine(currentUserId(authentication), unreadOnly, pageable));
     }
 
     @GetMapping("/unread-count")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Dem so thong bao chua doc")
+    @Operation(summary = "Đếm số thông báo chưa đọc")
     public ApiResponse<Map<String, Long>> unreadCount(Authentication authentication) {
         long count = notificationService.countUnread(currentUserId(authentication));
-        return ApiResponse.success("Lay so thong bao chua doc thanh cong", Map.of("count", count));
+        return ApiResponse.success("Lấy số thông báo chưa đọc thành công", Map.of("count", count));
     }
 
     @PatchMapping("/{id}/read")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Danh dau mot thong bao da doc")
+    @Operation(summary = "Đánh dấu một thông báo đã đọc")
     public ApiResponse<NotificationResponse> markAsRead(Authentication authentication, @PathVariable UUID id) {
-        return ApiResponse.success("Danh dau thong bao da doc thanh cong",
+        return ApiResponse.success("Đánh dấu thông báo đã đọc thành công",
                 notificationService.markAsRead(currentUserId(authentication), id));
     }
 
     @PatchMapping("/read-all")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Danh dau tat ca thong bao da doc")
+    @Operation(summary = "Đánh dấu tất cả thông báo đã đọc")
     public ApiResponse<Map<String, Integer>> markAllAsRead(Authentication authentication) {
         int updated = notificationService.markAllAsRead(currentUserId(authentication));
-        return ApiResponse.success("Danh dau tat ca thong bao da doc thanh cong", Map.of("updated", updated));
+        return ApiResponse.success("Đánh dấu tất cả thông báo đã đọc thành công", Map.of("updated", updated));
     }
 
     private static UUID currentUserId(Authentication authentication) {
@@ -76,7 +76,7 @@ public class NotificationController {
         try {
             return UUID.fromString(authentication.getName());
         } catch (IllegalArgumentException ex) {
-            throw new AppException(ErrorCode.FORBIDDEN, "Token khong hop le");
+            throw new AppException(ErrorCode.FORBIDDEN, "Token không hợp lệ");
         }
     }
 }

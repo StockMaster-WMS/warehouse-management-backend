@@ -44,7 +44,12 @@ public class PutawayTaskService {
 
     // Lấy danh sách putaway task có phân trang và lọc trạng thái.
     public PagedResponse<PutawayTaskResponse> findAll(Pageable pageable, UUID poItemId, String status) {
+        return findAll(pageable, poItemId, status, null);
+    }
+
+    public PagedResponse<PutawayTaskResponse> findAll(Pageable pageable, UUID poItemId, String status, UUID assignedTo) {
         Specification<PutawayTask> spec = PutawayTaskSpecification.hasPoItemId(poItemId)
+                .and(PutawayTaskSpecification.hasAssignedTo(assignedTo))
                 .and(PutawayTaskSpecification.hasStatus(status));
         Page<PutawayTask> page = putawayTaskRepository.findAll(spec, pageable);
         Page<PutawayTaskResponse> mapped = page.map(putawayTaskMapper::toResponse);
@@ -58,7 +63,13 @@ public class PutawayTaskService {
 
     // Lấy chi tiết putaway task theo id.
     public PutawayTaskResponse findById(UUID id) {
-        return putawayTaskMapper.toResponse(getTask(id));
+        return findById(id, null, true);
+    }
+
+    public PutawayTaskResponse findById(UUID id, UUID actorId, boolean canBypassAssignment) {
+        PutawayTask task = getTask(id);
+        assertPutawayAssignmentAllowed(task, actorId, canBypassAssignment);
+        return putawayTaskMapper.toResponse(task);
     }
 
     private static final EnumSet<PutawayStatus> TERMINAL_STATUSES =
@@ -108,9 +119,15 @@ public class PutawayTaskService {
     // Hoàn tất putaway và cập nhật trạng thái phiếu nhập liên quan.
     @Transactional
     public PutawayTaskResponse complete(UUID id, CompletePutawayRequest request) {
+        return complete(id, request, null, true);
+    }
+
+    @Transactional
+    public PutawayTaskResponse complete(UUID id, CompletePutawayRequest request, UUID actorId, boolean canBypassAssignment) {
         PutawayTask task = putawayTaskRepository.findByIdWithPoAndOrderForUpdate(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy putaway"));
 
+        assertPutawayAssignmentAllowed(task, actorId, canBypassAssignment);
         if (!EnumSet.of(PutawayStatus.PENDING, PutawayStatus.IN_PROGRESS).contains(task.getStatus())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ hoàn tất putaway ở trạng thái PENDING hoặc IN_PROGRESS");
         }
@@ -221,5 +238,14 @@ public class PutawayTaskService {
         metadata.put("assignedTo", task.getAssignedTo());
         metadata.put("status", task.getStatus() == null ? null : task.getStatus().name());
         return metadata;
+    }
+
+    private void assertPutawayAssignmentAllowed(PutawayTask task, UUID actorId, boolean canBypassAssignment) {
+        if (canBypassAssignment) {
+            return;
+        }
+        if (actorId == null || task.getAssignedTo() == null || !actorId.equals(task.getAssignedTo())) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Bạn chỉ được thao tác nhiệm vụ putaway được phân công cho bạn");
+        }
     }
 }

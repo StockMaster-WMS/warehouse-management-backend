@@ -15,6 +15,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -53,15 +55,17 @@ public class PickingItemController {
             @Parameter(description = "Từ thời điểm tạo đơn xuất (ISO 8601)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
             @Parameter(description = "Đến thời điểm tạo đơn xuất (ISO 8601)")
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo,
+            Authentication authentication) {
         String resolvedSort = resolveSortField(sort);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), resolvedSort));
         return ApiResponse.success("Lấy danh sách picking item thành công",
-                pickingItemService.findAll(pageable, soItemId, productId, locationId, status, createdFrom, createdTo));
+                pickingItemService.findAll(pageable, soItemId, productId, locationId, status, createdFrom, createdTo,
+                        staffScopeUserId(authentication)));
     }
 
     @PostMapping("/{id}/assign")
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Phân công nhiệm vụ lấy hàng")
     public ApiResponse<PickingItemResponse> assignTask(@PathVariable UUID id, @RequestBody Map<String, String> payload) {
         UUID assigneeId = payload.get("assigneeId") != null ? UUID.fromString(payload.get("assigneeId")) : null;
@@ -71,16 +75,19 @@ public class PickingItemController {
     @PostMapping("/{id}/exception")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Báo lỗi lấy hàng")
-    public ApiResponse<PickingItemResponse> reportException(@PathVariable UUID id, @RequestBody Map<String, String> payload) {
+    public ApiResponse<PickingItemResponse> reportException(@PathVariable UUID id, @RequestBody Map<String, String> payload,
+            Authentication authentication) {
         String reason = payload.get("reason");
-        return ApiResponse.success("Ghi nhận báo lỗi thành công", pickingItemService.reportException(id, reason));
+        return ApiResponse.success("Ghi nhận báo lỗi thành công",
+                pickingItemService.reportException(id, reason, currentUserId(authentication), canBypassTaskScope(authentication)));
     }
 
     @PostMapping("/{id}/complete-mobile")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Hoàn tất picking nhanh cho Mobile", description = "Dùng cho Mobile khi quét xong: Tự động set status=PICKED và cập nhật kho")
-    public ApiResponse<PickingItemResponse> completeMobile(@PathVariable UUID id) {
-        return ApiResponse.success("Hoàn tất lấy hàng thành công", pickingItemService.completeMobile(id));
+    public ApiResponse<PickingItemResponse> completeMobile(@PathVariable UUID id, Authentication authentication) {
+        return ApiResponse.success("Hoàn tất lấy hàng thành công",
+                pickingItemService.completeMobile(id, currentUserId(authentication), canBypassTaskScope(authentication)));
     }
 
     private String resolveSortField(String sort) {
@@ -90,11 +97,33 @@ public class PickingItemController {
         return sort;
     }
 
+    private UUID staffScopeUserId(Authentication authentication) {
+        return canBypassTaskScope(authentication) ? null : currentUserId(authentication);
+    }
+
+    private boolean canBypassTaskScope(Authentication authentication) {
+        return hasAuthority(authentication, "ADMIN") || hasAuthority(authentication, "WAREHOUSE_MANAGER");
+    }
+
+    private boolean hasAuthority(Authentication authentication, String authority) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(authority::equals);
+    }
+
+    private UUID currentUserId(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            return null;
+        }
+        return UUID.fromString(authentication.getName());
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy picking item theo ID")
-    public ApiResponse<?> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Lấy chi tiết picking item thành công", pickingItemService.findDetailForPicker(id));
+    public ApiResponse<?> getById(@PathVariable UUID id, Authentication authentication) {
+        return ApiResponse.success("Lấy chi tiết picking item thành công",
+                pickingItemService.findDetailForPicker(id, currentUserId(authentication), canBypassTaskScope(authentication)));
     }
 
     @PostMapping

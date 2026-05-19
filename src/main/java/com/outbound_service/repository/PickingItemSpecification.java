@@ -22,6 +22,10 @@ public class PickingItemSpecification {
         return (root, query, cb) -> locationId == null ? null : cb.equal(root.get("locationId"), locationId);
     }
 
+    public static Specification<PickingItem> hasAssigneeId(UUID assigneeId) {
+        return (root, query, cb) -> assigneeId == null ? null : cb.equal(root.get("assigneeId"), assigneeId);
+    }
+
     public static Specification<PickingItem> hasStatus(PickingItemStatus status) {
         return (root, query, cb) -> status == null ? null : cb.equal(root.get("status"), status);
     }

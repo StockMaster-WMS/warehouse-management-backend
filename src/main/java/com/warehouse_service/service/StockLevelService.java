@@ -746,8 +746,8 @@ public class StockLevelService {
                 List.of("ADMIN", "WAREHOUSE_MANAGER", "REPORT_VIEWER"),
                 NotificationType.LOW_STOCK,
                 NotificationSeverity.WARNING,
-                "Canh bao ton kho thap",
-                "San pham " + productLabel + " chi con kha dung " + available + ", duoi muc toi thieu " + product.minQty(),
+                "Cảnh báo tồn kho thấp",
+                "Sản phẩm " + productLabel + " chỉ còn khả dụng " + available + ", dưới mức tối thiểu " + product.minQty(),
                 "STOCK_LEVEL",
                 stock.id());
     }
