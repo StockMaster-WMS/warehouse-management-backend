@@ -129,4 +129,82 @@ class AiIntentRouterServiceTest {
         assertThat(result.getIntent()).isEqualTo(AiIntent.PURCHASE_ORDER_APPROVAL_AUDIT);
         assertThat(result.safeParameters()).containsEntry("code", "PO-2026-0001");
     }
+
+    @Test
+    void routesNumericSkuStockQuestions() {
+        AiIntentResult result = router.route("SKU 00018 ở WH-002 còn bao nhiêu?", List.of());
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.STOCK_BY_PRODUCT);
+        assertThat(result.safeParameters()).containsEntry("sku", "00018");
+        assertThat(result.safeParameters()).containsEntry("warehouseCode", "WH-002");
+    }
+
+    @Test
+    void routesProductNameWithNumericSkuWarehouseQuestion() {
+        AiIntentResult result = router.route("Rovi Bút bi xanh loại cao cấp 00018 ở kho nào?", List.of());
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.STOCK_BY_PRODUCT);
+        assertThat(result.safeParameters()).containsEntry("sku", "00018");
+    }
+
+    @Test
+    void routesSalesOrderPickingOperationalQuestions() {
+        AiIntentResult assignee = router.route("Ai đang pick SO-2026-001?", List.of());
+        AiIntentResult missing = router.route("SO-2026-001 còn thiếu gì?", List.of());
+
+        assertThat(assignee.getIntent()).isEqualTo(AiIntent.PICKING_STATUS);
+        assertThat(assignee.safeParameters()).containsEntry("soId", "SO-2026-001");
+        assertThat(missing.getIntent()).isEqualTo(AiIntent.SALES_ORDER_DETAIL);
+    }
+
+    @Test
+    void routesReceiptAndTaskCodes() {
+        assertThat(router.route("Phiếu GR-2026-015 đã nhập xong chưa?", List.of()).getIntent())
+                .isEqualTo(AiIntent.INBOUND_RECEIPT_STATUS);
+        assertThat(router.route("GR-2026-015 để hàng ở đâu?", List.of()).getIntent())
+                .isEqualTo(AiIntent.INBOUND_RECEIPT_DETAIL);
+        assertThat(router.route("Putaway task PT-2026-003 xong chưa?", List.of()).getIntent())
+                .isEqualTo(AiIntent.PENDING_PUTAWAY);
+        assertThat(router.route("Picking task PK-2026-009 còn bao nhiêu món chưa lấy?", List.of()).getIntent())
+                .isEqualTo(AiIntent.PICKING_STATUS);
+    }
+
+    @Test
+    void routesCycleReturnAnalyticsAndPermissionQuestions() {
+        assertThat(router.route("Session SC-2026-005 đã khóa chưa?", List.of()).getIntent())
+                .isEqualTo(AiIntent.CYCLE_COUNT_STATUS);
+        assertThat(router.route("SC-2026-005 có lệch SKU 00018 không?", List.of()).getIntent())
+                .isEqualTo(AiIntent.CYCLE_COUNT_VARIANCE);
+        assertThat(router.route("Return RT-2026-002 xử lý tới đâu rồi?", List.of()).getIntent())
+                .isEqualTo(AiIntent.RMA_PENDING);
+        assertThat(router.route("Sản phẩm nào quay vòng chậm nhất?", List.of()).getIntent())
+                .isEqualTo(AiIntent.SLOW_MOVING_STOCK);
+        assertThat(router.route("Tôi có quyền chỉnh tồn SKU 00018 không?", List.of()).getIntent())
+                .isEqualTo(AiIntent.USER_PERMISSION);
+    }
+
+    @Test
+    void toleratesCommonWarehouseCodeTypos() {
+        AiIntentResult missingDash = router.route("SKU 00018 ở WH002 còn bao nhiêu?", List.of());
+        AiIntentResult letterO = router.route("WH-OO2 còn SKU 00018 không?", List.of());
+
+        assertThat(missingDash.getIntent()).isEqualTo(AiIntent.STOCK_BY_PRODUCT);
+        assertThat(missingDash.safeParameters()).containsEntry("warehouseCode", "WH-002");
+        assertThat(letterO.getIntent()).isEqualTo(AiIntent.STOCK_BY_PRODUCT);
+        assertThat(letterO.safeParameters()).containsEntry("warehouseCode", "WH-002");
+    }
+
+    @Test
+    void toleratesCommonBusinessCodeTyposAndMissingSeparators() {
+        AiIntentResult salesOrder = router.route("S0 2026 001 đang trạng thái gì?", List.of());
+        AiIntentResult receipt = router.route("GR2026015 de hang o dau?", List.of());
+        AiIntentResult picking = router.route("PK 2026 009 uu tien khong?", List.of());
+
+        assertThat(salesOrder.getIntent()).isEqualTo(AiIntent.SALES_ORDER_STATUS);
+        assertThat(salesOrder.safeParameters()).containsEntry("code", "SO-2026-001");
+        assertThat(receipt.getIntent()).isEqualTo(AiIntent.INBOUND_RECEIPT_DETAIL);
+        assertThat(receipt.safeParameters()).containsEntry("receiptCode", "GR-2026-015");
+        assertThat(picking.getIntent()).isEqualTo(AiIntent.PICKING_STATUS);
+        assertThat(picking.safeParameters()).containsEntry("pickingTaskCode", "PK-2026-009");
+    }
 }

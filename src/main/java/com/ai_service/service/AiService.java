@@ -1,5 +1,6 @@
 package com.ai_service.service;
 
+import com.ai_service.client.AiModelSelectionContext;
 import com.ai_service.dto.AiAskRequest;
 import com.ai_service.dto.AiAskResponse;
 import com.ai_service.intent.AiIntentResult;
@@ -37,6 +38,7 @@ public class AiService {
         String error = null;
         String finalReply = null;
 
+        AiModelSelectionContext.set(req.getProvider(), req.getModel());
         try {
             log.info("AI ask start session={} question='{}'", sessionId, preview(userMessage));
             List<Map<String, String>> history = historyService.getMessages(sessionId);
@@ -67,6 +69,7 @@ public class AiService {
             if (finalReply != null) {
                 historyService.addHistory(sessionId, userMessage, finalReply);
             }
+            AiModelSelectionContext.clear();
         }
     }
 
@@ -87,6 +90,7 @@ public class AiService {
         StringBuilder finalReply = new StringBuilder();
         boolean cancelled = false;
 
+        AiModelSelectionContext.set(req.getProvider(), req.getModel());
         try {
             log.info("AI stream start session={} request={} question='{}'",
                     sessionId, requestId, preview(userMessage));
@@ -147,6 +151,7 @@ public class AiService {
             // clear cancel token
             var cancelService2 = com.ai_service.util.ApplicationContextHolder.getBean(com.ai_service.service.AiCancelService.class);
             cancelService2.clear(requestId);
+            AiModelSelectionContext.clear();
         }
     }
 

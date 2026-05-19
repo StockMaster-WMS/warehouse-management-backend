@@ -14,5 +14,7 @@ public class AiAskRequest {
     private String question;
     private String sessionId;
     private String requestId;
+    private String provider;
+    private String model;
     private List<ChatMessage> history;
 }

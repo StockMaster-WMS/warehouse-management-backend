@@ -8,6 +8,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,7 +39,7 @@ public class AiController {
 
     // Xử lý câu hỏi AI dạng trả lời một lần.
     @PostMapping("/ask")
-    @Operation(summary = "Chat với trợ lý AI", description = "Gửi câu hỏi tới model stockmaster-ai")
+    @Operation(summary = "Chat với trợ lý AI", description = "Gửi câu hỏi tới provider/model AI đang chọn")
     public ResponseEntity<AiAskResponse> ask(@RequestBody AiAskRequest req) {
         try {
             AiAskResponse response = aiService.ask(req);
@@ -62,11 +64,15 @@ public class AiController {
     public SseEmitter askStreamLegacy(
             @RequestParam String question,
             @RequestParam(required = false) String sessionId,
-            @RequestParam(required = false) String requestId) {
+            @RequestParam(required = false) String requestId,
+            @RequestParam(required = false) String provider,
+            @RequestParam(required = false) String model) {
         AiAskRequest req = new AiAskRequest();
         req.setQuestion(question);
         req.setSessionId(sessionId);
         req.setRequestId(requestId);
+        req.setProvider(provider);
+        req.setModel(model);
         return openStream(req);
     }
 
@@ -76,6 +82,7 @@ public class AiController {
         String sessionId = request == null ? null : request.getSessionId();
         String requestId = request == null ? null : request.getRequestId();
         String cancelKey = StringUtils.hasText(requestId) ? requestId : sessionId;
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         emitter.onTimeout(() -> {
             clientDisconnected.set(true);
@@ -92,6 +99,9 @@ public class AiController {
         });
         
         aiTaskExecutor.execute(() -> {
+            var securityContext = SecurityContextHolder.createEmptyContext();
+            securityContext.setAuthentication(authentication);
+            SecurityContextHolder.setContext(securityContext);
             try {
                 aiService.askStream(request, fragment -> {
                     if (clientDisconnected.get()) {
@@ -120,6 +130,8 @@ public class AiController {
                 if (!clientDisconnected.get()) {
                     emitter.complete();
                 }
+            } finally {
+                SecurityContextHolder.clearContext();
             }
         });
 
