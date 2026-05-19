@@ -172,18 +172,8 @@ public class PutawayTaskService {
             );
             stockLevelService.adjust(addCmd);
         } else {
-            // Fallback nếu không có receipt liên quan (trường hợp hiếm)
-            StockAdjustCommand adjustCmd = new StockAdjustCommand(
-                    request.actualLocationId(), // warehouseId fallback is tricky here, assuming request has it or similar
-                    saved.getActualLocationId(),
-                    saved.getProductId(),
-                    null,
-                    saved.getQtyToPutaway(),
-                    "PUTAWAY_DIRECT_" + saved.getId().toString(),
-                    "PUTAWAY_TASK",
-                    saved.getId()
-            );
-            stockLevelService.adjust(adjustCmd);
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Không thể hoàn tất putaway không gắn với phiếu nhập kho");
         }
 
         auditLogService.record("PUTAWAY", "PUTAWAY", "Hoàn tất putaway",

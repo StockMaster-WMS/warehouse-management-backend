@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -62,7 +63,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
 
                 // Trích xuất thông tin
-                String username = claims.getSubject(); // UUID lưu trong subject
+                UUID userId = UUID.fromString(claims.getSubject());
+                String username = claims.get("username", String.class);
                 String rolesString = claims.get("roles", String.class);
                 
                 Collection<? extends GrantedAuthority> authorities = Collections.emptyList();
@@ -76,13 +78,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 }
 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                        username, null, authorities);
+                        new JwtPrincipal(userId, username, claims.get("email", String.class)), null, authorities);
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (JwtException | IllegalArgumentException ex) {
-            log.error("Could not set user authentication in security context", ex);
+            log.warn("Could not set user authentication in security context: {}", ex.getMessage());
             // Không set authentication, request sẽ đi tiếp và bị chặn bởi Spring Security nếu API yêu cầu auth
         }
 

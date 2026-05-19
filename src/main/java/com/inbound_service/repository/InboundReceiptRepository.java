@@ -15,5 +15,7 @@ public interface InboundReceiptRepository extends JpaRepository<InboundReceipt, 
 
     Optional<InboundReceipt> findByReceiptNumber(String receiptNumber);
 
+    Optional<InboundReceipt> findByIdempotencyKey(String idempotencyKey);
+
     boolean existsByReceiptNumber(String receiptNumber);
 }

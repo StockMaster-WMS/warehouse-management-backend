@@ -258,37 +258,6 @@ public class PickingItemService {
         PickingItem saved = pickingItemRepository.save(existing);
         PickingItemResponse after = pickingItemMapper.toResponse(saved);
 
-        // Logic trọng tâm cho Mobile: Khi hoàn tất lấy hàng (PICKED), trừ tồn thực tế và giải phóng giữ chỗ
-        if (saved.getStatus() == PickingItemStatus.PICKED && (before.status() == null || !before.status().equals("PICKED"))) {
-            try {
-                // 1. Trừ tồn tay (OnHand)
-                stockLevelService.adjust(new com.common.api.stock.StockAdjustCommand(
-                        so.getWarehouseId(),
-                        saved.getLocationId(),
-                        saved.getProductId(),
-                        org.springframework.util.StringUtils.hasText(saved.getLotNumber()) ? saved.getLotNumber() : "",
-                        -saved.getQtyToPick(),
-                        "PICKING_ITEM:" + saved.getId() + ":COMPLETE_PICK",
-                        "PICKING_ITEM",
-                        saved.getId()
-                ));
-
-                // 2. Giải phóng giữ chỗ (Reserved)
-                stockLevelService.adjustReserved(new com.common.api.stock.StockReserveCommand(
-                        so.getWarehouseId(),
-                        saved.getLocationId(),
-                        saved.getProductId(),
-                        org.springframework.util.StringUtils.hasText(saved.getLotNumber()) ? saved.getLotNumber() : "",
-                        -saved.getQtyToPick(),
-                        "PICKING_ITEM:" + saved.getId() + ":COMPLETE_RELEASE",
-                        "PICKING_ITEM",
-                        saved.getId()
-                ));
-            } catch (Exception e) {
-                log.error("Lỗi cập nhật tồn kho khi hoàn tất picking: {}", e.getMessage());
-            }
-        }
-
         String actionType = saved.getStatus() == PickingItemStatus.PICKED ? "PICK" : "UPDATE";
         String action = saved.getStatus() == PickingItemStatus.PICKED ? "Hoàn tất picking" : "Cập nhật picking";
         auditLogService.record("PICKING", actionType, action,
@@ -409,7 +378,7 @@ public class PickingItemService {
             item.getLotNumber()
         );
 
-        // Reuse the update logic which handles the physical stock deduction and reserve releasing
+        // Reuse update validation; stock on-hand is deducted only when the sales order is shipped.
         return update(id, request);
     }
 

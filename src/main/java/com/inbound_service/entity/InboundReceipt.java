@@ -50,6 +50,12 @@ public class InboundReceipt {
     @Column(name = "received_by")
     private UUID receivedBy;
 
+    @Column(name = "idempotency_key", unique = true, length = 160)
+    private String idempotencyKey;
+
+    @Column(name = "request_hash", length = 64)
+    private String requestHash;
+
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
 

@@ -257,6 +257,7 @@ public class SalesOrderService {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không có picking để xuất kho");
         }
 
+        validatePickingCompleted(id, picks);
         deductStock(so, picks);
         updateShippedQuantities(id, picks);
 
@@ -309,7 +310,8 @@ public class SalesOrderService {
         }
     }
 
-    // Trừ reserved và trừ on-hand theo số lượng đã pick.
+    // Shipment là điểm duy nhất chuyển reserved thành xuất kho thật:
+    // nhả reserved và trừ on-hand theo số lượng đã pick.
     private void deductStock(SalesOrder so, List<PickingItem> picks) {
         for (PickingItem p : picks) {
             int picked = p.getQtyPicked() == null ? 0 : p.getQtyPicked();

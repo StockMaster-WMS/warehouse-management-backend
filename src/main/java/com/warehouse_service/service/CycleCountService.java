@@ -239,11 +239,14 @@ public class CycleCountService {
         CycleCount count = getEntity(id);
         assertStatus(count, CycleCountStatus.COMPLETED, "Chỉ duyệt khi đợt đang COMPLETED (chờ duyệt)");
 
-        for (CycleCountItem item : count.getItems()) {
-            if (item.getStatus() != CycleCountItem.ItemStatus.COUNTED) {
-                continue; // Items đã adjusted hoặc chưa đếm (shouldn't happen sau submit)
-            }
+        List<CycleCountItem> countedItems = count.getItems().stream()
+                .filter(item -> item.getStatus() == CycleCountItem.ItemStatus.COUNTED)
+                .toList();
+        for (CycleCountItem item : countedItems) {
+            assertStockSnapshotStillCurrent(item);
+        }
 
+        for (CycleCountItem item : countedItems) {
             if (item.getDiscrepancy() != null && item.getDiscrepancy() != 0) {
                 StockAdjustCommand cmd = new StockAdjustCommand(
                         count.getWarehouseId(),
@@ -266,6 +269,24 @@ public class CycleCountService {
         count.setApprovedBy(approverId);
 
         return toResponse(cycleCountRepository.save(count));
+    }
+
+    private void assertStockSnapshotStillCurrent(CycleCountItem item) {
+        String lotNumber = normalizeLot(item.getLotNumber());
+        StockLevel current = stockLevelRepository
+                .findByLocationIdAndProductIdAndLotNumber(item.getLocationId(), item.getProductId(), lotNumber)
+                .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST,
+                        "Tồn kho đã thay đổi sau khi tạo kiểm kê; vui lòng tạo đợt kiểm kê mới"));
+        int currentQty = current.getQtyOnHand() == null ? 0 : current.getQtyOnHand();
+        int snapshotQty = item.getSystemQty() == null ? 0 : item.getSystemQty();
+        if (currentQty != snapshotQty) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Tồn kho đã thay đổi sau khi tạo kiểm kê cho productId=" + item.getProductId()
+                            + ", locationId=" + item.getLocationId()
+                            + ", lot=" + lotNumber
+                            + " (snapshot=" + snapshotQty + ", hiện tại=" + currentQty
+                            + "). Vui lòng kiểm kê lại trước khi duyệt.");
+        }
     }
 
     /**

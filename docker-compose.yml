@@ -35,7 +35,7 @@ services:
       WAREHOUSE_DB_PASSWORD: postgres
       WAREHOUSE_FLYWAY_ENABLED: "true"
       AUTH_MODE: ${AUTH_MODE:-public}
-      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-change-me-to-a-very-long-secret-key-at-least-32-bytes}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required}
       AUTH_JWT_ISSUER: ${AUTH_JWT_ISSUER:-warehouse-app}
       AUTH_JWT_ACCESS_EXPIRATION_SECONDS: ${AUTH_JWT_ACCESS_EXPIRATION_SECONDS:-3600}
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
