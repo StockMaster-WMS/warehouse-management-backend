@@ -14,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -43,17 +45,19 @@ public class PutawayTaskController {
             @RequestParam(defaultValue = "id") String sort,
             @RequestParam(defaultValue = "desc") String sortDir,
             @Parameter(description = "ID dòng PO") @RequestParam(required = false) UUID poItemId,
-            @Parameter(description = "PENDING | IN_PROGRESS | COMPLETED | CANCELLED") @RequestParam(required = false) String status) {
+            @Parameter(description = "PENDING | IN_PROGRESS | COMPLETED | CANCELLED") @RequestParam(required = false) String status,
+            Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách putaway thành công",
-                putawayTaskService.findAll(pageable, poItemId, status));
+                putawayTaskService.findAll(pageable, poItemId, status, staffScopeUserId(authentication)));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Chi tiết putaway")
-    public ApiResponse<PutawayTaskResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Lấy putaway thành công", putawayTaskService.findById(id));
+    public ApiResponse<PutawayTaskResponse> getById(@PathVariable UUID id, Authentication authentication) {
+        return ApiResponse.success("Lấy putaway thành công",
+                putawayTaskService.findById(id, currentUserId(authentication), canBypassTaskScope(authentication)));
     }
 
     @PatchMapping("/{id}")
@@ -65,10 +69,33 @@ public class PutawayTaskController {
     }
 
     @PostMapping("/{id}/complete")
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Hoàn tất putaway", description = "Ghi nhận vị trí thực tế trong kho (tồn kho đã cập nhật khi tạo phiếu nhập)")
     public ApiResponse<PutawayTaskResponse> complete(@PathVariable UUID id,
-            @Valid @RequestBody CompletePutawayRequest request) {
-        return ApiResponse.success("Hoàn tất putaway thành công", putawayTaskService.complete(id, request));
+            @Valid @RequestBody CompletePutawayRequest request,
+            Authentication authentication) {
+        return ApiResponse.success("Hoàn tất putaway thành công",
+                putawayTaskService.complete(id, request, currentUserId(authentication), canBypassTaskScope(authentication)));
+    }
+
+    private UUID staffScopeUserId(Authentication authentication) {
+        return canBypassTaskScope(authentication) ? null : currentUserId(authentication);
+    }
+
+    private boolean canBypassTaskScope(Authentication authentication) {
+        return hasAuthority(authentication, "ADMIN") || hasAuthority(authentication, "WAREHOUSE_MANAGER");
+    }
+
+    private boolean hasAuthority(Authentication authentication, String authority) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(authority::equals);
+    }
+
+    private UUID currentUserId(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            return null;
+        }
+        return UUID.fromString(authentication.getName());
     }
 }

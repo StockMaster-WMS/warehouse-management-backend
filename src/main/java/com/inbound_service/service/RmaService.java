@@ -97,8 +97,8 @@ public class RmaService {
                 List.of("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
                 NotificationType.RMA_RECEIVED,
                 NotificationSeverity.INFO,
-                "Co RMA moi can xu ly",
-                "RMA " + saved.getRmaNumber() + " vua duoc tao cho khach " + saved.getCustomerName(),
+                "Có RMA mới cần xử lý",
+                "RMA " + saved.getRmaNumber() + " vừa được tạo cho khách " + saved.getCustomerName(),
                 "RMA",
                 saved.getId());
         return toResponse(saved);
@@ -151,8 +151,8 @@ public class RmaService {
                     List.of("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
                     NotificationType.RMA_RECEIVED,
                     NotificationSeverity.INFO,
-                    "Da nhan hang tra RMA",
-                    "RMA " + saved.getRmaNumber() + " vua nhan " + newReceivedQty + "/" + expectedQty + " san pham",
+                    "Đã nhận hàng trả RMA",
+                    "RMA " + saved.getRmaNumber() + " vừa nhận " + newReceivedQty + "/" + expectedQty + " sản phẩm",
                     "RMA",
                     saved.getId());
         }

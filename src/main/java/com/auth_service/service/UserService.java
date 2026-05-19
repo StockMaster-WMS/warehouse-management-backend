@@ -87,8 +87,8 @@ public class UserService {
                 user.getId(),
                 NotificationType.ROLE_CHANGED,
                 NotificationSeverity.WARNING,
-                "Quyen tai khoan da thay doi",
-                "Vai tro hien tai cua ban: " + response.roles(),
+                "Quyền tài khoản đã thay đổi",
+                "Vai trò hiện tại của bạn: " + response.roles(),
                 "USER",
                 user.getId()));
         return response;
@@ -105,8 +105,8 @@ public class UserService {
                 user.getId(),
                 NotificationType.SYSTEM_ALERT,
                 NotificationSeverity.WARNING,
-                "Trang thai tai khoan da thay doi",
-                Boolean.TRUE.equals(response.isActive()) ? "Tai khoan cua ban da duoc kich hoat" : "Tai khoan cua ban da bi tam khoa",
+                "Trạng thái tài khoản đã thay đổi",
+                Boolean.TRUE.equals(response.isActive()) ? "Tài khoản của bạn đã được kích hoạt" : "Tài khoản của bạn đã bị tạm khóa",
                 "USER",
                 user.getId()));
         return response;

@@ -347,6 +347,12 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.95, "deterministic greeting");
         }
 
+        if (containsAny(normalized, "ai da duyet", "nguoi da duyet", "approved by", "who approved")
+                && containsAny(normalized, "phieu nhap", "don nhap", "purchase order", "po")) {
+            return AiIntentResult.of(AiIntent.PURCHASE_ORDER_APPROVAL_AUDIT, params, 0.92,
+                    "deterministic purchase order approval audit");
+        }
+
         if (looksUnsupported(userMessage)) {
             return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.95, "deterministic unsupported");
         }
@@ -358,7 +364,7 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.95, "deterministic unsupported");
         }
 
-        if (containsAny(normalized, "kho do", "san pham do", "san pham nay", "san pham kia",
+        if (containsAnyPhrase(normalized, "kho do", "san pham do", "san pham nay", "san pham kia",
                 "don do", "don nay", "don kia", "cai nay", "lo nay", "hang nay", "mat hang do",
                 "con nay") && !hasResolvedReference(params)) {
             return AiIntentResult.of(AiIntent.AMBIGUOUS, params, 0.9, "deterministic ambiguous reference");
@@ -397,12 +403,6 @@ public class AiIntentRouterService {
                 && containsAny(normalized, "thang truoc", "last month", "month before")
                 && containsAny(normalized, "nhap", "xuat", "inbound", "outbound")) {
             return AiIntentResult.of(AiIntent.MONTH_OVER_MONTH_FLOW, params, 0.92, "deterministic month over month flow");
-        }
-
-        if (containsAny(normalized, "ai da duyet", "nguoi da duyet", "approved by", "who approved")
-                && containsAny(normalized, "phieu nhap", "don nhap", "purchase order", "po")) {
-            return AiIntentResult.of(AiIntent.PURCHASE_ORDER_APPROVAL_AUDIT, params, 0.92,
-                    "deterministic purchase order approval audit");
         }
 
         if (containsAny(normalized, "phieu xuat", "don xuat", "sales order", "so ")
@@ -977,6 +977,20 @@ public class AiIntentRouterService {
         }
         for (String candidate : candidates) {
             if (text.contains(candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsAnyPhrase(String text, String... candidates) {
+        if (text == null) {
+            return false;
+        }
+        for (String candidate : candidates) {
+            if (Pattern.compile("(^|[^a-z0-9])" + Pattern.quote(candidate) + "([^a-z0-9]|$)")
+                    .matcher(text)
+                    .find()) {
                 return true;
             }
         }

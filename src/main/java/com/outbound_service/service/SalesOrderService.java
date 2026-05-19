@@ -99,8 +99,8 @@ public class SalesOrderService {
                 List.of("ADMIN", "WAREHOUSE_MANAGER"),
                 NotificationType.SYSTEM_ALERT,
                 NotificationSeverity.INFO,
-                "Co don xuat moi",
-                "Don xuat " + saved.getSoNumber() + " vua duoc tao",
+                "Có đơn xuất mới",
+                "Đơn xuất " + saved.getSoNumber() + " vừa được tạo",
                 "SALES_ORDER",
                 saved.getId());
         return response;

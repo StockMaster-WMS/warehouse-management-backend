@@ -139,8 +139,8 @@ public class PurchaseOrderService {
                 List.of("ADMIN", "WAREHOUSE_MANAGER", "WAREHOUSE_STAFF"),
                 NotificationType.PURCHASE_ORDER_CREATED,
                 NotificationSeverity.INFO,
-                "Co don nhap moi",
-                "Don nhap " + saved.getPoNumber() + " vua duoc tao",
+                "Có đơn nhập mới",
+                "Đơn nhập " + saved.getPoNumber() + " vừa được tạo",
                 "PURCHASE_ORDER",
                 saved.getId());
         return response;

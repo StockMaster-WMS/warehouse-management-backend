@@ -16,7 +16,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 @RequestMapping("/api/dashboard")
 @Tag(name = "Dashboard", description = "API tổng hợp dữ liệu cho trang dashboard")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("isAuthenticated()")
+@PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
 public class DashboardController {
 
     private final DashboardService dashboardService;

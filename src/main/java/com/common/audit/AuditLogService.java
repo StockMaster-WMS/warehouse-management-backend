@@ -23,15 +23,34 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class AuditLogService {
+
+    private static final Set<String> MANAGER_VISIBLE_MODULES = Set.of(
+            "PURCHASE_ORDER",
+            "INBOUND_RECEIPT",
+            "PUTAWAY",
+            "RMA",
+            "SALES_ORDER",
+            "PICKING",
+            "STOCK",
+            "PRODUCT",
+            "SUPPLIER",
+            "CATEGORY",
+            "CUSTOMER",
+            "WAREHOUSE",
+            "LOCATION",
+            "CYCLE_COUNT"
+    );
 
     private final AuditLogRepository auditLogRepository;
     private final ObjectMapper objectMapper;
@@ -74,8 +93,18 @@ public class AuditLogService {
     @Transactional(readOnly = true)
     public PagedResponse<AuditLogResponse> findAll(Pageable pageable, String module, String actionType,
             String entityType, String keyword, OffsetDateTime createdFrom, OffsetDateTime createdTo) {
+        return findAll(pageable, module, actionType, entityType, keyword, createdFrom, createdTo, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<AuditLogResponse> findAll(Pageable pageable, String module, String actionType,
+            String entityType, String keyword, OffsetDateTime createdFrom, OffsetDateTime createdTo,
+            Collection<String> visibleModules) {
         Specification<AuditLog> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+            if (visibleModules != null && !visibleModules.isEmpty()) {
+                predicates.add(root.get("module").in(visibleModules));
+            }
             if (StringUtils.hasText(module)) {
                 predicates.add(cb.equal(cb.upper(root.get("module")), module.trim().toUpperCase(Locale.ROOT)));
             }
@@ -106,6 +135,10 @@ public class AuditLogService {
         Page<AuditLogResponse> page = auditLogRepository.findAll(spec, pageable).map(this::toResponse);
         return new PagedResponse<>(page.getContent(), page.getNumber(), page.getSize(),
                 page.getTotalElements(), page.getTotalPages());
+    }
+
+    public Set<String> managerVisibleModules() {
+        return MANAGER_VISIBLE_MODULES;
     }
 
     private AuditLogResponse toResponse(AuditLog logEntry) {
