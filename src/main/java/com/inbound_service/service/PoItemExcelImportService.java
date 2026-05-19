@@ -48,6 +48,7 @@ public class PoItemExcelImportService {
 
     private static final int MAX_DATA_ROWS = 500;
     private static final int MAX_ERROR_DETAILS = 100;
+    private static final long MAX_UPLOAD_BYTES = 5L * 1024 * 1024;
 
     private static final List<String> REQUIRED_COLUMNS =
             List.of("name", "baseUnit", "orderedQty");
@@ -63,10 +64,7 @@ public class PoItemExcelImportService {
     private final com.inbound_service.repository.PoItemRepository poItemRepository;
 
     public PoItemImportResponse importFromXlsx(UUID purchaseOrderId, MultipartFile file, UUID createdBy) {
-        if (file == null || file.isEmpty()) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "File không được để trống");
-        }
-        ExcelImportSupport.requireXlsxExtension(file.getOriginalFilename());
+        ExcelImportSupport.requireSafeXlsxFile(file, MAX_UPLOAD_BYTES);
 
         UUID effectiveCreatedBy = createdBy != null ? createdBy : DEFAULT_CREATED_BY;
         List<ImportRowError> errors = new ArrayList<>();

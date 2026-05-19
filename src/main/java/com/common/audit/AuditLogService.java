@@ -2,6 +2,7 @@ package com.common.audit;
 
 import com.common.api.PagedResponse;
 import com.auth_service.entity.UserAccount;
+import com.auth_service.security.JwtPrincipal;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.criteria.Predicate;
@@ -183,6 +184,11 @@ public class AuditLogService {
         Object principal = authentication.getPrincipal();
         if (principal instanceof UserAccount user) {
             return new Actor(user.getId(), defaultActorName(user.getUsername(), user.getEmail()), user.getEmail());
+        }
+        if (principal instanceof JwtPrincipal jwtPrincipal) {
+            return new Actor(jwtPrincipal.userId(),
+                    defaultActorName(jwtPrincipal.username(), jwtPrincipal.email()),
+                    jwtPrincipal.email());
         }
         if (principal instanceof UserDetails userDetails) {
             return new Actor(null, userDetails.getUsername(), null);

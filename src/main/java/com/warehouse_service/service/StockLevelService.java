@@ -1,5 +1,6 @@
 package com.warehouse_service.service;
 
+import com.auth_service.security.JwtPrincipal;
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.api.stock.StockReserveCommand;
@@ -35,6 +36,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -47,6 +50,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -224,7 +228,8 @@ public class StockLevelService {
 
         String lot = normalizeLot(cmd.lotNumber());
         Optional<StockLevelResponse> idempotentResponse = findIdempotentStockResponse(
-                cmd.idempotencyKey(), cmd.locationId(), cmd.productId(), lot);
+                cmd.idempotencyKey(), cmd.locationId(), cmd.productId(), lot,
+                cmd.qtyDelta(), 0, cmd.referenceType(), cmd.referenceId());
         if (idempotentResponse.isPresent()) {
             return idempotentResponse.get();
         }
@@ -258,7 +263,8 @@ public class StockLevelService {
 
         String lot = normalizeLot(cmd.lotNumber());
         Optional<StockLevelResponse> idempotentResponse = findIdempotentStockResponse(
-                cmd.idempotencyKey(), cmd.locationId(), cmd.productId(), lot);
+                cmd.idempotencyKey(), cmd.locationId(), cmd.productId(), lot,
+                0, cmd.reservedDelta(), cmd.referenceType(), cmd.referenceId());
         if (idempotentResponse.isPresent()) {
             return idempotentResponse.get();
         }
@@ -538,12 +544,30 @@ public class StockLevelService {
                 .idempotencyKey(normalizeIdempotencyKey(idempotencyKey))
                 .referenceType(referenceType)
                 .referenceId(referenceId)
+                .createdBy(currentActorName())
                 .build();
         stockMovementRepository.save(movement);
     }
 
+    private String currentActorName() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return "system";
+        }
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof JwtPrincipal jwtPrincipal) {
+            if (StringUtils.hasText(jwtPrincipal.username())) {
+                return jwtPrincipal.username();
+            }
+            return jwtPrincipal.getName();
+        }
+        String name = authentication.getName();
+        return StringUtils.hasText(name) ? name : "system";
+    }
+
     private Optional<StockLevelResponse> findIdempotentStockResponse(String idempotencyKey,
-            UUID locationId, UUID productId, String lot) {
+            UUID locationId, UUID productId, String lot, int expectedQtyChange, int expectedReservedChange,
+            String expectedReferenceType, UUID expectedReferenceId) {
         if (!StringUtils.hasText(idempotencyKey)) {
             return Optional.empty();
         }
@@ -552,12 +576,35 @@ public class StockLevelService {
         if (movement.isEmpty()) {
             return Optional.empty();
         }
+        assertIdempotentMovementMatches(movement.get(), locationId, productId, lot,
+                expectedQtyChange, expectedReservedChange, expectedReferenceType, expectedReferenceId);
 
         StockLevel stock = stockLevelRepository
                 .findByLocationIdAndProductIdAndLotNumber(locationId, productId, lot)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
                         "Không tìm thấy tồn kho cho lệnh đã xử lý trước đó"));
         return Optional.of(fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock)));
+    }
+
+    private void assertIdempotentMovementMatches(StockMovement movement, UUID locationId, UUID productId, String lot,
+            int expectedQtyChange, int expectedReservedChange, String expectedReferenceType, UUID expectedReferenceId) {
+        UUID movementLocationId = movement.getLocation() == null ? null : movement.getLocation().getId();
+        boolean matches = Objects.equals(movementLocationId, locationId)
+                && Objects.equals(movement.getProductId(), productId)
+                && Objects.equals(normalizeLot(movement.getLotNumber()), normalizeLot(lot))
+                && Objects.equals(movement.getQtyChange(), expectedQtyChange)
+                && Objects.equals(movement.getReservedChange() == null ? 0 : movement.getReservedChange(),
+                        expectedReservedChange)
+                && Objects.equals(normalizeBlank(movement.getReferenceType()), normalizeBlank(expectedReferenceType))
+                && Objects.equals(movement.getReferenceId(), expectedReferenceId);
+        if (!matches) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Idempotency-Key tồn kho đã được sử dụng với payload khác");
+        }
+    }
+
+    private String normalizeBlank(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private String normalizeIdempotencyKey(String idempotencyKey) {

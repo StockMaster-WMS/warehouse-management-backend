@@ -44,20 +44,37 @@ public class AiController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("AI ASK Error: ", e);
-            return ResponseEntity.status(500).body(new AiAskResponse(null, e.getMessage()));
+            return ResponseEntity.status(500)
+                    .body(new AiAskResponse(null, "Rất tiếc, hiện tại tôi chưa thể trả lời yêu cầu này."));
         }
+    }
+
+    @PostMapping(value = "/ask/stream", consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "Hỏi đáp dữ liệu dạng Stream (SSE)", description = "Trả về câu trả lời theo thời gian thực")
+    public SseEmitter askStream(@RequestBody AiAskRequest request) {
+        return openStream(request);
     }
 
     // Xử lý câu hỏi AI dạng stream qua SSE.
     @GetMapping(value = "/ask/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @Operation(summary = "Hỏi đáp dữ liệu dạng Stream (SSE)", description = "Trả về câu trả lời theo thời gian thực (từng từ một)")
-    public SseEmitter askStream(
+    @Operation(summary = "Hỏi đáp dữ liệu dạng Stream legacy (GET)", description = "Giữ tương thích; client mới nên dùng POST body")
+    public SseEmitter askStreamLegacy(
             @RequestParam String question,
             @RequestParam(required = false) String sessionId,
             @RequestParam(required = false) String requestId) {
-        
+        AiAskRequest req = new AiAskRequest();
+        req.setQuestion(question);
+        req.setSessionId(sessionId);
+        req.setRequestId(requestId);
+        return openStream(req);
+    }
+
+    private SseEmitter openStream(AiAskRequest request) {
         SseEmitter emitter = new SseEmitter(300_000L); // 5 phút timeout
         AtomicBoolean clientDisconnected = new AtomicBoolean(false);
+        String sessionId = request == null ? null : request.getSessionId();
+        String requestId = request == null ? null : request.getRequestId();
         String cancelKey = StringUtils.hasText(requestId) ? requestId : sessionId;
 
         emitter.onTimeout(() -> {
@@ -76,12 +93,7 @@ public class AiController {
         
         aiTaskExecutor.execute(() -> {
             try {
-                AiAskRequest req = new AiAskRequest();
-                req.setQuestion(question);
-                req.setSessionId(sessionId);
-                req.setRequestId(requestId);
-
-                aiService.askStream(req, fragment -> {
+                aiService.askStream(request, fragment -> {
                     if (clientDisconnected.get()) {
                         return;
                     }
@@ -123,7 +135,7 @@ public class AiController {
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             log.error("Cancel error: {}", e.getMessage(), e);
-            return ResponseEntity.status(500).body(e.getMessage());
+            return ResponseEntity.status(500).body("Không thể hủy phiên AI lúc này.");
         }
     }
 }

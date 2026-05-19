@@ -12,6 +12,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.UUID;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -54,17 +56,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleUnexpected(Exception ex) {
+        String errorId = UUID.randomUUID().toString();
         Throwable root = ex;
         while (root.getCause() != null && root.getCause() != root) {
             root = root.getCause();
         }
-        log.error("Unexpected error (rootCause={}): {}", root.getClass().getName(), root.getMessage(), ex);
-        
-        java.io.StringWriter sw = new java.io.StringWriter();
-        java.io.PrintWriter pw = new java.io.PrintWriter(sw);
-        ex.printStackTrace(pw);
-        
+        log.error("Unexpected error id={} rootCause={} message={}",
+                errorId, root.getClass().getName(), root.getMessage(), ex);
+
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Error: " + ex.getMessage() + " || Trace: " + sw.toString(), "INTERNAL_SERVER_ERROR"));
+                .body(ApiResponse.error("Lỗi hệ thống. Mã lỗi: " + errorId, "INTERNAL_SERVER_ERROR"));
     }
 }

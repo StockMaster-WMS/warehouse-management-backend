@@ -24,6 +24,10 @@ import java.util.regex.Pattern;
 public class AiToolExecutorService {
 
     private static final int DEFAULT_LIMIT = 50;
+    private static final String ADMIN = "ADMIN";
+    private static final String WAREHOUSE_MANAGER = "WAREHOUSE_MANAGER";
+    private static final String WAREHOUSE_STAFF = "WAREHOUSE_STAFF";
+    private static final String REPORT_VIEWER = "REPORT_VIEWER";
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -31,6 +35,11 @@ public class AiToolExecutorService {
     public AiToolResult execute(AiIntentResult route) {
         AiIntent intent = route == null || route.getIntent() == null ? AiIntent.UNSUPPORTED : route.getIntent();
         Map<String, Object> params = route == null ? Map.of() : route.safeParameters();
+
+        if (!isIntentAllowed(intent)) {
+            return AiToolResult.message("Authorization.forbidden",
+                    "Bạn không có quyền truy xuất dữ liệu này qua AI.");
+        }
 
         return switch (intent) {
             case WAREHOUSE_COUNT -> AiToolResult.data("WarehouseTool.countWarehouses", countWarehouses());
@@ -104,13 +113,13 @@ public class AiToolExecutorService {
             case MONTH_OVER_MONTH_FLOW -> AiToolResult.data("ReportTool.getMonthOverMonthFlow", getMonthOverMonthFlow());
             case GLOBAL_SEARCH -> AiToolResult.data("SearchTool.globalSearch", getGlobalSearch(params));
             case AUDIT_LOG -> {
-                if (!hasAuthority("ADMIN")) {
+                if (!hasAuthority(ADMIN)) {
                     yield AiToolResult.message("AuditTool.forbidden", "Bạn không có quyền xem nhật ký hệ thống.");
                 }
                 yield AiToolResult.data("AuditTool.getAuditLogs", getAuditLogs(params));
             }
             case AI_AUDIT_LOG -> {
-                if (!hasAuthority("ADMIN")) {
+                if (!hasAuthority(ADMIN)) {
                     yield AiToolResult.message("AuditTool.forbidden", "Bạn không có quyền xem nhật ký AI.");
                 }
                 yield AiToolResult.data("AuditTool.getAiAuditLogs", getAiAuditLogs(params));
@@ -2082,6 +2091,54 @@ public class AiToolExecutorService {
         return authentication != null
                 && authentication.getAuthorities().stream()
                 .anyMatch(granted -> authority.equals(granted.getAuthority()));
+    }
+
+    private boolean hasAnyAuthority(String... authorities) {
+        for (String authority : authorities) {
+            if (hasAuthority(authority)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isIntentAllowed(AiIntent intent) {
+        if (intent == null) {
+            return false;
+        }
+        if (intent == AiIntent.AUDIT_LOG || intent == AiIntent.AI_AUDIT_LOG) {
+            return hasAuthority(ADMIN);
+        }
+        if (isPublicAiIntent(intent)) {
+            return hasAnyAuthority(ADMIN, WAREHOUSE_MANAGER, WAREHOUSE_STAFF, REPORT_VIEWER);
+        }
+        if (isReportViewerIntent(intent)) {
+            return hasAnyAuthority(ADMIN, WAREHOUSE_MANAGER, WAREHOUSE_STAFF, REPORT_VIEWER);
+        }
+        return hasAnyAuthority(ADMIN, WAREHOUSE_MANAGER, WAREHOUSE_STAFF);
+    }
+
+    private static boolean isPublicAiIntent(AiIntent intent) {
+        return switch (intent) {
+            case GENERAL_GUIDE, AMBIGUOUS, UNSUPPORTED -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isReportViewerIntent(AiIntent intent) {
+        return switch (intent) {
+            case WAREHOUSE_COUNT,
+                    STOCK_TOTAL,
+                    INVENTORY_VALUE,
+                    FLOW_REPORT,
+                    DAILY_TASKS,
+                    REPORT_SUMMARY,
+                    INBOUND_REPORT,
+                    OUTBOUND_REPORT,
+                    MONTHLY_REPORT,
+                    MONTH_OVER_MONTH_FLOW -> true;
+            default -> false;
+        };
     }
 
     private boolean countOnly(Map<String, Object> params) {

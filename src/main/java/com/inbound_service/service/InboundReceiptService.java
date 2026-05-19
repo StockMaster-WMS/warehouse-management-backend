@@ -1,5 +1,7 @@
 package com.inbound_service.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.audit.AuditLogService;
@@ -28,10 +30,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.*;
+import java.util.HexFormat;
 
 @Service
 @RequiredArgsConstructor
@@ -46,20 +52,39 @@ public class InboundReceiptService {
     private final AuditLogService auditLogService;
     private final SupplierRepository supplierRepository;
     private final ProductRepository productRepository;
+    private final ObjectMapper objectMapper;
 
     private static final EnumSet<PurchaseOrderStatus> RECEIVABLE_STATUSES =
             EnumSet.of(PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.PARTIAL);
+    private static final int MAX_IDEMPOTENCY_KEY_LENGTH = 160;
 
         // Tạo phiếu nhập kho và cập nhật tồn kho, trạng thái PO, putaway task.
     @Transactional
     public InboundReceiptResponse createReceipt(CreateInboundReceiptRequest request) {
+        return createReceipt(request, null);
+    }
+
+    // Tạo phiếu nhập kho và cập nhật tồn kho, trạng thái PO, putaway task.
+    @Transactional
+    public InboundReceiptResponse createReceipt(CreateInboundReceiptRequest request, String rawIdempotencyKey) {
         if (request.items() == null || request.items().isEmpty()) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Phiếu nhập phải có ít nhất một dòng nhận hàng");
+        }
+        String idempotencyKey = normalizeIdempotencyKey(rawIdempotencyKey);
+        String requestHash = idempotencyKey == null ? null : requestHash(request);
+        Optional<InboundReceiptResponse> existingResponse = findExistingIdempotentReceipt(idempotencyKey, requestHash);
+        if (existingResponse.isPresent()) {
+            return existingResponse.get();
         }
 
         // 1. Lấy PO và kiểm tra trạng thái
         PurchaseOrder po = purchaseOrderRepository.findByIdForUpdate(request.purchaseOrderId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
+
+        existingResponse = findExistingIdempotentReceipt(idempotencyKey, requestHash);
+        if (existingResponse.isPresent()) {
+            return existingResponse.get();
+        }
 
         if (!RECEIVABLE_STATUSES.contains(po.getStatus())) {
             throw new AppException(ErrorCode.BAD_REQUEST,
@@ -129,6 +154,8 @@ public class InboundReceiptService {
                 .status(InboundReceiptStatus.RECEIVED)
                 .note(request.note())
                 .receivedDate(LocalDate.now())
+                .idempotencyKey(idempotencyKey)
+                .requestHash(requestHash)
                 .build();
 
         for (InboundReceiptItem item : receiptItems) {
@@ -299,6 +326,60 @@ public class InboundReceiptService {
     }
 
     // ---- helpers ----
+
+    private Optional<InboundReceiptResponse> findExistingIdempotentReceipt(String idempotencyKey, String requestHash) {
+        if (!StringUtils.hasText(idempotencyKey)) {
+            return Optional.empty();
+        }
+        return receiptRepository.findByIdempotencyKey(idempotencyKey)
+                .map(existing -> {
+                    if (!Objects.equals(existing.getRequestHash(), requestHash)) {
+                        throw new AppException(ErrorCode.BAD_REQUEST,
+                                "Idempotency-Key đã được sử dụng với payload khác");
+                    }
+                    return receiptMapper.toResponse(existing);
+                });
+    }
+
+    private String normalizeIdempotencyKey(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        String key = raw.trim();
+        if (key.length() > MAX_IDEMPOTENCY_KEY_LENGTH) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Idempotency-Key không được vượt quá " + MAX_IDEMPOTENCY_KEY_LENGTH + " ký tự");
+        }
+        return key;
+    }
+
+    private String requestHash(CreateInboundReceiptRequest request) {
+        Map<String, Object> canonical = new LinkedHashMap<>();
+        canonical.put("purchaseOrderId", request.purchaseOrderId());
+        canonical.put("locationId", request.locationId());
+        canonical.put("note", request.note() == null ? "" : request.note().trim());
+        List<Map<String, Object>> lines = request.items().stream()
+                .map(line -> {
+                    Map<String, Object> value = new LinkedHashMap<>();
+                    value.put("poItemId", line.poItemId());
+                    value.put("receivedQty", line.receivedQty());
+                    value.put("note", line.note() == null ? "" : line.note().trim());
+                    return value;
+                })
+                .sorted(Comparator
+                        .comparing((Map<String, Object> line) -> String.valueOf(line.get("poItemId")))
+                        .thenComparing(line -> String.valueOf(line.get("receivedQty")))
+                        .thenComparing(line -> String.valueOf(line.get("note"))))
+                .toList();
+        canonical.put("items", lines);
+        try {
+            byte[] json = objectMapper.writeValueAsBytes(canonical);
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(json));
+        } catch (JsonProcessingException | NoSuchAlgorithmException e) {
+            throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Không thể tạo idempotency hash");
+        }
+    }
 
     // Đồng bộ trạng thái đơn nhập theo tổng tiến độ nhận hàng.
     private void refreshPoStatus(UUID purchaseOrderId) {

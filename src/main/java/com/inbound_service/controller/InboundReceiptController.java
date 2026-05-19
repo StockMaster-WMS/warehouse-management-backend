@@ -59,8 +59,11 @@ public class InboundReceiptController {
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Tạo phiếu nhập kho", description = "Nhận hàng theo PO: kiểm tra số lượng → tạo phiếu → cập nhật tồn kho → cập nhật trạng thái PO")
-    public ApiResponse<InboundReceiptResponse> create(@Valid @RequestBody CreateInboundReceiptRequest request) {
-        return ApiResponse.success("Tạo phiếu nhập kho thành công", receiptService.createReceipt(request));
+    public ApiResponse<InboundReceiptResponse> create(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody CreateInboundReceiptRequest request) {
+        return ApiResponse.success("Tạo phiếu nhập kho thành công",
+                receiptService.createReceipt(request, idempotencyKey));
     }
 
     @GetMapping("/{id}")

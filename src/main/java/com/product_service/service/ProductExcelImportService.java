@@ -38,6 +38,7 @@ public class ProductExcelImportService {
 
     private static final int MAX_DATA_ROWS = 2_000;
     private static final int MAX_ERROR_DETAILS = 100;
+    private static final long MAX_UPLOAD_BYTES = 10L * 1024 * 1024;
 
     private static final List<String> REQUIRED_BASE_COLUMNS = List.of("name", "baseUnit");
     private static final String REQUIRED_COLUMNS_HINT =
@@ -51,10 +52,7 @@ public class ProductExcelImportService {
 
     // Import sản phẩm từ file Excel và trả thống kê kết quả.
     public ProductImportResponse importFromXlsx(MultipartFile file, UUID createdBy) {
-        if (file == null || file.isEmpty()) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "File không được để trống");
-        }
-        ExcelImportSupport.requireXlsxExtension(file.getOriginalFilename());
+        ExcelImportSupport.requireSafeXlsxFile(file, MAX_UPLOAD_BYTES);
         UUID effectiveCreatedBy = createdBy != null ? createdBy : DEFAULT_IMPORT_CREATED_BY;
 
         List<ImportRowError> errors = new ArrayList<>();

@@ -2,6 +2,7 @@ package com;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -23,6 +24,7 @@ class DatabaseExportRunnerTest {
 
     // Xuất toàn bộ dữ liệu từng bảng trong schema public ra một file JSON.
     @Test
+    @Disabled("Manual database export utility; do not run in the normal test suite")
     void exportAllPublicTablesToJson() throws Exception {
         Map<String, String> env = loadEnv(Path.of(".env"));
         String url = required(env, "WAREHOUSE_DB_URL");

@@ -39,7 +39,7 @@ auth:
   mode: ${AUTH_MODE:public}
   jwt:
     issuer: ${AUTH_JWT_ISSUER:warehouse-app}
-    secret: ${AUTH_JWT_SECRET:change-me-to-a-very-long-secret-key-at-least-32-bytes}
+    secret: ${AUTH_JWT_SECRET:}
     access-token-expiration-seconds: ${AUTH_JWT_ACCESS_EXPIRATION_SECONDS:3600}
   cookie:
     secure: ${AUTH_COOKIE_SECURE:false}

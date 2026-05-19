@@ -1,6 +1,10 @@
 package com.ai_service.service;
 
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -11,27 +15,32 @@ import java.util.Queue;
 @Service
 public class AiHistoryService {
 
-    // Lưu trữ lịch sử theo Session ID. Mỗi session giữ tối đa 5 lượt hội thoại gần nhất.
-    private final Map<String, Queue<Map<String, String>>> historyMap = new ConcurrentHashMap<>();
+    // Lưu lịch sử theo user + session. Mỗi session giữ tối đa 5 lượt hội thoại gần nhất.
+    private final Map<String, SessionHistory> historyMap = new ConcurrentHashMap<>();
     private static final int MAX_HISTORY = 10;
+    private static final Duration SESSION_TTL = Duration.ofHours(8);
 
     // Thêm một lượt hỏi đáp vào lịch sử session.
     public void addHistory(String sessionId, String question, String answer) {
         if (sessionId == null || sessionId.isBlank()) return;
-        
-        Queue<Map<String, String>> history = historyMap.computeIfAbsent(sessionId, k -> new LinkedList<>());
-        while (history.size() > MAX_HISTORY - 2) {
-            history.poll(); // Xóa lượt cũ nhất
+
+        cleanupExpiredSessions();
+        SessionHistory session = historyMap.computeIfAbsent(sessionKey(sessionId), k -> new SessionHistory());
+        synchronized (session) {
+            session.touch();
+            while (session.messages.size() > MAX_HISTORY - 2) {
+                session.messages.poll(); // Xóa lượt cũ nhất
+            }
+            session.messages.add(Map.of("role", "user", "content", question));
+            session.messages.add(Map.of("role", "assistant", "content", answer));
         }
-        history.add(Map.of("role", "user", "content", question));
-        history.add(Map.of("role", "assistant", "content", answer));
     }
 
     // Lấy lịch sử session dạng text đơn giản.
     public String getHistory(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) return null;
-        Queue<Map<String, String>> history = historyMap.get(sessionId);
-        if (history == null || history.isEmpty()) return null;
+        List<Map<String, String>> history = getMessages(sessionId);
+        if (history.isEmpty()) return null;
         return history.stream()
                 .map(message -> message.getOrDefault("role", "user") + ": " + message.getOrDefault("content", ""))
                 .reduce((a, b) -> a + "\n" + b)
@@ -41,24 +50,30 @@ public class AiHistoryService {
     // Lấy lịch sử session dạng danh sách message.
     public List<Map<String, String>> getMessages(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) return List.of();
-        Queue<Map<String, String>> history = historyMap.get(sessionId);
-        if (history == null || history.isEmpty()) return List.of();
-        return new ArrayList<>(history);
+        cleanupExpiredSessions();
+        SessionHistory session = historyMap.get(sessionKey(sessionId));
+        if (session == null) return List.of();
+        synchronized (session) {
+            if (session.expired()) {
+                historyMap.remove(sessionKey(sessionId), session);
+                return List.of();
+            }
+            session.touch();
+            return new ArrayList<>(session.messages);
+        }
     }
 
     // Xóa lịch sử của một session.
     public void clearHistory(String sessionId) {
-        if (sessionId != null) historyMap.remove(sessionId);
+        if (sessionId != null) historyMap.remove(sessionKey(sessionId));
     }
 
     // Lấy câu trả lời gần nhất tương ứng với một câu hỏi nếu trùng khớp hoàn toàn.
     public String findLastAnswerForQuestion(String sessionId, String question) {
         if (sessionId == null || sessionId.isBlank() || question == null) return null;
-        Queue<Map<String, String>> history = historyMap.get(sessionId);
-        if (history == null || history.isEmpty()) return null;
+        List<Map<String, String>> list = getMessages(sessionId);
+        if (list.isEmpty()) return null;
 
-        // traverse from tail: since Queue doesn't support reverse, convert to list
-        List<Map<String, String>> list = new ArrayList<>(history);
         for (int i = list.size() - 1; i >= 1; i--) {
             Map<String, String> entry = list.get(i - 1);
             Map<String, String> reply = list.get(i);
@@ -72,5 +87,34 @@ public class AiHistoryService {
             i--; // skip pair
         }
         return null;
+    }
+
+    private String sessionKey(String sessionId) {
+        return currentUserKey() + ":" + sessionId.trim();
+    }
+
+    private String currentUserKey() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
+            return "anonymous";
+        }
+        return authentication.getName();
+    }
+
+    private void cleanupExpiredSessions() {
+        historyMap.entrySet().removeIf(entry -> entry.getValue().expired());
+    }
+
+    private static final class SessionHistory {
+        private final Queue<Map<String, String>> messages = new LinkedList<>();
+        private Instant lastAccessedAt = Instant.now();
+
+        private void touch() {
+            lastAccessedAt = Instant.now();
+        }
+
+        private boolean expired() {
+            return lastAccessedAt.plus(SESSION_TTL).isBefore(Instant.now());
+        }
     }
 }

@@ -5,6 +5,7 @@ import com.common.exception.ErrorCode;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.text.Normalizer;
 import java.util.ArrayList;
@@ -113,6 +114,18 @@ public final class ExcelImportSupport {
         String name = originalFilename != null ? originalFilename : "";
         if (!name.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ file .xlsx");
+        }
+    }
+
+    public static void requireSafeXlsxFile(MultipartFile file, long maxBytes) {
+        if (file == null || file.isEmpty()) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "File import không được để trống");
+        }
+        requireNonEmptyMultipartName(file.getOriginalFilename());
+        requireXlsxExtension(file.getOriginalFilename());
+        if (file.getSize() > maxBytes) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "File .xlsx vượt quá dung lượng tối đa " + (maxBytes / 1024 / 1024) + "MB");
         }
     }
 }
