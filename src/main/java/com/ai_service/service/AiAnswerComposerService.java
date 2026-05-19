@@ -1,6 +1,6 @@
 package com.ai_service.service;
 
-import com.ai_service.client.OllamaClient;
+import com.ai_service.client.AiTextClient;
 import com.ai_service.intent.AiIntent;
 import com.ai_service.intent.AiIntentResult;
 import com.ai_service.tool.AiToolResult;
@@ -26,7 +26,7 @@ public class AiAnswerComposerService {
     private static final int MAX_HISTORY_MESSAGES = 4;
     private static final int MAX_TOOL_LIST_ITEMS = 5;
     private static final int MAX_TOOL_TEXT_LENGTH = 2000;
-    private final OllamaClient ollamaClient;
+    private final AiTextClient aiTextClient;
     private final ObjectMapper objectMapper;
 
     // Tạo câu trả lời AI dạng đồng bộ từ route và tool result.
@@ -44,7 +44,7 @@ public class AiAnswerComposerService {
         log.info("AI compose mode=ollama start intent={} tool={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName());
-        String answer = ollamaClient.generateAnswer(buildAnswerPrompt(userMessage, route, toolResult, history));
+        String answer = aiTextClient.generateAnswer(buildAnswerPrompt(userMessage, route, toolResult, history));
         log.info("AI compose mode=ollama done intent={} tool={} outputChars={} durationMs={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName(),
@@ -82,7 +82,7 @@ public class AiAnswerComposerService {
         log.info("AI composeStream mode=ollama start intent={} tool={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName());
-        ollamaClient.generateAnswerStream(buildAnswerPrompt(userMessage, route, toolResult, history), fragmentConsumer, isCancelled);
+        aiTextClient.generateAnswerStream(buildAnswerPrompt(userMessage, route, toolResult, history), fragmentConsumer, isCancelled);
         log.info("AI composeStream mode=ollama done intent={} tool={} cancelled={} durationMs={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName(),

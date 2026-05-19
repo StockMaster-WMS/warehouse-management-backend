@@ -1,6 +1,6 @@
 package com.ai_service.service;
 
-import com.ai_service.client.OllamaClient;
+import com.ai_service.client.AiTextClient;
 import com.ai_service.intent.AiIntent;
 import com.ai_service.intent.AiIntentResult;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -44,7 +44,7 @@ public class AiIntentRouterService {
     private static final Pattern RETURN_CODE_PATTERN = Pattern.compile("\\bRT-?\\d+[A-Z0-9-]*\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern RMA_CODE_PATTERN = Pattern.compile("\\bRMA-?\\d+[A-Z0-9-]*\\b", Pattern.CASE_INSENSITIVE);
 
-    private final OllamaClient ollamaClient;
+    private final AiTextClient aiTextClient;
     private final ObjectMapper objectMapper;
 
     // Định tuyến câu hỏi người dùng thành intent và tham số.
@@ -72,7 +72,7 @@ public class AiIntentRouterService {
             long ollamaStart = System.currentTimeMillis();
             log.info("AI route source=ollama start question='{}' historyMessages={}",
                     preview(userMessage), history == null ? 0 : history.size());
-            String raw = ollamaClient.generateIntent(buildRouterPrompt(userMessage, history));
+            String raw = aiTextClient.generateIntent(buildRouterPrompt(userMessage, history));
             AiIntentResult parsed = finalizeRoute(userMessage, history, correctIntent(userMessage, history, parseIntent(raw)));
             if (parsed.getIntent() != AiIntent.UNSUPPORTED || looksUnsupported(userMessage)) {
                 log.info("AI route source=ollama intent={} confidence={} reason={} ollamaMs={} durationMs={}",
@@ -338,6 +338,8 @@ public class AiIntentRouterService {
         if (text.isEmpty()) {
             return;
         }
+        String canonical = canonicalizeBusinessCode(text);
+        text = canonical == null ? text : canonical;
         if (!params.containsKey("code") || isGroundedInQuestion(userMessage, text)) {
             params.put("code", text);
         }
@@ -837,14 +839,14 @@ public class AiIntentRouterService {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("query", userMessage);
 
-        Matcher whMatcher = WAREHOUSE_CODE_PATTERN.matcher(userMessage == null ? "" : userMessage);
-        if (whMatcher.find()) {
-            params.put("warehouseCode", whMatcher.group().toUpperCase(Locale.ROOT));
+        String warehouseCode = extractWarehouseCode(userMessage);
+        if (warehouseCode != null) {
+            params.put("warehouseCode", warehouseCode);
         }
 
-        Matcher codeMatcher = BUSINESS_CODE_PATTERN.matcher(userMessage == null ? "" : userMessage);
-        if (codeMatcher.find()) {
-            String code = codeMatcher.group().toUpperCase(Locale.ROOT);
+        String extractedBusinessCode = extractBusinessCode(userMessage);
+        if (extractedBusinessCode != null) {
+            String code = extractedBusinessCode.toUpperCase(Locale.ROOT);
             params.put("code", code);
             if (PURCHASE_ORDER_CODE_PATTERN.matcher(code).matches()) {
                 params.put("poId", code);
@@ -926,6 +928,91 @@ public class AiIntentRouterService {
             candidate = matcher.group();
         }
         return candidate;
+    }
+
+    private String extractWarehouseCode(String userMessage) {
+        if (userMessage == null) {
+            return null;
+        }
+        Matcher exact = WAREHOUSE_CODE_PATTERN.matcher(userMessage);
+        if (exact.find()) {
+            return canonicalizeWarehouseCode(exact.group());
+        }
+        Matcher fuzzy = Pattern.compile("\\bW\\s*H\\s*[-:]?\\s*([A-Z0-9]+(?:\\s*[-:]?\\s*[A-Z0-9]+)*)\\b",
+                Pattern.CASE_INSENSITIVE).matcher(userMessage);
+        if (!fuzzy.find()) {
+            return null;
+        }
+        return canonicalizeWarehouseCode("WH-" + fuzzy.group(1));
+    }
+
+    private String canonicalizeWarehouseCode(String rawCode) {
+        if (rawCode == null) {
+            return null;
+        }
+        String code = rawCode.toUpperCase(Locale.ROOT)
+                .replaceAll("[\\s:]+", "-")
+                .replaceAll("-+", "-")
+                .replaceAll("^WH(?!-)", "WH-");
+        if (!code.startsWith("WH-")) {
+            return null;
+        }
+        String suffix = code.substring(3);
+        if (suffix.matches("[O0\\d-]+")) {
+            suffix = suffix.replace('O', '0');
+        }
+        return "WH-" + suffix;
+    }
+
+    private String extractBusinessCode(String userMessage) {
+        if (userMessage == null) {
+            return null;
+        }
+        Matcher exact = BUSINESS_CODE_PATTERN.matcher(userMessage);
+        if (exact.find()) {
+            return canonicalizeBusinessCode(exact.group());
+        }
+        String prepared = prepareBusinessCodeText(userMessage);
+        Matcher compact = Pattern.compile("\\b(RMA|PO|SO|GR|PT|PK|SC|RT)[\\s:-]*(\\d{4})(?:[\\s:-]*(\\d{1,6}[A-Z0-9-]*))?\\b",
+                Pattern.CASE_INSENSITIVE).matcher(prepared);
+        if (compact.find()) {
+            String tail = compact.group(3);
+            return canonicalizeBusinessCode(compact.group(1) + "-" + compact.group(2)
+                    + (tail == null ? "" : "-" + tail));
+        }
+        Matcher noSeparator = Pattern.compile("\\b(RMA|PO|SO|GR|PT|PK|SC|RT)(\\d{7,12}[A-Z0-9-]*)\\b",
+                Pattern.CASE_INSENSITIVE).matcher(prepared);
+        if (!noSeparator.find()) {
+            return null;
+        }
+        String digits = noSeparator.group(2);
+        String year = digits.substring(0, 4);
+        String sequence = digits.substring(4);
+        return canonicalizeBusinessCode(noSeparator.group(1) + "-" + year + "-" + sequence);
+    }
+
+    private String prepareBusinessCodeText(String userMessage) {
+        return userMessage.toUpperCase(Locale.ROOT)
+                .replaceAll("\\bS\\s*0(?=[\\s:-]*\\d)", "SO")
+                .replaceAll("\\bP\\s*0(?=[\\s:-]*\\d)", "PO")
+                .replaceAll("\\b([A-Z])\\s+([A-Z])(?=[\\s:-]*\\d)", "$1$2")
+                .replaceAll("\\bR\\s*M\\s*A(?=[\\s:-]*\\d)", "RMA");
+    }
+
+    private String canonicalizeBusinessCode(String rawCode) {
+        if (rawCode == null) {
+            return null;
+        }
+        String code = prepareBusinessCodeText(rawCode)
+                .replaceAll("[\\s:]+", "-")
+                .replaceAll("-+", "-")
+                .toUpperCase(Locale.ROOT);
+        Matcher compact = Pattern.compile("^(RMA|PO|SO|GR|PT|PK|SC|RT)-?(\\d{7,12}[A-Z0-9-]*)$").matcher(code);
+        if (compact.matches()) {
+            String digits = compact.group(2);
+            return compact.group(1) + "-" + digits.substring(0, 4) + "-" + digits.substring(4);
+        }
+        return code;
     }
 
     // Kiểm tra câu hỏi có nằm ngoài phạm vi hoặc nguy hiểm không.
@@ -1018,10 +1105,14 @@ public class AiIntentRouterService {
                 continue;
             }
             String content = message.getOrDefault("content", "");
-            applyHistoryMatch(context, "warehouseCode", WAREHOUSE_CODE_PATTERN.matcher(content),
-                    value -> value.toUpperCase(Locale.ROOT));
-            applyHistoryMatch(context, "code", BUSINESS_CODE_PATTERN.matcher(content),
-                    value -> value.toUpperCase(Locale.ROOT));
+            String warehouseCode = extractWarehouseCode(content);
+            if (!context.containsKey("warehouseCode") && warehouseCode != null) {
+                context.put("warehouseCode", warehouseCode);
+            }
+            String businessCode = extractBusinessCode(content);
+            if (!context.containsKey("code") && businessCode != null) {
+                context.put("code", businessCode);
+            }
             applyHistoryMatch(context, "sku", SKU_PATTERN.matcher(content.toUpperCase(Locale.ROOT)),
                     value -> value.toUpperCase(Locale.ROOT));
             Object sku = context.get("sku");
@@ -1161,7 +1252,14 @@ public class AiIntentRouterService {
     }
 
     private boolean hasBusinessCode(String text, Pattern pattern) {
-        return text != null && pattern.matcher(text).find();
+        if (text == null) {
+            return false;
+        }
+        if (pattern.matcher(text).find()) {
+            return true;
+        }
+        String canonical = extractBusinessCode(text);
+        return canonical != null && pattern.matcher(canonical).matches();
     }
 
     private boolean isBusinessOrWarehouseCode(String value) {

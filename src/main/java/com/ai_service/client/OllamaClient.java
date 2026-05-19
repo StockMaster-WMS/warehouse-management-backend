@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
@@ -15,7 +16,7 @@ import java.util.function.Supplier;
 
 @Component
 @Slf4j
-public class OllamaClient {
+public class OllamaClient implements AiTextClient {
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
@@ -58,11 +59,13 @@ public class OllamaClient {
     }
 
     // Sinh JSON intent ổn định để backend gọi tool cố định.
+    @Override
     public String generateIntent(String prompt) {
         return generate(prompt, 0.0, 0.1, 160);
     }
 
     // Sinh câu trả lời tự nhiên từ prompt đã format.
+    @Override
     public String generateAnswer(String prompt) {
         return generate(prompt, 0.2, 0.3, 512);
     }
@@ -73,12 +76,13 @@ public class OllamaClient {
     }
 
     private String generate(String prompt, double temperature, double topP, int numPredict) {
+        String selectedModel = activeModel();
         long start = System.currentTimeMillis();
         log.info("AI ollama generate start model={} temp={} topP={} numPredict={} promptChars={}",
-                model, temperature, topP, numPredict, prompt == null ? 0 : prompt.length());
+                selectedModel, temperature, topP, numPredict, prompt == null ? 0 : prompt.length());
 
         Map<String, Object> body = Map.of(
-                "model", model,
+                "model", selectedModel,
                 "prompt", prompt,
                 "stream", false,
                 "raw", true,
@@ -102,21 +106,22 @@ public class OllamaClient {
         Object generatedText = response != null ? response.get("response") : null;
         String text = generatedText instanceof String value ? value : "";
         log.info("AI ollama generate done model={} outputChars={} durationMs={}",
-                model, text.length(), System.currentTimeMillis() - start);
+                selectedModel, text.length(), System.currentTimeMillis() - start);
         return text;
     }
 
     // Stream câu trả lời từ /api/generate cho prompt raw.
-    // Support a cancellable stream by polling AiCancelService.isCancelled(sessionId)
+    @Override
     public void generateAnswerStream(String prompt, java.util.function.Consumer<String> consumer, java.util.function.Supplier<Boolean> isCancelled) {
+        String selectedModel = activeModel();
         long start = System.currentTimeMillis();
         int[] chunks = {0};
         int[] chars = {0};
         log.info("AI ollama stream start model={} numPredict={} promptChars={}",
-                model, 512, prompt == null ? 0 : prompt.length());
+                selectedModel, 512, prompt == null ? 0 : prompt.length());
 
         Map<String, Object> body = Map.of(
-                "model", model,
+                "model", selectedModel,
                 "prompt", prompt,
                 "stream", true,
                 "raw", true,
@@ -154,18 +159,19 @@ public class OllamaClient {
                     return null;
                 });
         log.info("AI ollama stream done model={} chunks={} outputChars={} cancelled={} durationMs={}",
-                model, chunks[0], chars[0], isCancelled != null && isCancelled.get(),
+                selectedModel, chunks[0], chars[0], isCancelled != null && isCancelled.get(),
                 System.currentTimeMillis() - start);
     }
 
     // Gọi API chat không stream với cấu hình sampling tùy chỉnh.
     private String chat(List<Map<String, String>> messages, double temperature, double topP) {
+        String selectedModel = activeModel();
         long start = System.currentTimeMillis();
         log.info("AI ollama chat start model={} temp={} topP={} messages={}",
-                model, temperature, topP, messages == null ? 0 : messages.size());
+                selectedModel, temperature, topP, messages == null ? 0 : messages.size());
 
         Map<String, Object> body = Map.of(
-                "model", model,
+                "model", selectedModel,
                 "messages", messages,
                 "stream", false,
                 "keep_alive", keepAlive,
@@ -187,20 +193,21 @@ public class OllamaClient {
         Map<?, ?> message = (Map<?, ?>) response.get("message");
         String content = message != null ? (String) message.get("content") : "";
         log.info("AI ollama chat done model={} outputChars={} durationMs={}",
-                model, content == null ? 0 : content.length(), System.currentTimeMillis() - start);
+                selectedModel, content == null ? 0 : content.length(), System.currentTimeMillis() - start);
         return content == null ? "" : content;
     }
 
     // Gọi API chat dạng stream.
     public void chatStream(List<Map<String, String>> messages, java.util.function.Consumer<String> consumer, java.util.function.Supplier<Boolean> isCancelled) {
+        String selectedModel = activeModel();
         long start = System.currentTimeMillis();
         int[] chunks = {0};
         int[] chars = {0};
         log.info("AI ollama chatStream start model={} messages={}",
-                model, messages == null ? 0 : messages.size());
+                selectedModel, messages == null ? 0 : messages.size());
 
         Map<String, Object> body = Map.of(
-                "model", model,
+                "model", selectedModel,
                 "messages", messages,
                 "stream", true,
                 "keep_alive", keepAlive,
@@ -236,8 +243,13 @@ public class OllamaClient {
                     return null;
                 });
         log.info("AI ollama chatStream done model={} chunks={} outputChars={} cancelled={} durationMs={}",
-                model, chunks[0], chars[0], isCancelled != null && isCancelled.get(),
+                selectedModel, chunks[0], chars[0], isCancelled != null && isCancelled.get(),
                 System.currentTimeMillis() - start);
+    }
+
+    private String activeModel() {
+        String override = AiModelSelectionContext.model();
+        return StringUtils.hasText(override) ? override.trim() : model;
     }
 
     // Trích nội dung từ từng dòng JSON của /api/chat.

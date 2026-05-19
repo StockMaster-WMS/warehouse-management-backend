@@ -770,7 +770,7 @@ public class AiToolExecutorService {
         if (warehouse != null) {
             resolvedParams.put("warehouseCode", warehouse.code());
             resolvedParams.put("warehouse", warehouse.name());
-        } else if (hasWarehouseHint(resolvedParams)) {
+        } else if (hasWarehouseHint(resolvedParams) && !asksWhichWarehouse(query)) {
             return AiToolResult.message("StockTool.getStockByProduct",
                     "Tôi chưa tìm thấy kho phù hợp với thông tin bạn nêu. Bạn vui lòng kiểm tra lại mã hoặc tên kho.");
         }
@@ -1438,7 +1438,8 @@ public class AiToolExecutorService {
     }
 
     private List<Map<String, Object>> getSalesOrderStatus(Map<String, Object> params) {
-        String code = firstText(params, "code", "query");
+        String code = firstText(params, "code", "soId");
+        String query = firstText(params, "query");
         String status = firstText(params, "status");
         String dateRange = firstText(params, "dateRange");
         List<Object> args = new ArrayList<>();
@@ -1459,8 +1460,11 @@ public class AiToolExecutorService {
                 WHERE 1 = 1
                 """);
         if (StringUtils.hasText(code)) {
-            sql.append(" AND LOWER(so.so_number) LIKE ?");
-            args.add(like(code));
+            sql.append(" AND LOWER(so.so_number) = LOWER(?) ");
+            args.add(code);
+        } else if (StringUtils.hasText(query)) {
+            sql.append(" AND LOWER(so.so_number) LIKE ? ");
+            args.add(like(query));
         }
         if (StringUtils.hasText(status)) {
             sql.append(" AND LOWER(so.status) = LOWER(?)");
@@ -1483,7 +1487,7 @@ public class AiToolExecutorService {
     }
 
     private List<Map<String, Object>> getSalesOrderDetail(Map<String, Object> params) {
-        String code = firstText(params, "code", "query");
+        String code = firstText(params, "code", "soId");
         if (!StringUtils.hasText(code)) {
             return getSalesOrderStatus(params);
         }
@@ -1506,10 +1510,10 @@ public class AiToolExecutorService {
                 LEFT JOIN warehouses w ON w.id = so.warehouse_id
                 LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
                 LEFT JOIN products p ON p.id = soi.product_id
-                WHERE LOWER(so.so_number) LIKE ?
+                WHERE LOWER(so.so_number) = LOWER(?)
                 ORDER BY so.so_number ASC, soi.line_number ASC NULLS LAST
                 LIMIT 50
-                """, like(code));
+                """, code);
     }
 
     private List<Map<String, Object>> getPackingStatus() {
@@ -2631,6 +2635,15 @@ public class AiToolExecutorService {
                 || normalized.contains("theo kho")
                 || normalized.contains("per warehouse")
                 || normalized.contains("by warehouse");
+    }
+
+    private boolean asksWhichWarehouse(String query) {
+        String normalized = normalize(query);
+        return normalized.contains("o kho nao")
+                || normalized.contains("tai kho nao")
+                || normalized.contains("kho nao co")
+                || normalized.contains("nhung kho nao")
+                || normalized.contains("cac kho nao");
     }
 
     // Chấm điểm candidate theo token xuất hiện trong câu hỏi.
