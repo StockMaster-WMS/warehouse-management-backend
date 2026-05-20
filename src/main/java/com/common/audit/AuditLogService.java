@@ -142,6 +142,14 @@ public class AuditLogService {
         return MANAGER_VISIBLE_MODULES;
     }
 
+    @Transactional(readOnly = true)
+    public List<AuditLogResponse> findRecentForEntity(String entityType, UUID entityId) {
+        return auditLogRepository.findTop10ByEntityTypeAndEntityIdOrderByCreatedAtDesc(entityType, entityId)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
     private AuditLogResponse toResponse(AuditLog logEntry) {
         return new AuditLogResponse(
                 logEntry.getId(),
