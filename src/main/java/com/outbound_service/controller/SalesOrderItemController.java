@@ -24,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import com.warehouse_service.service.WarehouseAccessService;
 
 import java.util.UUID;
 
@@ -34,6 +36,7 @@ import java.util.UUID;
 public class SalesOrderItemController {
 
     private final SalesOrderItemService salesOrderItemService;
+    private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
@@ -44,39 +47,45 @@ public class SalesOrderItemController {
             @RequestParam(defaultValue = "lineNumber") String sort,
             @RequestParam(defaultValue = "asc") String sortDir,
             @Parameter(description = "ID đơn xuất") @RequestParam(required = false) UUID salesOrderId,
-            @RequestParam(required = false) String keyword) {
+            @RequestParam(required = false) String keyword,
+            Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách dòng đơn xuất thành công",
-                salesOrderItemService.findAll(pageable, salesOrderId, keyword));
+                salesOrderItemService.findAll(pageable, salesOrderId, keyword,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Chi tiết dòng đơn xuất")
-    public ApiResponse<SalesOrderItemResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Lấy dòng đơn xuất thành công", salesOrderItemService.findById(id));
+    public ApiResponse<SalesOrderItemResponse> getById(@PathVariable UUID id, Authentication authentication) {
+        return ApiResponse.success("Lấy dòng đơn xuất thành công",
+                salesOrderItemService.findById(id, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo dòng đơn xuất")
-    public ApiResponse<SalesOrderItemResponse> create(@Valid @RequestBody CreateSalesOrderItemRequest request) {
-        return ApiResponse.success("Tạo dòng đơn xuất thành công", salesOrderItemService.create(request));
+    public ApiResponse<SalesOrderItemResponse> create(@Valid @RequestBody CreateSalesOrderItemRequest request,
+            Authentication authentication) {
+        return ApiResponse.success("Tạo dòng đơn xuất thành công", salesOrderItemService.create(request, authentication));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật dòng đơn xuất")
     public ApiResponse<SalesOrderItemResponse> update(@PathVariable UUID id,
-            @Valid @RequestBody UpdateSalesOrderItemRequest request) {
-        return ApiResponse.success("Cập nhật dòng đơn xuất thành công", salesOrderItemService.update(id, request));
+            @Valid @RequestBody UpdateSalesOrderItemRequest request,
+            Authentication authentication) {
+        return ApiResponse.success("Cập nhật dòng đơn xuất thành công",
+                salesOrderItemService.update(id, request, authentication));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa dòng đơn xuất")
-    public ApiResponse<String> delete(@PathVariable UUID id) {
-        salesOrderItemService.delete(id);
+    public ApiResponse<String> delete(@PathVariable UUID id, Authentication authentication) {
+        salesOrderItemService.delete(id, authentication);
         return ApiResponse.success("Xóa dòng đơn xuất thành công", id.toString());
     }
 }

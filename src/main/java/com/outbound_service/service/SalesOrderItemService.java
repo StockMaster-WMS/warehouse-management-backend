@@ -14,6 +14,7 @@ import com.outbound_service.repository.PickingItemRepository;
 import com.outbound_service.repository.SalesOrderItemRepository;
 import com.outbound_service.repository.SalesOrderItemSpecification;
 import com.outbound_service.repository.SalesOrderRepository;
+import com.warehouse_service.service.WarehouseAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.Collection;
 
 @Service
 @RequiredArgsConstructor
@@ -32,10 +34,13 @@ public class SalesOrderItemService {
     private final SalesOrderRepository salesOrderRepository;
     private final PickingItemRepository pickingItemRepository;
     private final SalesOrderItemMapper salesOrderItemMapper;
+    private final WarehouseAccessService warehouseAccessService;
 
     // Lấy danh sách dòng đơn xuất có phân trang và tìm kiếm.
-    public PagedResponse<SalesOrderItemResponse> findAll(Pageable pageable, UUID salesOrderId, String keyword) {
-        Specification<SalesOrderItem> spec = SalesOrderItemSpecification.hasSalesOrderId(salesOrderId)
+    public PagedResponse<SalesOrderItemResponse> findAll(Pageable pageable, UUID salesOrderId, String keyword,
+            Collection<UUID> visibleWarehouseIds) {
+        Specification<SalesOrderItem> spec = SalesOrderItemSpecification.salesOrderWarehouseIdIn(visibleWarehouseIds)
+                .and(SalesOrderItemSpecification.hasSalesOrderId(salesOrderId))
                 .and(SalesOrderItemSpecification.hasKeyword(keyword));
         Page<SalesOrderItem> page = salesOrderItemRepository.findAll(spec, pageable);
         Page<SalesOrderItemResponse> mapped = page.map(salesOrderItemMapper::toResponse);
@@ -48,14 +53,17 @@ public class SalesOrderItemService {
     }
 
     // Lấy chi tiết một dòng đơn xuất theo id.
-    public SalesOrderItemResponse findById(UUID id) {
-        return salesOrderItemMapper.toResponse(getLine(id));
+    public SalesOrderItemResponse findById(UUID id, Collection<UUID> visibleWarehouseIds) {
+        SalesOrderItem line = getLine(id);
+        assertVisible(line.getSalesOrder(), visibleWarehouseIds);
+        return salesOrderItemMapper.toResponse(line);
     }
 
     // Tạo mới dòng đơn xuất.
     @Transactional
-    public SalesOrderItemResponse create(CreateSalesOrderItemRequest request) {
+    public SalesOrderItemResponse create(CreateSalesOrderItemRequest request, org.springframework.security.core.Authentication authentication) {
         SalesOrder order = getOrder(request.salesOrderId());
+        warehouseAccessService.assertCanAccessWarehouse(authentication, order.getWarehouseId());
         requireOrderPending(order);
         ensureLineUnique(request.salesOrderId(), request.lineNumber(), null);
 
@@ -67,9 +75,10 @@ public class SalesOrderItemService {
 
     // Cập nhật thông tin dòng đơn xuất khi đơn còn ở trạng thái cho phép.
     @Transactional
-    public SalesOrderItemResponse update(UUID id, UpdateSalesOrderItemRequest request) {
+    public SalesOrderItemResponse update(UUID id, UpdateSalesOrderItemRequest request, org.springframework.security.core.Authentication authentication) {
         SalesOrderItem item = getLine(id);
         SalesOrder order = item.getSalesOrder();
+        warehouseAccessService.assertCanAccessWarehouse(authentication, order.getWarehouseId());
         requireOrderPending(order);
         if (!order.getId().equals(request.salesOrderId())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không được chuyển dòng đơn xuất sang đơn khác");
@@ -94,8 +103,9 @@ public class SalesOrderItemService {
 
     // Xóa dòng đơn xuất theo id.
     @Transactional
-    public void delete(UUID id) {
+    public void delete(UUID id, org.springframework.security.core.Authentication authentication) {
         SalesOrderItem item = getLine(id);
+        warehouseAccessService.assertCanAccessWarehouse(authentication, item.getSalesOrder().getWarehouseId());
         requireOrderPending(item.getSalesOrder());
         if (pickingItemRepository.existsBySoItem_Id(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST,
@@ -114,6 +124,12 @@ public class SalesOrderItemService {
     private SalesOrder getOrder(UUID id) {
         return salesOrderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất"));
+    }
+
+    private void assertVisible(SalesOrder order, Collection<UUID> visibleWarehouseIds) {
+        if (visibleWarehouseIds != null && !visibleWarehouseIds.contains(order.getWarehouseId())) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Bạn không được phân công quản lý kho này");
+        }
     }
 
     // Cho phép chỉnh sửa dòng đơn khi đơn ở trạng thái DRAFT hoặc PENDING.
