@@ -69,19 +69,19 @@ public class AiIntentRouterService {
         }
 
         try {
-            long ollamaStart = System.currentTimeMillis();
-            log.info("AI route source=ollama start question='{}' historyMessages={}",
+            long modelStart = System.currentTimeMillis();
+            log.info("AI route source=selected-model start question='{}' historyMessages={}",
                     preview(userMessage), history == null ? 0 : history.size());
             String raw = aiTextClient.generateIntent(buildRouterPrompt(userMessage, history));
             AiIntentResult parsed = finalizeRoute(userMessage, history, correctIntent(userMessage, history, parseIntent(raw)));
             if (parsed.getIntent() != AiIntent.UNSUPPORTED || looksUnsupported(userMessage)) {
-                log.info("AI route source=ollama intent={} confidence={} reason={} ollamaMs={} durationMs={}",
+                log.info("AI route source=selected-model intent={} confidence={} reason={} modelMs={} durationMs={}",
                         parsed.getIntent(), parsed.getConfidence(), parsed.getReason(),
-                        System.currentTimeMillis() - ollamaStart, System.currentTimeMillis() - start);
+                        System.currentTimeMillis() - modelStart, System.currentTimeMillis() - start);
                 return parsed;
             }
         } catch (Exception e) {
-            log.warn("AI route source=ollama failed question='{}' durationMs={} error={}",
+            log.warn("AI route source=selected-model failed question='{}' durationMs={} error={}",
                     preview(userMessage), System.currentTimeMillis() - start, e.getMessage());
         }
         AiIntentResult fallback = finalizeRoute(userMessage, history, heuristic(userMessage, history));
