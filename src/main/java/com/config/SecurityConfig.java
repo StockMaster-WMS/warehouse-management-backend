@@ -18,6 +18,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 @Configuration
@@ -25,9 +26,17 @@ import java.util.List;
 @EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
+    private static final List<String> DEFAULT_ALLOWED_ORIGINS = List.of(
+            "http://localhost:3000",
+            "https://warehouse.codestack.live",
+            "https://warehouse.ryon.website",
+            "http://warehouse.ryon.website",
+            "https://apiwarehouse.ryon.website",
+            "http://apiwarehouse.ryon.website");
+
     private final com.auth_service.security.JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    @Value("${app.cors.allowed-origin:http://localhost:3000}")
+    @Value("${app.cors.allowed-origin:http://localhost:3000,https://warehouse.codestack.live,https://warehouse.ryon.website,http://warehouse.ryon.website,https://apiwarehouse.ryon.website,http://apiwarehouse.ryon.website}")
     private String allowedOrigin;
 
     @Bean
@@ -82,9 +91,13 @@ public class SecurityConfig {
     }
 
     private List<String> parseAllowedOrigins() {
-        return Arrays.stream(allowedOrigin.split(","))
+        LinkedHashSet<String> origins = new LinkedHashSet<>(DEFAULT_ALLOWED_ORIGINS);
+
+        Arrays.stream(allowedOrigin.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isBlank())
-                .toList();
+                .forEach(origins::add);
+
+        return List.copyOf(origins);
     }
 }
