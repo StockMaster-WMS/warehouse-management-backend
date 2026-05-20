@@ -28,7 +28,7 @@ services:
         condition: service_healthy
     environment:
       WAREHOUSE_APP_PORT: 9000
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000,https://warehouse.ryon.website,http://warehouse.ryon.website,https://apiwarehouse.ryon.website,http://apiwarehouse.ryon.website}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000,https://warehouse.codestack.live,https://warehouse.ryon.website,http://warehouse.ryon.website,https://apiwarehouse.ryon.website,http://apiwarehouse.ryon.website}
       OPENAPI_SERVER_URL: ${OPENAPI_SERVER_URL:-https://apiwarehouse.ryon.website}
       WAREHOUSE_DB_URL: jdbc:postgresql://postgres:5432/warehouse_management
       WAREHOUSE_DB_USERNAME: postgres

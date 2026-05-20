@@ -67,7 +67,7 @@ Tạo `.env` từ `.env.example` nếu cần:
 
 ```env
 WAREHOUSE_APP_PORT=9000
-FRONTEND_ORIGIN=http://localhost:3000
+FRONTEND_ORIGIN=http://localhost:3000,https://warehouse.codestack.live
 
 WAREHOUSE_DB_URL=jdbc:postgresql://localhost:5432/warehouse_management
 WAREHOUSE_DB_USERNAME=postgres
