@@ -4,8 +4,10 @@ import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.warehouse_service.dto.request.CreateWarehouseRequest;
 import com.warehouse_service.dto.request.UpdateWarehouseRequest;
+import com.warehouse_service.dto.response.WarehouseManagerResponse;
 import com.warehouse_service.dto.response.WarehouseResponse;
 import com.warehouse_service.dto.response.WarehouseSummaryResponse;
+import com.warehouse_service.service.WarehouseAccessService;
 import com.warehouse_service.service.WarehouseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,7 +26,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -34,12 +38,21 @@ import java.util.UUID;
 public class WarehouseController {
 
     private final WarehouseService warehouseService;
+    private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping("/summary")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'REPORT_VIEWER')")
     @Operation(summary = "Tổng quan kho", description = "Trả về số liệu tổng quan phục vụ dashboard kho")
-    public ApiResponse<WarehouseSummaryResponse> getSummary() {
-        return ApiResponse.success("Lấy tổng quan kho thành công", warehouseService.getSummary());
+    public ApiResponse<WarehouseSummaryResponse> getSummary(Authentication authentication) {
+        return ApiResponse.success("Lấy tổng quan kho thành công",
+                warehouseService.getSummary(warehouseAccessService.visibleWarehouseIdSet(authentication)));
+    }
+
+    @GetMapping("/managers")
+    @PreAuthorize("hasAuthority('ADMIN')")
+    @Operation(summary = "Danh sách quản lý kho có thể phân công")
+    public ApiResponse<List<WarehouseManagerResponse>> getAvailableManagers() {
+        return ApiResponse.success("Lấy danh sách quản lý kho thành công", warehouseService.findAvailableManagers());
     }
 
     @GetMapping
@@ -52,36 +65,39 @@ public class WarehouseController {
             @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean isActive,
-            @RequestParam(required = false) String timezone) {
+            @RequestParam(required = false) String timezone,
+            Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         PagedResponse<WarehouseResponse> pagedResponse = warehouseService.findAll(pageable, keyword, isActive,
-                timezone);
+                timezone, warehouseAccessService.visibleWarehouseIdSet(authentication));
         return ApiResponse.success("Lấy danh sách kho thành công", pagedResponse);
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Lấy kho theo ID", description = "Trả về chi tiết kho theo UUID")
-    public ApiResponse<WarehouseResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Lấy kho thành công", warehouseService.findById(id));
+    public ApiResponse<WarehouseResponse> getById(@PathVariable UUID id, Authentication authentication) {
+        return ApiResponse.success("Lấy kho thành công",
+                warehouseService.findById(id, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping("/code/{code}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy kho theo mã", description = "Tìm kho bằng mã code")
-    public ApiResponse<WarehouseResponse> getByCode(@PathVariable String code) {
-        return ApiResponse.success("Lấy kho thành công", warehouseService.findByCode(code));
+    public ApiResponse<WarehouseResponse> getByCode(@PathVariable String code, Authentication authentication) {
+        return ApiResponse.success("Lấy kho thành công",
+                warehouseService.findByCode(code, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
+    @PreAuthorize("hasAuthority('ADMIN')")
     @Operation(summary = "Tạo kho", description = "Tạo mới một kho")
     public ApiResponse<WarehouseResponse> create(@Valid @RequestBody CreateWarehouseRequest request) {
         return ApiResponse.success("Tạo kho thành công", warehouseService.create(request));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
+    @PreAuthorize("hasAuthority('ADMIN')")
     @Operation(summary = "Cập nhật kho", description = "Cập nhật thông tin kho theo ID")
     public ApiResponse<WarehouseResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdateWarehouseRequest request) {
@@ -89,7 +105,7 @@ public class WarehouseController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
+    @PreAuthorize("hasAuthority('ADMIN')")
     @Operation(summary = "Xóa kho", description = "Xóa kho theo ID")
     public ApiResponse<String> delete(@PathVariable UUID id) {
         warehouseService.delete(id);

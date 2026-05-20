@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,7 +40,13 @@ public class LocationService {
 
     // Lấy danh sách vị trí có phân trang và bộ lọc.
     public PagedResponse<LocationResponse> findAll(Pageable pageable, UUID warehouseId, String zone, String keyword) {
-        Specification<Location> spec = LocationSpecification.hasWarehouseId(warehouseId)
+        return findAll(pageable, warehouseId, zone, keyword, null);
+    }
+
+    public PagedResponse<LocationResponse> findAll(Pageable pageable, UUID warehouseId, String zone, String keyword,
+            Collection<UUID> visibleWarehouseIds) {
+        Specification<Location> spec = LocationSpecification.warehouseIdIn(visibleWarehouseIds)
+                .and(LocationSpecification.hasWarehouseId(warehouseId))
                 .and(LocationSpecification.hasZone(zone))
                 .and(LocationSpecification.hasKeyword(keyword));
         Page<Location> page = locationRepository.findAll(spec, pageable);
@@ -55,6 +62,14 @@ public class LocationService {
     // Lấy chi tiết vị trí theo id.
     public LocationResponse findById(UUID id) {
         return locationMapper.toResponse(getLocation(id));
+    }
+
+    public LocationResponse findById(UUID id, Collection<UUID> visibleWarehouseIds) {
+        Location location = getLocation(id);
+        if (visibleWarehouseIds != null && !visibleWarehouseIds.contains(location.getWarehouse().getId())) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Bạn không được phân công quản lý kho của vị trí này");
+        }
+        return locationMapper.toResponse(location);
     }
 
     // Tạo mới vị trí trong kho.

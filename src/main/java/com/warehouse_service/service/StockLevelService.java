@@ -72,7 +72,13 @@ public class StockLevelService {
 
     // Lấy danh sách tồn kho có phân trang và bộ lọc cơ bản.
     public PagedResponse<StockLevelResponse> findAll(Pageable pageable, UUID warehouseId, UUID locationId, UUID productId) {
-        Specification<StockLevel> spec = StockLevelSpecification.hasWarehouseId(warehouseId)
+        return findAll(pageable, warehouseId, locationId, productId, null);
+    }
+
+    public PagedResponse<StockLevelResponse> findAll(Pageable pageable, UUID warehouseId, UUID locationId, UUID productId,
+            Collection<UUID> visibleWarehouseIds) {
+        Specification<StockLevel> spec = StockLevelSpecification.warehouseIdIn(visibleWarehouseIds)
+                .and(StockLevelSpecification.hasWarehouseId(warehouseId))
                 .and(StockLevelSpecification.hasLocationId(locationId))
                 .and(StockLevelSpecification.hasProductId(productId));
         Page<StockLevel> page = stockLevelRepository.findAll(spec, pageable);
@@ -92,7 +98,16 @@ public class StockLevelService {
     public PagedResponse<StockLevelExpandedResponse> findAllExpanded(Pageable pageable,
             UUID warehouseId, UUID locationId, UUID productId,
             boolean expandWarehouse, boolean expandLocation, boolean expandProduct) {
-        Specification<StockLevel> spec = StockLevelSpecification.hasWarehouseId(warehouseId)
+        return findAllExpanded(pageable, warehouseId, locationId, productId,
+                expandWarehouse, expandLocation, expandProduct, null);
+    }
+
+    public PagedResponse<StockLevelExpandedResponse> findAllExpanded(Pageable pageable,
+            UUID warehouseId, UUID locationId, UUID productId,
+            boolean expandWarehouse, boolean expandLocation, boolean expandProduct,
+            Collection<UUID> visibleWarehouseIds) {
+        Specification<StockLevel> spec = StockLevelSpecification.warehouseIdIn(visibleWarehouseIds)
+                .and(StockLevelSpecification.hasWarehouseId(warehouseId))
                 .and(StockLevelSpecification.hasLocationId(locationId))
                 .and(StockLevelSpecification.hasProductId(productId));
 
@@ -143,6 +158,12 @@ public class StockLevelService {
     // Lấy chi tiết tồn kho theo id.
     public StockLevelResponse findById(UUID id) {
         StockLevel stock = getStockLevel(id);
+        return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock));
+    }
+
+    public StockLevelResponse findById(UUID id, Collection<UUID> visibleWarehouseIds) {
+        StockLevel stock = getStockLevel(id);
+        assertWarehouseVisible(stock.getWarehouse().getId(), visibleWarehouseIds);
         return fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock));
     }
 
@@ -408,6 +429,12 @@ public class StockLevelService {
         }
     }
 
+    private void assertWarehouseVisible(UUID warehouseId, Collection<UUID> visibleWarehouseIds) {
+        if (visibleWarehouseIds != null && !visibleWarehouseIds.contains(warehouseId)) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Bạn không được phân công quản lý kho này");
+        }
+    }
+
     // Đảm bảo không trùng tồn kho theo tổ hợp vị trí-sản phẩm-lô.
     private void ensureUniqueStock(UUID locationId, UUID productId, String lotNumber, UUID currentStockId) {
         stockLevelRepository.findByLocationIdAndProductIdAndLotNumber(locationId, productId, lotNumber)
@@ -647,13 +674,28 @@ public class StockLevelService {
 
     // Lấy số liệu tổng quan tồn kho phục vụ dashboard.
     public StockSummaryResponse getSummary(int nearExpiryDays) {
-        long totalSkus = stockLevelRepository.countDistinctProducts();
-        long totalOnHand = stockLevelRepository.sumTotalQtyOnHand();
-        long totalReserved = stockLevelRepository.sumTotalQtyReserved();
-        long nearExpiry = stockLevelRepository.countNearExpiry(LocalDate.now().plusDays(nearExpiryDays));
+        return getSummary(nearExpiryDays, null);
+    }
+
+    public StockSummaryResponse getSummary(int nearExpiryDays, Collection<UUID> visibleWarehouseIds) {
+        if (visibleWarehouseIds != null && visibleWarehouseIds.isEmpty()) {
+            return new StockSummaryResponse(0, 0, 0, 0, 0, 0);
+        }
+        long totalSkus = visibleWarehouseIds == null
+                ? stockLevelRepository.countDistinctProducts()
+                : stockLevelRepository.countDistinctProductsByWarehouseIds(visibleWarehouseIds);
+        long totalOnHand = visibleWarehouseIds == null
+                ? stockLevelRepository.sumTotalQtyOnHand()
+                : stockLevelRepository.sumTotalQtyOnHandByWarehouseIds(visibleWarehouseIds);
+        long totalReserved = visibleWarehouseIds == null
+                ? stockLevelRepository.sumTotalQtyReserved()
+                : stockLevelRepository.sumTotalQtyReservedByWarehouseIds(visibleWarehouseIds);
+        long nearExpiry = visibleWarehouseIds == null
+                ? stockLevelRepository.countNearExpiry(LocalDate.now().plusDays(nearExpiryDays))
+                : stockLevelRepository.countNearExpiryByWarehouseIds(LocalDate.now().plusDays(nearExpiryDays), visibleWarehouseIds);
 
         // Đếm low-stock: lấy tất cả stock, so minQty từ product-service
-        long lowStockCount = countLowStock();
+        long lowStockCount = countLowStock(visibleWarehouseIds);
 
         return new StockSummaryResponse(
                 totalSkus,
@@ -666,7 +708,16 @@ public class StockLevelService {
 
     // Lấy danh sách sản phẩm tồn kho thấp (qtyAvailable < minQty).
     public List<StockLevelExpandedResponse> findLowStock() {
+        return findLowStock(null);
+    }
+
+    public List<StockLevelExpandedResponse> findLowStock(Collection<UUID> visibleWarehouseIds) {
         List<StockLevelRepository.StockQuantityView> stockViews = stockLevelRepository.findQuantityViews();
+        if (visibleWarehouseIds != null) {
+            stockViews = stockViews.stream()
+                    .filter(stock -> visibleWarehouseIds.contains(stock.getWarehouseId()))
+                    .toList();
+        }
         if (stockViews.isEmpty()) return List.of();
 
         Map<UUID, ProductSummaryResponse> productMap = loadProductsSummary(extractProductIdsFromQuantityViews(stockViews));
@@ -711,8 +762,18 @@ public class StockLevelService {
     // Lấy danh sách hàng sắp hết hạn dạng JSON.
     public List<NearExpiryStockResponse> findNearExpiry(int days,
             UUID warehouseId, UUID locationId, UUID productId) {
+        return findNearExpiry(days, warehouseId, locationId, productId, null);
+    }
+
+    public List<NearExpiryStockResponse> findNearExpiry(int days,
+            UUID warehouseId, UUID locationId, UUID productId, Collection<UUID> visibleWarehouseIds) {
         LocalDate threshold = LocalDate.now().plusDays(days);
         List<StockLevel> stocks = stockLevelRepository.findNearExpiry(threshold, warehouseId, locationId, productId);
+        if (visibleWarehouseIds != null) {
+            stocks = stocks.stream()
+                    .filter(stock -> visibleWarehouseIds.contains(stock.getWarehouse().getId()))
+                    .toList();
+        }
 
         return stocks.stream()
                 .map(s -> {
@@ -737,8 +798,13 @@ public class StockLevelService {
     }
 
     // Đếm số stock record có qtyAvailable < minQty.
-    private long countLowStock() {
+    private long countLowStock(Collection<UUID> visibleWarehouseIds) {
         List<StockLevelRepository.StockQuantityView> stockViews = stockLevelRepository.findQuantityViews();
+        if (visibleWarehouseIds != null) {
+            stockViews = stockViews.stream()
+                    .filter(stock -> visibleWarehouseIds.contains(stock.getWarehouseId()))
+                    .toList();
+        }
         if (stockViews.isEmpty()) return 0;
 
         Map<UUID, ProductSummaryResponse> productMap = loadProductsSummary(extractProductIdsFromQuantityViews(stockViews));

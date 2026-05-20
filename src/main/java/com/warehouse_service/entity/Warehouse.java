@@ -1,10 +1,13 @@
 package com.warehouse_service.entity;
 
+import com.auth_service.entity.UserAccount;
 import com.common.util.UuidUtils;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.OffsetDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -33,6 +36,13 @@ public class Warehouse {
     private String managerName;
 
     @Builder.Default
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "warehouse_managers",
+            joinColumns = @JoinColumn(name = "warehouse_id"),
+            inverseJoinColumns = @JoinColumn(name = "user_id"))
+    private Set<UserAccount> managers = new LinkedHashSet<>();
+
+    @Builder.Default
     @Column(name = "timezone", length = 50)
     private String timezone = "Asia/Ho_Chi_Minh";
 
@@ -51,6 +61,7 @@ public class Warehouse {
         if (id == null) id = UuidUtils.uuidV7();
         if (createdAt == null) createdAt = OffsetDateTime.now();
         if (updatedAt == null) updatedAt = createdAt;
+        if (managers == null) managers = new LinkedHashSet<>();
     }
 
     @PreUpdate

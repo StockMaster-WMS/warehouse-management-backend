@@ -2,6 +2,8 @@ package com.warehouse_service.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import java.util.Set;
+import java.util.UUID;
 
 public record CreateWarehouseRequest(
         @NotBlank(message = "Mã kho không được để trống")
@@ -15,6 +17,7 @@ public record CreateWarehouseRequest(
         String address,
         @Size(max = 120, message = "Tên người quản lý không được vượt quá 120 ký tự")
         String managerName,
+        Set<UUID> managerIds,
         String timezone,
         Boolean isActive
 ) {

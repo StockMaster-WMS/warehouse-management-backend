@@ -4,6 +4,8 @@ import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.common.api.stock.StockAdjustCommand;
 import com.common.api.stock.StockReserveCommand;
+import com.common.exception.AppException;
+import com.common.exception.ErrorCode;
 import com.warehouse_service.dto.request.CreateStockLevelRequest;
 import com.warehouse_service.dto.request.UpdateStockLevelRequest;
 import com.warehouse_service.dto.response.StockLevelExpandedResponse;
@@ -12,6 +14,7 @@ import com.warehouse_service.dto.response.NearExpiryStockResponse;
 import com.warehouse_service.dto.response.StockSummaryResponse;
 import com.warehouse_service.service.StockLevelExcelExportService;
 import com.warehouse_service.service.StockLevelService;
+import com.warehouse_service.service.WarehouseAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,6 +37,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -47,20 +51,24 @@ public class StockLevelController {
 
     private final StockLevelService stockLevelService;
     private final StockLevelExcelExportService stockLevelExcelExportService;
+    private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping("/summary")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'REPORT_VIEWER')")
     @Operation(summary = "Tổng quan tồn kho", description = "Trả về số liệu tổng quan: tổng SKU, tổng tồn, tồn thấp, sắp hết hạn")
     public ApiResponse<StockSummaryResponse> getSummary(
-            @Parameter(description = "Số ngày tính sắp hết hạn") @RequestParam(defaultValue = "30") int nearExpiryDays) {
-        return ApiResponse.success("Lấy tổng quan tồn kho thành công", stockLevelService.getSummary(nearExpiryDays));
+            @Parameter(description = "Số ngày tính sắp hết hạn") @RequestParam(defaultValue = "30") int nearExpiryDays,
+            Authentication authentication) {
+        return ApiResponse.success("Lấy tổng quan tồn kho thành công",
+                stockLevelService.getSummary(nearExpiryDays, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping("/alerts/low-stock")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Cảnh báo tồn kho thấp", description = "Danh sách sản phẩm có tồn khả dụng < mức tối thiểu (minQty)")
-    public ApiResponse<List<StockLevelExpandedResponse>> getLowStock() {
-        return ApiResponse.success("Lấy danh sách tồn kho thấp thành công", stockLevelService.findLowStock());
+    public ApiResponse<List<StockLevelExpandedResponse>> getLowStock(Authentication authentication) {
+        return ApiResponse.success("Lấy danh sách tồn kho thấp thành công",
+                stockLevelService.findLowStock(warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping("/alerts/near-expiry")
@@ -70,9 +78,12 @@ public class StockLevelController {
             @Parameter(description = "Số ngày") @RequestParam(defaultValue = "30") int days,
             @RequestParam(required = false) UUID warehouseId,
             @RequestParam(required = false) UUID locationId,
-            @RequestParam(required = false) UUID productId) {
+            @RequestParam(required = false) UUID productId,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
         return ApiResponse.success("Lấy danh sách hàng sắp hết hạn thành công",
-                stockLevelService.findNearExpiry(days, warehouseId, locationId, productId));
+                stockLevelService.findNearExpiry(days, warehouseId, locationId, productId,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping
@@ -86,14 +97,16 @@ public class StockLevelController {
             @Parameter(description = "Mở rộng dữ liệu product,location,warehouse.") @RequestParam(required = false) String expand,
             @Parameter(description = "ID kho") @RequestParam(required = false) UUID warehouseId,
             @Parameter(description = "ID vị trí") @RequestParam(required = false) UUID locationId,
-            @Parameter(description = "ID sản phẩm") @RequestParam(required = false) UUID productId) {
+            @Parameter(description = "ID sản phẩm") @RequestParam(required = false) UUID productId,
+            Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         String e = expand == null ? "" : expand.trim().toLowerCase();
+        warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
 
         // Backward-compatible "light" mode when explicitly requested
         if (e.equals("ids") || e.equals("none")) {
             PagedResponse<StockLevelResponse> data = stockLevelService.findAll(pageable, warehouseId, locationId,
-                    productId);
+                    productId, warehouseAccessService.visibleWarehouseIdSet(authentication));
             return ApiResponse.success("Lấy danh sách tồn kho thành công", data);
         }
 
@@ -102,31 +115,39 @@ public class StockLevelController {
         boolean expandLocation = e.isBlank() || e.contains("location");
         boolean expandProduct = e.isBlank() || e.contains("product");
         PagedResponse<StockLevelExpandedResponse> data = stockLevelService.findAllExpanded(
-                pageable, warehouseId, locationId, productId, expandWarehouse, expandLocation, expandProduct);
+                pageable, warehouseId, locationId, productId, expandWarehouse, expandLocation, expandProduct,
+                warehouseAccessService.visibleWarehouseIdSet(authentication));
         return ApiResponse.success("Lấy danh sách tồn kho thành công", data);
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Lấy tồn kho theo ID")
-    public ApiResponse<StockLevelResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Lấy tồn kho thành công", stockLevelService.findById(id));
+    public ApiResponse<StockLevelResponse> getById(@PathVariable UUID id, Authentication authentication) {
+        return ApiResponse.success("Lấy tồn kho thành công",
+                stockLevelService.findById(id, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PostMapping("/adjust")    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")    @Operation(summary = "Điều chỉnh tồn kho", description = "qtyDelta > 0 nhập thêm; < 0 trừ (xuất). Dùng cho luồng putaway / xuất hàng.")
-    public ApiResponse<StockLevelResponse> adjust(@Valid @RequestBody StockAdjustCommand command) {
+    public ApiResponse<StockLevelResponse> adjust(@Valid @RequestBody StockAdjustCommand command,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, command.warehouseId());
         return ApiResponse.success("Điều chỉnh tồn kho thành công", stockLevelService.adjust(command));
     }
 
     @PostMapping("/adjust-reserved")    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")    @Operation(summary = "Điều chỉnh giữ chỗ", description = "reservedDelta > 0 giữ thêm; < 0 nhả chỗ (đơn xuất / hủy pick).")
-    public ApiResponse<StockLevelResponse> adjustReserved(@Valid @RequestBody StockReserveCommand command) {
+    public ApiResponse<StockLevelResponse> adjustReserved(@Valid @RequestBody StockReserveCommand command,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, command.warehouseId());
         return ApiResponse.success("Điều chỉnh giữ chỗ thành công", stockLevelService.adjustReserved(command));
     }
 
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo tồn kho")
-    public ApiResponse<StockLevelResponse> create(@Valid @RequestBody CreateStockLevelRequest request) {
+    public ApiResponse<StockLevelResponse> create(@Valid @RequestBody CreateStockLevelRequest request,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, request.warehouseId());
         return ApiResponse.success("Tạo tồn kho thành công", stockLevelService.create(request));
     }
 
@@ -134,14 +155,17 @@ public class StockLevelController {
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật tồn kho")
     public ApiResponse<StockLevelResponse> update(@PathVariable UUID id,
-            @Valid @RequestBody UpdateStockLevelRequest request) {
+            @Valid @RequestBody UpdateStockLevelRequest request,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, request.warehouseId());
         return ApiResponse.success("Cập nhật tồn kho thành công", stockLevelService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa tồn kho")
-    public ApiResponse<String> delete(@PathVariable UUID id) {
+    public ApiResponse<String> delete(@PathVariable UUID id, Authentication authentication) {
+        stockLevelService.findById(id, warehouseAccessService.visibleWarehouseIdSet(authentication));
         stockLevelService.delete(id);
         return ApiResponse.success("Xóa tồn kho thành công", id.toString());
     }
@@ -152,7 +176,9 @@ public class StockLevelController {
     public ResponseEntity<byte[]> exportXlsx(
             @RequestParam(required = false) UUID warehouseId,
             @RequestParam(required = false) UUID locationId,
-            @RequestParam(required = false) UUID productId) {
+            @RequestParam(required = false) UUID productId,
+            Authentication authentication) {
+        warehouseId = exportWarehouseScope(authentication, warehouseId);
         byte[] bytes = stockLevelExcelExportService.exportOnHandToXlsx(warehouseId, locationId, productId);
         String filename = "stock-report-" + java.time.LocalDate.now() + ".xlsx";
         ContentDisposition disposition = ContentDisposition.attachment()
@@ -172,7 +198,9 @@ public class StockLevelController {
             @RequestParam(defaultValue = "30") Integer days,
             @RequestParam(required = false) UUID warehouseId,
             @RequestParam(required = false) UUID locationId,
-            @RequestParam(required = false) UUID productId) {
+            @RequestParam(required = false) UUID productId,
+            Authentication authentication) {
+        warehouseId = exportWarehouseScope(authentication, warehouseId);
         byte[] bytes = stockLevelExcelExportService.exportNearExpiryToXlsx(warehouseId, locationId, productId, days);
         String filename = "near-expiry-stock-" + java.time.LocalDate.now() + ".xlsx";
         ContentDisposition disposition = ContentDisposition.attachment()
@@ -191,7 +219,9 @@ public class StockLevelController {
     public ResponseEntity<byte[]> exportLowStockXlsx(
             @RequestParam(required = false) UUID warehouseId,
             @RequestParam(required = false) UUID locationId,
-            @RequestParam(required = false) UUID productId) {
+            @RequestParam(required = false) UUID productId,
+            Authentication authentication) {
+        warehouseId = exportWarehouseScope(authentication, warehouseId);
         byte[] bytes = stockLevelExcelExportService.exportLowStockToXlsx(warehouseId, locationId, productId);
         String filename = "low-stock-report-" + java.time.LocalDate.now() + ".xlsx";
         ContentDisposition disposition = ContentDisposition.attachment()
@@ -202,5 +232,21 @@ public class StockLevelController {
                         MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .body(bytes);
+    }
+
+    private UUID exportWarehouseScope(Authentication authentication, UUID warehouseId) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
+        List<UUID> visibleIds = warehouseAccessService.visibleWarehouseIds(authentication);
+        if (visibleIds == null) {
+            return warehouseId;
+        }
+        if (warehouseId != null) {
+            return warehouseId;
+        }
+        if (visibleIds.size() == 1) {
+            return visibleIds.get(0);
+        }
+        throw new AppException(ErrorCode.BAD_REQUEST,
+                "Vui lòng chọn một kho cụ thể khi xuất báo cáo với tài khoản quản lý nhiều kho");
     }
 }

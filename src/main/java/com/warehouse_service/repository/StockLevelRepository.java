@@ -23,6 +23,8 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 
 		UUID getProductId();
 
+		UUID getWarehouseId();
+
 		Integer getQtyOnHand();
 
 		Integer getQtyReserved();
@@ -51,17 +53,32 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 	@Query("select count(distinct s.warehouse.id) from StockLevel s where s.qtyOnHand > 0")
 	long countWarehousesWithStock();
 
+	@Query("select count(distinct s.warehouse.id) from StockLevel s where s.qtyOnHand > 0 and s.warehouse.id in :warehouseIds")
+	long countWarehousesWithStockByWarehouseIds(@Param("warehouseIds") Collection<UUID> warehouseIds);
+
 	@Query("select count(distinct s.productId) from StockLevel s where s.qtyOnHand > 0")
 	long countDistinctProducts();
+
+	@Query("select count(distinct s.productId) from StockLevel s where s.qtyOnHand > 0 and s.warehouse.id in :warehouseIds")
+	long countDistinctProductsByWarehouseIds(@Param("warehouseIds") Collection<UUID> warehouseIds);
 
 	@Query("select coalesce(sum(s.qtyOnHand), 0) from StockLevel s")
 	long sumTotalQtyOnHand();
 
+	@Query("select coalesce(sum(s.qtyOnHand), 0) from StockLevel s where s.warehouse.id in :warehouseIds")
+	long sumTotalQtyOnHandByWarehouseIds(@Param("warehouseIds") Collection<UUID> warehouseIds);
+
 	@Query("select coalesce(sum(s.qtyReserved), 0) from StockLevel s")
 	long sumTotalQtyReserved();
 
+	@Query("select coalesce(sum(s.qtyReserved), 0) from StockLevel s where s.warehouse.id in :warehouseIds")
+	long sumTotalQtyReservedByWarehouseIds(@Param("warehouseIds") Collection<UUID> warehouseIds);
+
 	@Query("select count(s) from StockLevel s where s.expiryDate is not null and s.expiryDate <= :threshold and s.qtyOnHand > 0")
 	long countNearExpiry(@Param("threshold") LocalDate threshold);
+
+	@Query("select count(s) from StockLevel s where s.expiryDate is not null and s.expiryDate <= :threshold and s.qtyOnHand > 0 and s.warehouse.id in :warehouseIds")
+	long countNearExpiryByWarehouseIds(@Param("threshold") LocalDate threshold, @Param("warehouseIds") Collection<UUID> warehouseIds);
 
 	@EntityGraph(attributePaths = {"warehouse", "location"})
 	@Query("""
@@ -82,6 +99,7 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 
 	@Query("""
 			select s.id as id,
+			       s.warehouse.id as warehouseId,
 			       s.productId as productId,
 			       s.qtyOnHand as qtyOnHand,
 			       s.qtyReserved as qtyReserved

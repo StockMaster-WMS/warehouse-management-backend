@@ -7,6 +7,7 @@ import com.warehouse_service.dto.request.CreateLocationRequest;
 import com.warehouse_service.dto.request.UpdateLocationRequest;
 import com.warehouse_service.dto.response.LocationResponse;
 import com.warehouse_service.service.LocationService;
+import com.warehouse_service.service.WarehouseAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 
 import java.util.UUID;
 
@@ -35,6 +37,7 @@ import java.util.UUID;
 public class LocationController {
 
     private final LocationService locationService;
+    private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
@@ -46,30 +49,38 @@ public class LocationController {
             @RequestParam(defaultValue = "desc") String sortDir,
             @Parameter(description = "ID kho") @RequestParam(required = false) UUID warehouseId,
             @Parameter(description = "Zone") @RequestParam(required = false) String zone,
-            @RequestParam(required = false) String keyword) {
+            @RequestParam(required = false) String keyword,
+            Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
+        warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
         return ApiResponse.success("Lấy danh sách vị trí thành công",
-                locationService.findAll(pageable, warehouseId, zone, keyword));
+                locationService.findAll(pageable, warehouseId, zone, keyword,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy vị trí theo ID")
-    public ApiResponse<LocationResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Lấy vị trí thành công", locationService.findById(id));
+    public ApiResponse<LocationResponse> getById(@PathVariable UUID id, Authentication authentication) {
+        return ApiResponse.success("Lấy vị trí thành công",
+                locationService.findById(id, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo vị trí")
-    public ApiResponse<LocationResponse> create(@Valid @RequestBody CreateLocationRequest request) {
+    public ApiResponse<LocationResponse> create(@Valid @RequestBody CreateLocationRequest request,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, request.warehouseId());
         return ApiResponse.success("Tạo vị trí thành công", locationService.create(request));
     }
 
     @PostMapping("/bulk-generate")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo hàng loạt vị trí theo quy luật")
-    public ApiResponse<String> bulkGenerate(@Valid @RequestBody BulkLocationGeneratorRequest request) {
+    public ApiResponse<String> bulkGenerate(@Valid @RequestBody BulkLocationGeneratorRequest request,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, request.getWarehouseId());
         locationService.generateBulk(request);
         return ApiResponse.success("Bắt đầu tiến trình tạo hàng loạt vị trí thành công", "SUCCESS");
     }
@@ -78,14 +89,17 @@ public class LocationController {
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật vị trí")
     public ApiResponse<LocationResponse> update(@PathVariable UUID id,
-            @Valid @RequestBody UpdateLocationRequest request) {
+            @Valid @RequestBody UpdateLocationRequest request,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, request.warehouseId());
         return ApiResponse.success("Cập nhật vị trí thành công", locationService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa vị trí")
-    public ApiResponse<String> delete(@PathVariable UUID id) {
+    public ApiResponse<String> delete(@PathVariable UUID id, Authentication authentication) {
+        locationService.findById(id, warehouseAccessService.visibleWarehouseIdSet(authentication));
         locationService.delete(id);
         return ApiResponse.success("Xóa vị trí thành công", id.toString());
     }

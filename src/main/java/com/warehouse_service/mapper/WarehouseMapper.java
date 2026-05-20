@@ -15,14 +15,14 @@ public interface WarehouseMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "managers", ignore = true)
     Warehouse toEntity(CreateWarehouseRequest request);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    @Mapping(target = "managers", ignore = true)
     void updateEntity(UpdateWarehouseRequest request, @MappingTarget Warehouse warehouse);
-
-    WarehouseResponse toResponse(Warehouse warehouse);
 
     @AfterMapping
     default void setDefaultsOnCreate(CreateWarehouseRequest request,

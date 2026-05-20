@@ -8,4 +8,6 @@ import java.util.UUID;
 
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID>, JpaSpecificationExecutor<AuditLog> {
     List<AuditLog> findTop5ByOrderByCreatedAtDesc();
+
+    List<AuditLog> findTop10ByEntityTypeAndEntityIdOrderByCreatedAtDesc(String entityType, UUID entityId);
 }

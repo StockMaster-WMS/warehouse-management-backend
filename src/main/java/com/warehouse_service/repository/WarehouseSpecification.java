@@ -4,6 +4,9 @@ import com.warehouse_service.entity.Warehouse;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
+import java.util.Collection;
+import java.util.UUID;
+
 public class WarehouseSpecification {
 
     public static Specification<Warehouse> hasKeyword(String keyword) {
@@ -31,6 +34,30 @@ public class WarehouseSpecification {
                 return null;
             }
             return cb.equal(cb.lower(root.get("timezone")), timezone.toLowerCase());
+        };
+    }
+
+    public static Specification<Warehouse> idIn(Collection<UUID> ids) {
+        return (root, query, cb) -> {
+            if (ids == null) {
+                return null;
+            }
+            if (ids.isEmpty()) {
+                return cb.disjunction();
+            }
+            return root.get("id").in(ids);
+        };
+    }
+
+    public static Specification<Warehouse> managedBy(UUID managerId) {
+        return (root, query, cb) -> {
+            if (managerId == null) {
+                return null;
+            }
+            if (query != null) {
+                query.distinct(true);
+            }
+            return cb.equal(root.join("managers").get("id"), managerId);
         };
     }
 }
