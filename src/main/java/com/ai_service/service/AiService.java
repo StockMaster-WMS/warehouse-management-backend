@@ -40,7 +40,8 @@ public class AiService {
 
         AiModelSelectionContext.set(req.getProvider(), req.getModel());
         try {
-            log.info("AI ask start session={} question='{}'", sessionId, preview(userMessage));
+            log.info("AI ask start session={} provider={} model={} question='{}'",
+                    sessionId, req.getProvider(), req.getModel(), preview(userMessage));
             List<Map<String, String>> history = historyService.getMessages(sessionId);
             long routeStart = System.currentTimeMillis();
             AiIntentResult route = intentRouterService.route(userMessage, history);
@@ -92,8 +93,8 @@ public class AiService {
 
         AiModelSelectionContext.set(req.getProvider(), req.getModel());
         try {
-            log.info("AI stream start session={} request={} question='{}'",
-                    sessionId, requestId, preview(userMessage));
+            log.info("AI stream start session={} request={} provider={} model={} question='{}'",
+                    sessionId, requestId, req.getProvider(), req.getModel(), preview(userMessage));
             if (cancelService.isCancelled(requestId)) {
                 log.info("AI stream cancelled before history session={} request={}", sessionId, requestId);
                 return;

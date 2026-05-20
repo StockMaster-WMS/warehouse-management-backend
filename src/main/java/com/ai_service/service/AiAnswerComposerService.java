@@ -41,11 +41,11 @@ public class AiAnswerComposerService {
                     deterministic.length(), System.currentTimeMillis() - start);
             return deterministic;
         }
-        log.info("AI compose mode=ollama start intent={} tool={}",
+        log.info("AI compose mode=selected-model start intent={} tool={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName());
         String answer = aiTextClient.generateAnswer(buildAnswerPrompt(userMessage, route, toolResult, history));
-        log.info("AI compose mode=ollama done intent={} tool={} outputChars={} durationMs={}",
+        log.info("AI compose mode=selected-model done intent={} tool={} outputChars={} durationMs={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName(),
                 answer == null ? 0 : answer.length(), System.currentTimeMillis() - start);
@@ -74,16 +74,16 @@ public class AiAnswerComposerService {
             return;
         }
         if (isCancelled != null && isCancelled.get()) {
-            log.info("AI composeStream cancelled before ollama intent={} tool={}",
+            log.info("AI composeStream cancelled before selected-model intent={} tool={}",
                     route == null ? "null" : route.getIntent(),
                     toolResult == null ? "null" : toolResult.toolName());
             return;
         }
-        log.info("AI composeStream mode=ollama start intent={} tool={}",
+        log.info("AI composeStream mode=selected-model start intent={} tool={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName());
         aiTextClient.generateAnswerStream(buildAnswerPrompt(userMessage, route, toolResult, history), fragmentConsumer, isCancelled);
-        log.info("AI composeStream mode=ollama done intent={} tool={} cancelled={} durationMs={}",
+        log.info("AI composeStream mode=selected-model done intent={} tool={} cancelled={} durationMs={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName(),
                 isCancelled != null && isCancelled.get(), System.currentTimeMillis() - start);

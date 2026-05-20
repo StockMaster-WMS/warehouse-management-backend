@@ -3,6 +3,7 @@ package com.ai_service.controller;
 import com.ai_service.dto.AiAskRequest;
 import com.ai_service.dto.AiAskResponse;
 import com.ai_service.service.AiService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -36,6 +39,7 @@ public class AiController {
     private final AiService aiService;
     private final Executor aiTaskExecutor;
     private final com.ai_service.service.AiCancelService aiCancelService;
+    private final ObjectMapper objectMapper;
 
     // Xử lý câu hỏi AI dạng trả lời một lần.
     @PostMapping("/ask")
@@ -103,6 +107,7 @@ public class AiController {
             securityContext.setAuthentication(authentication);
             SecurityContextHolder.setContext(securityContext);
             try {
+                sendModelSelection(emitter, request, clientDisconnected);
                 aiService.askStream(request, fragment -> {
                     if (clientDisconnected.get()) {
                         return;
@@ -136,6 +141,27 @@ public class AiController {
         });
 
         return emitter;
+    }
+
+    private void sendModelSelection(SseEmitter emitter, AiAskRequest request, AtomicBoolean clientDisconnected) {
+        if (clientDisconnected.get()) {
+            return;
+        }
+        Map<String, String> payload = new LinkedHashMap<>();
+        payload.put("provider", cleanSelection(request == null ? null : request.getProvider()));
+        payload.put("model", cleanSelection(request == null ? null : request.getModel()));
+        try {
+            emitter.send(SseEmitter.event()
+                    .name("model")
+                    .data(objectMapper.writeValueAsString(payload)));
+        } catch (Exception e) {
+            clientDisconnected.set(true);
+            log.debug("Cannot send AI model selection event: {}", e.getMessage());
+        }
+    }
+
+    private String cleanSelection(String value) {
+        return StringUtils.hasText(value) ? value.trim() : "";
     }
 
     @PostMapping("/cancel")
