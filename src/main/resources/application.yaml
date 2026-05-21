@@ -50,6 +50,11 @@ auth:
 
 ai:
   provider: ${AI_PROVIDER:ollama}
+  engine:
+    # Dán trực tiếp URL vào đây, không dùng biến môi trường
+    url: https://barabara-chestiest-shonda.ngrok-free.dev/api/v1/ai
+    connect-timeout: 5000
+    read-timeout: 15000
   ollama:
     api-url: ${AI_OLLAMA_API_URL:http://localhost:11434}
     model: ${AI_OLLAMA_MODEL:stockmaster-ai}
@@ -68,8 +73,6 @@ ai:
     model: ${AI_GEMINI_MODEL:gemini-2.5-flash}
     connect-timeout-seconds: ${AI_GEMINI_CONNECT_TIMEOUT_SECONDS:5}
     read-timeout-seconds: ${AI_GEMINI_READ_TIMEOUT_SECONDS:120}
-
-
 
 springdoc:
   api-docs:

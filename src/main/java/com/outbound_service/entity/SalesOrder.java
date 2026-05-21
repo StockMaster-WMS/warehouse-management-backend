@@ -30,6 +30,9 @@ public class SalesOrder {
     @Column(name = "customer_name", nullable = false, length = 200)
     private String customerName;
 
+    @Column(name = "customer_id")
+    private UUID customerId;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "shipping_address", nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> shippingAddress;

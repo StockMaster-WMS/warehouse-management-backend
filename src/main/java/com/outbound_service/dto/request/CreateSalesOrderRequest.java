@@ -11,6 +11,9 @@ import java.util.UUID;
 
 @Schema(description = "Tạo đơn xuất. Mã đơn (soNumber) do hệ thống tự sinh bằng CodeGenerator, không gửi trong body.")
 public record CreateSalesOrderRequest(
+        @Schema(description = "ID khách hàng nếu đơn xuất được tạo từ danh mục khách hàng")
+        UUID customerId,
+
         @NotBlank(message = "Tên khách hàng không được để trống")
         @Size(max = 200, message = "Tên khách hàng không được vượt quá 200 ký tự")
         @Schema(description = "Tên khách hàng / đơn vị nhận hàng", example = "Công ty TNHH Thương mại ABC")

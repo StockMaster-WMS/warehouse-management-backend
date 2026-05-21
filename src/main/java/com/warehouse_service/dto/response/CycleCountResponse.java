@@ -15,10 +15,19 @@ public record CycleCountResponse(
     String scopeValue,
     OffsetDateTime scheduledAt,
     OffsetDateTime startedAt,
+    OffsetDateTime submittedAt,
     OffsetDateTime completedAt,
+    UUID assignedTo,
     UUID createdBy,
     UUID approvedBy,
+    UUID rejectedBy,
+    OffsetDateTime rejectedAt,
+    String rejectionReason,
     OffsetDateTime createdAt,
+    Integer totalLines,
+    Integer countedLines,
+    Integer discrepancyLines,
+    Integer totalAbsDiscrepancy,
     List<LineResponse> lines
 ) {
     public record LineResponse(
@@ -32,6 +41,7 @@ public record CycleCountResponse(
         Integer systemQty,
         Integer countedQty,
         Integer discrepancy,
+        String varianceSeverity,
         String status,
         String notes
     ) {}

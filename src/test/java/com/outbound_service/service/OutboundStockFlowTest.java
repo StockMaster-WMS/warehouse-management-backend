@@ -15,6 +15,7 @@ import com.outbound_service.entity.SalesOrderStatus;
 import com.outbound_service.mapper.PickingItemMapper;
 import com.outbound_service.mapper.SalesOrderMapper;
 import com.outbound_service.repository.PickingItemRepository;
+import com.outbound_service.repository.CustomerRepository;
 import com.outbound_service.repository.SalesOrderItemRepository;
 import com.outbound_service.repository.SalesOrderRepository;
 import com.product_service.repository.ProductRepository;
@@ -68,6 +69,8 @@ class OutboundStockFlowTest {
     private SalesOrderRepository salesOrderRepository;
     @Mock
     private SalesOrderMapper salesOrderMapper;
+    @Mock
+    private CustomerRepository customerRepository;
 
     private PickingItemService pickingItemService;
     private SalesOrderService salesOrderService;
@@ -92,7 +95,8 @@ class OutboundStockFlowTest {
                 stockLevelService,
                 salesOrderMapper,
                 auditLogService,
-                notificationService);
+                notificationService,
+                customerRepository);
     }
 
     @Test
@@ -227,6 +231,7 @@ class OutboundStockFlowTest {
         return new SalesOrderResponse(
                 order.getId(),
                 order.getSoNumber(),
+                order.getCustomerId(),
                 order.getCustomerName(),
                 order.getShippingAddress(),
                 order.getWarehouseId(),
