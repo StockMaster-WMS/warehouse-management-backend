@@ -72,6 +72,8 @@ class OutboundStockFlowTest {
     @Mock
     private SalesOrderMapper salesOrderMapper;
     @Mock
+    private CustomerRepository customerRepository;
+    @Mock
     private WarehouseAccessService warehouseAccessService;
     @Mock
     private UserRepository userRepository;
@@ -102,6 +104,7 @@ class OutboundStockFlowTest {
                 salesOrderMapper,
                 auditLogService,
                 notificationService,
+                customerRepository,
                 warehouseAccessService);
     }
 
