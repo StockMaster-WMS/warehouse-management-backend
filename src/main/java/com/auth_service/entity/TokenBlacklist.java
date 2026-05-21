@@ -1,5 +1,6 @@
 package com.auth_service.entity;
 
+import com.common.util.UuidUtils;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -46,7 +47,7 @@ public class TokenBlacklist {
     @PrePersist
     void prePersist() {
         if (id == null) {
-            id = UUID.randomUUID();
+            id = UuidUtils.uuidV7();
         }
         if (createdAt == null) {
             createdAt = OffsetDateTime.now();
