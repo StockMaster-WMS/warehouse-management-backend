@@ -31,11 +31,14 @@ public class ReportController {
 
     private final ReportService reportService;
     private final InventoryExcelExportService inventoryExcelExportService;
+    private final ReportSummaryExcelExportService reportSummaryExcelExportService;
 
     @GetMapping("/summary")
     @Operation(summary = "Tổng quan báo cáo", description = "Trả về doanh thu, tỷ lệ hoàn thành và các xu hướng chính")
-    public ApiResponse<ReportSummaryResponse> getSummary() {
-        return ApiResponse.success("Lấy tổng quan báo cáo thành công", reportService.getSummary());
+    public ApiResponse<ReportSummaryResponse> getSummary(
+            @RequestParam(defaultValue = "30d") String period,
+            @RequestParam(required = false) Integer year) {
+        return ApiResponse.success("Lấy tổng quan báo cáo thành công", reportService.getSummary(period, year));
     }
 
     @GetMapping("/revenue-trend")
@@ -48,6 +51,23 @@ public class ReportController {
     @Operation(summary = "Top sản phẩm", description = "Trả về danh sách sản phẩm bán chạy nhất")
     public ApiResponse<List<TopSkuResponse>> getTopSkus(@RequestParam(defaultValue = "5") int limit) {
         return ApiResponse.success("Lấy danh sách sản phẩm hàng đầu thành công", reportService.getTopSkus(limit));
+    }
+
+    @GetMapping(value = "/summary/export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @Operation(summary = "Xuất báo cáo tổng hợp ra Excel")
+    public ResponseEntity<byte[]> exportSummary(
+            @RequestParam(defaultValue = "30d") String period,
+            @RequestParam(required = false) Integer year) {
+        byte[] bytes = reportSummaryExcelExportService.exportToXlsx(period, year);
+        String suffix = "year".equalsIgnoreCase(period) && year != null ? String.valueOf(year) : period;
+        String filename = "summary-report-" + suffix + "-" + java.time.LocalDate.now() + ".xlsx";
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(bytes);
     }
 
     @GetMapping(value = "/inventory/export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
