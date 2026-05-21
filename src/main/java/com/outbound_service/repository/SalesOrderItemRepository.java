@@ -58,6 +58,25 @@ public interface SalesOrderItemRepository
             """, nativeQuery = true)
     List<TopSkuView> findTopSkus(@Param("limit") int limit);
 
+    @Query(value = """
+            select i.product_id as "productId",
+                   i.product_sku as "productSku",
+                   sum(i.shipped_qty) as "totalQty",
+                   sum(i.unit_price * i.shipped_qty) as "totalRevenue"
+            from sales_order_items i
+            join sales_orders o on i.sales_order_id = o.id
+            where o.status = 'SHIPPED'
+              and o.created_at >= :fromDate
+              and o.created_at < :toDate
+            group by i.product_id, i.product_sku
+            order by sum(i.shipped_qty) desc
+            limit :limit
+            """, nativeQuery = true)
+    List<TopSkuView> findTopSkusBetween(
+            @Param("fromDate") java.time.OffsetDateTime fromDate,
+            @Param("toDate") java.time.OffsetDateTime toDate,
+            @Param("limit") int limit);
+
     interface DailyRevenueView {
         java.time.LocalDate getOrderDate();
 

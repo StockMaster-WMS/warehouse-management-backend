@@ -58,8 +58,35 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID>, J
 
 	long countByStatusNotIn(Collection<SalesOrderStatus> statuses);
 
+	long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+			java.time.OffsetDateTime fromDate,
+			java.time.OffsetDateTime toDate);
+
+	long countByStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+			SalesOrderStatus status,
+			java.time.OffsetDateTime fromDate,
+			java.time.OffsetDateTime toDate);
+
+	@Query("""
+			SELECT COUNT(o) FROM SalesOrder o
+			WHERE o.status NOT IN :statuses
+			  AND o.createdAt >= :fromDate
+			  AND o.createdAt < :toDate
+			""")
+	long countByStatusNotInBetween(
+			@Param("statuses") Collection<SalesOrderStatus> statuses,
+			@Param("fromDate") java.time.OffsetDateTime fromDate,
+			@Param("toDate") java.time.OffsetDateTime toDate);
+
 	@Query("SELECT COALESCE(SUM(i.unitPrice * i.shippedQty), 0) " +
 			"FROM SalesOrderItem i JOIN i.salesOrder o " +
 			"WHERE o.status = 'SHIPPED' AND o.createdAt >= :fromDate")
 	java.math.BigDecimal sumTotalRevenue(@Param("fromDate") java.time.OffsetDateTime fromDate);
+
+	@Query("SELECT COALESCE(SUM(i.unitPrice * i.shippedQty), 0) " +
+			"FROM SalesOrderItem i JOIN i.salesOrder o " +
+			"WHERE o.status = 'SHIPPED' AND o.createdAt >= :fromDate AND o.createdAt < :toDate")
+	java.math.BigDecimal sumTotalRevenueBetween(
+			@Param("fromDate") java.time.OffsetDateTime fromDate,
+			@Param("toDate") java.time.OffsetDateTime toDate);
 }

@@ -21,9 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -35,7 +38,9 @@ import java.util.stream.Collectors;
 public class DashboardService {
 
     private static final int DEFAULT_NEAR_EXPIRY_DAYS = 30;
-    private static final int FLOW_DAYS = 7;
+    private static final int DEFAULT_FLOW_DAYS = 7;
+    private static final int MAX_FLOW_DAYS = 365;
+    private static final DateTimeFormatter SHORT_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM");
 
     private final StockLevelService stockLevelService;
     private final PurchaseOrderRepository purchaseOrderRepository;
@@ -44,7 +49,8 @@ public class DashboardService {
     private final CustomerRepository customerRepository;
     private final AuditLogRepository auditLogRepository;
 
-    public DashboardSummaryResponse getSummary() {
+    public DashboardSummaryResponse getSummary(String period, Integer year) {
+        DashboardRange range = resolveRange(period, year);
         StockSummaryResponse stock = stockLevelService.getSummary(DEFAULT_NEAR_EXPIRY_DAYS);
         long openPurchaseOrders = purchaseOrderRepository.countByStatusNotIn(
                 EnumSet.of(PurchaseOrderStatus.COMPLETED, PurchaseOrderStatus.CANCELLED));
@@ -52,18 +58,58 @@ public class DashboardService {
                 EnumSet.of(SalesOrderStatus.SHIPPED, SalesOrderStatus.CANCELLED));
 
         return new DashboardSummaryResponse(
-                buildMetrics(stock, openPurchaseOrders, openSalesOrders),
-                buildFlow(),
+                buildMetrics(stock, openPurchaseOrders, openSalesOrders, range),
+                buildFlow(range),
                 buildNotices(stock, openPurchaseOrders, openSalesOrders),
                 buildRecentActivities());
+    }
+
+    private DashboardRange resolveRange(String period, Integer requestedYear) {
+        ZoneId zone = ZoneId.systemDefault();
+        String normalized = period == null ? "7d" : period.trim().toLowerCase();
+        LocalDate today = LocalDate.now(zone);
+
+        if ("year".equals(normalized) || "365d".equals(normalized) || "1y".equals(normalized)) {
+            int currentYear = today.getYear();
+            int selectedYear = requestedYear == null ? currentYear : Math.max(2000, Math.min(requestedYear, currentYear + 1));
+            LocalDate fromDay = LocalDate.of(selectedYear, 1, 1);
+            LocalDate toDay = LocalDate.of(selectedYear + 1, 1, 1);
+            return new DashboardRange(
+                    fromDay.atStartOfDay(zone).toOffsetDateTime(),
+                    toDay.atStartOfDay(zone).toOffsetDateTime(),
+                    Math.max(1, Math.min(366, toDay.toEpochDay() - fromDay.toEpochDay())),
+                    true,
+                    selectedYear + "");
+        }
+
+        int days = resolvePeriodDays(normalized);
+        LocalDate fromDay = today.minusDays(days - 1L);
+        return new DashboardRange(
+                fromDay.atStartOfDay(zone).toOffsetDateTime(),
+                today.plusDays(1).atStartOfDay(zone).toOffsetDateTime(),
+                days,
+                false,
+                days == 1 ? "Hôm nay" : "Trong " + days + " ngày");
+    }
+
+    private int resolvePeriodDays(String period) {
+        if (period == null) {
+            return DEFAULT_FLOW_DAYS;
+        }
+        return switch (period.trim().toLowerCase()) {
+            case "today", "1d" -> 1;
+            case "30d", "month", "1m" -> 30;
+            case "7d", "week" -> DEFAULT_FLOW_DAYS;
+            default -> DEFAULT_FLOW_DAYS;
+        };
     }
 
     private List<DashboardMetricResponse> buildMetrics(
             StockSummaryResponse stock,
             long openPurchaseOrders,
-            long openSalesOrders) {
-        java.time.OffsetDateTime thirtyDaysAgo = java.time.OffsetDateTime.now().minusDays(30);
-        java.math.BigDecimal totalRevenue = salesOrderRepository.sumTotalRevenue(thirtyDaysAgo);
+            long openSalesOrders,
+            DashboardRange range) {
+        java.math.BigDecimal totalRevenue = salesOrderRepository.sumTotalRevenueBetween(range.from(), range.to());
         long customerCount = customerRepository.count();
 
         return List.of(
@@ -71,7 +117,7 @@ public class DashboardService {
                         "revenue",
                         "Tổng doanh thu",
                         totalRevenue.longValue(),
-                        "Từ đơn đã giao",
+                        range.metricLabel(),
                         "indigo"),
                 new DashboardMetricResponse(
                         "customers",
@@ -106,29 +152,54 @@ public class DashboardService {
                 .toList();
     }
 
-    private List<DashboardFlowPointResponse> buildFlow() {
-        LocalDate today = LocalDate.now();
-        LocalDate fromDay = today.minusDays(FLOW_DAYS - 1L);
-        ZoneId zone = ZoneId.systemDefault();
-        OffsetDateTime from = fromDay.atStartOfDay(zone).toOffsetDateTime();
-        OffsetDateTime to = today.plusDays(1).atStartOfDay(zone).toOffsetDateTime();
-
+    private List<DashboardFlowPointResponse> buildFlow(DashboardRange range) {
         Map<LocalDate, StockMovementRepository.DailyMovementView> movementByDate = stockMovementRepository
-                .sumDailyMovements(from, to)
+                .sumDailyMovements(range.from(), range.to())
                 .stream()
                 .collect(Collectors.toMap(
                         StockMovementRepository.DailyMovementView::getMovementDate,
                         Function.identity()));
 
-        List<DashboardFlowPointResponse> result = new ArrayList<>(FLOW_DAYS);
-        for (int i = 0; i < FLOW_DAYS; i++) {
+        if (range.yearly()) {
+            return buildMonthlyFlow(range, movementByDate);
+        }
+
+        int days = (int) Math.max(1, Math.min(range.days(), MAX_FLOW_DAYS));
+        LocalDate fromDay = range.from().toLocalDate();
+        List<DashboardFlowPointResponse> result = new ArrayList<>(days);
+        for (int i = 0; i < days; i++) {
             LocalDate date = fromDay.plusDays(i);
             StockMovementRepository.DailyMovementView movement = movementByDate.get(date);
             result.add(new DashboardFlowPointResponse(
                     date,
-                    dayLabel(date.getDayOfWeek()),
+                    days <= DEFAULT_FLOW_DAYS ? dayLabel(date.getDayOfWeek()) : SHORT_DATE_FORMATTER.format(date),
                     movement == null || movement.getInboundQty() == null ? 0 : movement.getInboundQty(),
                     movement == null || movement.getOutboundQty() == null ? 0 : movement.getOutboundQty()));
+        }
+        return result;
+    }
+
+    private List<DashboardFlowPointResponse> buildMonthlyFlow(
+            DashboardRange range,
+            Map<LocalDate, StockMovementRepository.DailyMovementView> movementByDate) {
+        Map<YearMonth, long[]> movementByMonth = new LinkedHashMap<>();
+        movementByDate.forEach((date, movement) -> {
+            YearMonth month = YearMonth.from(date);
+            long[] totals = movementByMonth.computeIfAbsent(month, ignored -> new long[2]);
+            totals[0] += movement == null || movement.getInboundQty() == null ? 0 : movement.getInboundQty();
+            totals[1] += movement == null || movement.getOutboundQty() == null ? 0 : movement.getOutboundQty();
+        });
+
+        int year = range.from().getYear();
+        List<DashboardFlowPointResponse> result = new ArrayList<>(12);
+        for (int month = 1; month <= 12; month++) {
+            YearMonth yearMonth = YearMonth.of(year, month);
+            long[] totals = movementByMonth.getOrDefault(yearMonth, new long[2]);
+            result.add(new DashboardFlowPointResponse(
+                    yearMonth.atDay(1),
+                    "T" + month,
+                    totals[0],
+                    totals[1]));
         }
         return result;
     }
@@ -189,5 +260,13 @@ public class DashboardService {
             case SATURDAY -> "T7";
             case SUNDAY -> "CN";
         };
+    }
+
+    private record DashboardRange(
+            OffsetDateTime from,
+            OffsetDateTime to,
+            long days,
+            boolean yearly,
+            String metricLabel) {
     }
 }
