@@ -17,10 +17,12 @@ import com.outbound_service.dto.request.UpdateSalesOrderRequest;
 import com.outbound_service.dto.response.SalesOrderResponse;
 import com.outbound_service.entity.PickingItem;
 import com.outbound_service.entity.PickingItemStatus;
+import com.outbound_service.entity.Customer;
 import com.outbound_service.entity.SalesOrder;
 import com.outbound_service.entity.SalesOrderItem;
 import com.outbound_service.entity.SalesOrderStatus;
 import com.outbound_service.mapper.SalesOrderMapper;
+import com.outbound_service.repository.CustomerRepository;
 import com.outbound_service.repository.PickingItemRepository;
 import com.outbound_service.repository.SalesOrderItemRepository;
 import com.outbound_service.repository.SalesOrderRepository;
@@ -54,6 +56,7 @@ public class SalesOrderService {
     private final SalesOrderMapper salesOrderMapper;
     private final AuditLogService auditLogService;
     private final NotificationService notificationService;
+    private final CustomerRepository customerRepository;
 
     // Lấy danh sách đơn xuất có phân trang và bộ lọc.
     public PagedResponse<SalesOrderResponse> findAll(Pageable pageable, String keyword, String status,
@@ -88,6 +91,7 @@ public class SalesOrderService {
     @Transactional
     public SalesOrderResponse create(CreateSalesOrderRequest request) {
         SalesOrder salesOrder = salesOrderMapper.toEntity(request);
+        applyCustomerFromCatalog(request.customerId(), salesOrder);
         salesOrder.setSoNumber(CodeGenerator.generate(SO_NUMBER_PREFIX));
 
         SalesOrder saved = salesOrderRepository.save(salesOrder);
@@ -120,6 +124,7 @@ public class SalesOrderService {
                 });
 
         salesOrderMapper.updateEntity(request, salesOrder);
+        applyCustomerFromCatalog(request.customerId(), salesOrder);
         salesOrder.setSoNumber(request.soNumber().trim());
 
         SalesOrder saved = salesOrderRepository.save(salesOrder);
@@ -447,8 +452,19 @@ public class SalesOrderService {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("soNumber", order.getSoNumber());
         metadata.put("warehouseId", order.getWarehouseId());
+        metadata.put("customerId", order.getCustomerId());
         metadata.put("customerName", order.getCustomerName());
         metadata.put("status", order.getStatus() == null ? null : order.getStatus().name());
         return metadata;
+    }
+
+    private void applyCustomerFromCatalog(UUID customerId, SalesOrder salesOrder) {
+        if (customerId == null) {
+            return;
+        }
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy khách hàng"));
+        salesOrder.setCustomerId(customer.getId());
+        salesOrder.setCustomerName(customer.getName());
     }
 }

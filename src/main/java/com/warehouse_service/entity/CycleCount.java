@@ -49,11 +49,26 @@ public class CycleCount {
     @Column(name = "completed_at")
     private OffsetDateTime completedAt;
 
+    @Column(name = "submitted_at")
+    private OffsetDateTime submittedAt;
+
+    @Column(name = "assigned_to")
+    private UUID assignedTo;
+
     @Column(name = "created_by")
     private UUID createdBy;
 
     @Column(name = "approved_by")
     private UUID approvedBy;
+
+    @Column(name = "rejected_by")
+    private UUID rejectedBy;
+
+    @Column(name = "rejected_at")
+    private OffsetDateTime rejectedAt;
+
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
 
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
@@ -70,6 +85,6 @@ public class CycleCount {
     }
 
     public enum CycleCountStatus {
-        PENDING, IN_PROGRESS, COMPLETED, APPROVED, CANCELLED
+        PENDING, IN_PROGRESS, PENDING_REVIEW, APPROVED, RECOUNT_REQUIRED, CANCELLED
     }
 }

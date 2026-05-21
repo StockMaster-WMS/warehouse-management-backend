@@ -13,6 +13,9 @@ public record CreateCycleCountRequest(
     String description,
 
     OffsetDateTime scheduledAt,
+
+    UUID assignedTo,
+
     /**
      * SCOPE mode: WAREHOUSE, ZONE, LOCATION, PRODUCT
      * - If scope is set, items can be null/empty

@@ -26,6 +26,19 @@ public class Rma {
     @Column(name = "sales_order_id")
     private UUID salesOrderId;
 
+    @Builder.Default
+    @Column(name = "return_type", length = 20)
+    private String returnType = "CUSTOMER";
+
+    @Column(name = "supplier_id")
+    private UUID supplierId;
+
+    @Column(name = "supplier_name", length = 200)
+    private String supplierName;
+
+    @Column(name = "customer_id")
+    private UUID customerId;
+
     @Column(name = "customer_name", length = 200)
     private String customerName;
 
@@ -45,6 +58,42 @@ public class Rma {
     @Column(name = "completed_at")
     private OffsetDateTime completedAt;
 
+    @Column(name = "created_by")
+    private UUID createdBy;
+
+    @Column(name = "received_by")
+    private UUID receivedBy;
+
+    @Column(name = "received_at")
+    private OffsetDateTime receivedAt;
+
+    @Column(name = "completed_by")
+    private UUID completedBy;
+
+    @Column(name = "approved_by")
+    private UUID approvedBy;
+
+    @Column(name = "approved_at")
+    private OffsetDateTime approvedAt;
+
+    @Column(name = "rejected_by")
+    private UUID rejectedBy;
+
+    @Column(name = "rejected_at")
+    private OffsetDateTime rejectedAt;
+
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
+
+    @Column(name = "cancelled_by")
+    private UUID cancelledBy;
+
+    @Column(name = "cancelled_at")
+    private OffsetDateTime cancelledAt;
+
+    @Column(name = "cancel_reason", length = 500)
+    private String cancelReason;
+
     @OneToMany(mappedBy = "rma", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<RmaItem> items;
 
@@ -53,9 +102,10 @@ public class Rma {
         if (id == null) id = UuidUtils.uuidV7();
         if (createdAt == null) createdAt = OffsetDateTime.now();
         if (status == null) status = RmaStatus.REQUESTED;
+        if (returnType == null || returnType.isBlank()) returnType = "CUSTOMER";
     }
 
     public enum RmaStatus {
-        REQUESTED, RECEIVED, COMPLETED, CANCELLED
+        REQUESTED, RECEIVED, APPROVED, REJECTED, COMPLETED, CANCELLED
     }
 }

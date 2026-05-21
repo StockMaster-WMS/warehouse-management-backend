@@ -19,8 +19,12 @@ import java.util.UUID;
 public interface PutawayTaskRepository extends JpaRepository<PutawayTask, UUID>, JpaSpecificationExecutor<PutawayTask> {
 
     @Override
-    @EntityGraph(attributePaths = {"poItem"})
+    @EntityGraph(attributePaths = {"poItem", "inboundReceipt"})
     Page<PutawayTask> findAll(Specification<PutawayTask> spec, Pageable pageable);
+
+    @Override
+    @EntityGraph(attributePaths = {"poItem", "inboundReceipt"})
+    Optional<PutawayTask> findById(UUID id);
 
     @Query("SELECT t FROM PutawayTask t JOIN FETCH t.poItem p WHERE p.purchaseOrder.id = :purchaseOrderId")
     List<PutawayTask> findByPurchaseOrderIdWithPoItem(@Param("purchaseOrderId") UUID purchaseOrderId);
