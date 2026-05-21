@@ -4,12 +4,25 @@ import com.outbound_service.entity.SalesOrderItem;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
+import java.util.Collection;
 import java.util.UUID;
 
 public class SalesOrderItemSpecification {
 
     public static Specification<SalesOrderItem> hasSalesOrderId(UUID salesOrderId) {
         return (root, query, cb) -> salesOrderId == null ? null : cb.equal(root.get("salesOrder").get("id"), salesOrderId);
+    }
+
+    public static Specification<SalesOrderItem> salesOrderWarehouseIdIn(Collection<UUID> warehouseIds) {
+        return (root, query, cb) -> {
+            if (warehouseIds == null) {
+                return null;
+            }
+            if (warehouseIds.isEmpty()) {
+                return cb.disjunction();
+            }
+            return root.get("salesOrder").get("warehouseId").in(warehouseIds);
+        };
     }
 
     public static Specification<SalesOrderItem> hasKeyword(String keyword) {

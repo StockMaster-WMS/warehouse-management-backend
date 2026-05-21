@@ -30,6 +30,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import com.warehouse_service.service.WarehouseAccessService;
 
 import java.time.OffsetDateTime;
 import java.nio.charset.StandardCharsets;
@@ -43,6 +45,7 @@ public class SalesOrderController {
 
     private final SalesOrderService salesOrderService;
     private final SalesOrderExcelExportService salesOrderExcelExportService;
+    private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
@@ -56,52 +59,61 @@ public class SalesOrderController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) UUID warehouseId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách đơn xuất thành công",
-                salesOrderService.findAll(pageable, keyword, status, warehouseId, createdFrom, createdTo));
+                salesOrderService.findAll(pageable, keyword, status, warehouseId, createdFrom, createdTo,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy đơn xuất theo ID", description = "Trả về chi tiết sales order theo UUID")
-    public ApiResponse<SalesOrderResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Lấy đơn xuất thành công", salesOrderService.findById(id));
+    public ApiResponse<SalesOrderResponse> getById(@PathVariable UUID id, Authentication authentication) {
+        return ApiResponse.success("Lấy đơn xuất thành công",
+                salesOrderService.findById(id, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping("/number/{soNumber}")    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")    @Operation(summary = "Lấy đơn xuất theo mã", description = "Tìm sales order bằng soNumber")
-    public ApiResponse<SalesOrderResponse> getBySoNumber(@PathVariable String soNumber) {
-        return ApiResponse.success("Lấy đơn xuất thành công", salesOrderService.findBySoNumber(soNumber));
+    public ApiResponse<SalesOrderResponse> getBySoNumber(@PathVariable String soNumber, Authentication authentication) {
+        return ApiResponse.success("Lấy đơn xuất thành công",
+                salesOrderService.findBySoNumber(soNumber, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PostMapping("/{id}/actions")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Thực thi hành động trên đơn xuất", description = "Dùng một endpoint duy nhất để chuyển trạng thái đơn hàng (confirm, start-picking, mark-picked, mark-packed, hold, resume, cancel, mark-shipped, mark-delivered)")
     public ApiResponse<SalesOrderResponse> executeAction(@PathVariable UUID id,
-            @Valid @RequestBody SalesOrderActionRequest request) {
-        return ApiResponse.success("Thực hiện hành động thành công", salesOrderService.executeAction(id, request));
+            @Valid @RequestBody SalesOrderActionRequest request,
+            Authentication authentication) {
+        return ApiResponse.success("Thực hiện hành động thành công",
+                salesOrderService.executeAction(id, request, authentication));
     }
 
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo đơn xuất", description = "Tạo mới sales order; mã đơn (soNumber) tự sinh bởi hệ thống")
-    public ApiResponse<SalesOrderResponse> create(@Valid @RequestBody CreateSalesOrderRequest request) {
-        return ApiResponse.success("Tạo đơn xuất thành công", salesOrderService.create(request));
+    public ApiResponse<SalesOrderResponse> create(@Valid @RequestBody CreateSalesOrderRequest request,
+            Authentication authentication) {
+        return ApiResponse.success("Tạo đơn xuất thành công", salesOrderService.create(request, authentication));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Cập nhật đơn xuất", description = "Cập nhật sales order theo ID")
     public ApiResponse<SalesOrderResponse> update(@PathVariable UUID id,
-            @Valid @RequestBody UpdateSalesOrderRequest request) {
-        return ApiResponse.success("Cập nhật đơn xuất thành công", salesOrderService.update(id, request));
+            @Valid @RequestBody UpdateSalesOrderRequest request,
+            Authentication authentication) {
+        return ApiResponse.success("Cập nhật đơn xuất thành công", salesOrderService.update(id, request, authentication));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Xóa đơn xuất", description = "Xóa sales order theo ID")
-    public ApiResponse<String> delete(@PathVariable UUID id) {
-        salesOrderService.delete(id);
+    public ApiResponse<String> delete(@PathVariable UUID id, Authentication authentication) {
+        salesOrderService.delete(id, authentication);
         return ApiResponse.success("Xóa đơn xuất thành công", id.toString());
     }
 
@@ -111,8 +123,11 @@ public class SalesOrderController {
     public ResponseEntity<byte[]> exportXlsx(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) UUID warehouseId) {
-        byte[] bytes = salesOrderExcelExportService.exportToXlsx(keyword, status, warehouseId);
+            @RequestParam(required = false) UUID warehouseId,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
+        byte[] bytes = salesOrderExcelExportService.exportToXlsx(keyword, status, warehouseId,
+                warehouseAccessService.visibleWarehouseIdSet(authentication));
         String filename = "sales-orders-export-" + java.time.LocalDate.now() + ".xlsx";
         ContentDisposition disposition = ContentDisposition.attachment()
                 .filename(filename, StandardCharsets.UTF_8)

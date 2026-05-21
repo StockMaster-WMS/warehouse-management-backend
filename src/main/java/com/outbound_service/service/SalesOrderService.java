@@ -12,6 +12,7 @@ import com.common.notification.NotificationSeverity;
 import com.common.notification.NotificationType;
 import com.common.util.CodeGenerator;
 import com.warehouse_service.service.StockLevelService;
+import com.warehouse_service.service.WarehouseAccessService;
 import com.outbound_service.dto.request.CreateSalesOrderRequest;
 import com.outbound_service.dto.request.UpdateSalesOrderRequest;
 import com.outbound_service.dto.response.SalesOrderResponse;
@@ -36,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -57,11 +59,14 @@ public class SalesOrderService {
     private final AuditLogService auditLogService;
     private final NotificationService notificationService;
     private final CustomerRepository customerRepository;
+    private final WarehouseAccessService warehouseAccessService;
 
     // Lấy danh sách đơn xuất có phân trang và bộ lọc.
     public PagedResponse<SalesOrderResponse> findAll(Pageable pageable, String keyword, String status,
-            UUID warehouseId, OffsetDateTime createdFrom, OffsetDateTime createdTo) {
-        Specification<SalesOrder> spec = SalesOrderSpecification.hasKeyword(keyword)
+            UUID warehouseId, OffsetDateTime createdFrom, OffsetDateTime createdTo,
+            Collection<UUID> visibleWarehouseIds) {
+        Specification<SalesOrder> spec = SalesOrderSpecification.warehouseIdIn(visibleWarehouseIds)
+                .and(SalesOrderSpecification.hasKeyword(keyword))
                 .and(SalesOrderSpecification.hasStatus(status))
                 .and(SalesOrderSpecification.hasWarehouseId(warehouseId))
                 .and(SalesOrderSpecification.createdFrom(createdFrom))
@@ -77,19 +82,24 @@ public class SalesOrderService {
     }
 
     // Lấy đơn xuất theo id.
-    public SalesOrderResponse findById(UUID id) {
-        return salesOrderMapper.toResponse(getSalesOrder(id));
+    public SalesOrderResponse findById(UUID id, Collection<UUID> visibleWarehouseIds) {
+        SalesOrder order = getSalesOrder(id);
+        assertVisible(order, visibleWarehouseIds);
+        return salesOrderMapper.toResponse(order);
     }
 
     // Lấy đơn xuất theo mã số đơn.
-    public SalesOrderResponse findBySoNumber(String soNumber) {
-        return salesOrderMapper.toResponse(salesOrderRepository.findBySoNumber(soNumber)
-                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất")));
+    public SalesOrderResponse findBySoNumber(String soNumber, Collection<UUID> visibleWarehouseIds) {
+        SalesOrder order = salesOrderRepository.findBySoNumber(soNumber)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất"));
+        assertVisible(order, visibleWarehouseIds);
+        return salesOrderMapper.toResponse(order);
     }
 
     // Tạo mới đơn xuất và sinh mã đơn tự động.
     @Transactional
-    public SalesOrderResponse create(CreateSalesOrderRequest request) {
+    public SalesOrderResponse create(CreateSalesOrderRequest request, org.springframework.security.core.Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, request.warehouseId());
         SalesOrder salesOrder = salesOrderMapper.toEntity(request);
         applyCustomerFromCatalog(request.customerId(), salesOrder);
         salesOrder.setSoNumber(CodeGenerator.generate(SO_NUMBER_PREFIX));
@@ -112,8 +122,10 @@ public class SalesOrderService {
 
     // Cập nhật thông tin đơn xuất khi đang ở trạng thái PENDING.
     @Transactional
-    public SalesOrderResponse update(UUID id, UpdateSalesOrderRequest request) {
+    public SalesOrderResponse update(UUID id, UpdateSalesOrderRequest request, org.springframework.security.core.Authentication authentication) {
         SalesOrder salesOrder = getSalesOrder(id);
+        warehouseAccessService.assertCanAccessWarehouse(authentication, salesOrder.getWarehouseId());
+        warehouseAccessService.assertCanAccessWarehouse(authentication, request.warehouseId());
         requireStatus(salesOrder, SalesOrderStatus.DRAFT, "Chỉ cập nhật đơn xuất khi đang DRAFT");
         SalesOrderResponse before = salesOrderMapper.toResponse(salesOrder);
 
@@ -137,8 +149,9 @@ public class SalesOrderService {
 
     // Xóa đơn xuất khi chưa phát sinh picking.
     @Transactional
-    public void delete(UUID id) {
+    public void delete(UUID id, org.springframework.security.core.Authentication authentication) {
         SalesOrder salesOrder = getSalesOrder(id);
+        warehouseAccessService.assertCanAccessWarehouse(authentication, salesOrder.getWarehouseId());
         requireStatus(salesOrder, SalesOrderStatus.DRAFT, "Chỉ xóa đơn xuất khi đang DRAFT");
         if (pickingItemRepository.existsBySoItem_SalesOrder_Id(id)) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không xóa đơn đã có picking; xóa picking trước");
@@ -152,8 +165,9 @@ public class SalesOrderService {
 
     // Chuyển đơn từ PENDING sang PICKING.
     @Transactional
-    public SalesOrderResponse startPicking(UUID id) {
+    public SalesOrderResponse startPicking(UUID id, org.springframework.security.core.Authentication authentication) {
         SalesOrder so = getSalesOrder(id);
+        warehouseAccessService.assertCanAccessWarehouse(authentication, so.getWarehouseId());
         requireStatus(so, SalesOrderStatus.PENDING, "Chỉ chuyển sang PICKING khi đơn đang PENDING");
         SalesOrderResponse before = salesOrderMapper.toResponse(so);
 
@@ -171,8 +185,9 @@ public class SalesOrderService {
 
     // Xác nhận đơn đã pick xong (PICKING -> PACKED)
     @Transactional
-    public SalesOrderResponse markPacked(UUID id) {
+    public SalesOrderResponse markPacked(UUID id, org.springframework.security.core.Authentication authentication) {
         SalesOrder so = getSalesOrder(id);
+        warehouseAccessService.assertCanAccessWarehouse(authentication, so.getWarehouseId());
         requireStatus(so, SalesOrderStatus.PICKING, "Chỉ đóng gói khi đơn đang PICKING");
         SalesOrderResponse before = salesOrderMapper.toResponse(so);
 
@@ -189,8 +204,9 @@ public class SalesOrderService {
 
     // Tạm dừng xử lý đơn xuất khi trạng thái cho phép.
     @Transactional
-    public SalesOrderResponse hold(UUID id) {
+    public SalesOrderResponse hold(UUID id, org.springframework.security.core.Authentication authentication) {
         SalesOrder so = getSalesOrder(id);
+        warehouseAccessService.assertCanAccessWarehouse(authentication, so.getWarehouseId());
         SalesOrderResponse before = salesOrderMapper.toResponse(so);
         if (!Set.of(SalesOrderStatus.DRAFT, SalesOrderStatus.PENDING, SalesOrderStatus.PICKING, SalesOrderStatus.PACKED)
                 .contains(so.getStatus())) {
@@ -207,8 +223,9 @@ public class SalesOrderService {
 
     // Tiếp tục xử lý đơn từ trạng thái ON_HOLD.
     @Transactional
-    public SalesOrderResponse resume(UUID id) {
+    public SalesOrderResponse resume(UUID id, org.springframework.security.core.Authentication authentication) {
         SalesOrder so = getSalesOrder(id);
+        warehouseAccessService.assertCanAccessWarehouse(authentication, so.getWarehouseId());
         requireStatus(so, SalesOrderStatus.ON_HOLD, "Chỉ tiếp tục khi đơn đang ON_HOLD");
         SalesOrderResponse before = salesOrderMapper.toResponse(so);
 
@@ -230,8 +247,9 @@ public class SalesOrderService {
 
     // Hủy đơn xuất và giải phóng lượng reserved đã giữ.
     @Transactional
-    public SalesOrderResponse cancel(UUID id) {
+    public SalesOrderResponse cancel(UUID id, org.springframework.security.core.Authentication authentication) {
         SalesOrder so = getSalesOrder(id);
+        warehouseAccessService.assertCanAccessWarehouse(authentication, so.getWarehouseId());
         SalesOrderResponse before = salesOrderMapper.toResponse(so);
         if (so.getStatus() == SalesOrderStatus.SHIPPED) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không thể hủy đơn đã giao hàng");
@@ -252,8 +270,9 @@ public class SalesOrderService {
 
     // Xác nhận giao hàng, trừ tồn kho và cập nhật shippedQty.
     @Transactional
-    public SalesOrderResponse markShipped(UUID id) {
+    public SalesOrderResponse markShipped(UUID id, org.springframework.security.core.Authentication authentication) {
         SalesOrder so = getSalesOrder(id);
+        warehouseAccessService.assertCanAccessWarehouse(authentication, so.getWarehouseId());
         requireStatus(so, SalesOrderStatus.PACKED, "Chỉ giao hàng khi đơn đang PACKED");
         SalesOrderResponse before = salesOrderMapper.toResponse(so);
 
@@ -277,8 +296,9 @@ public class SalesOrderService {
 
     // Xác nhận đơn nháp trước khi xử lý (DRAFT -> PENDING).
     @Transactional
-    public SalesOrderResponse confirmOrder(UUID id) {
+    public SalesOrderResponse confirmOrder(UUID id, org.springframework.security.core.Authentication authentication) {
         SalesOrder so = getSalesOrder(id);
+        warehouseAccessService.assertCanAccessWarehouse(authentication, so.getWarehouseId());
         requireStatus(so, SalesOrderStatus.DRAFT, "Chỉ xác nhận đơn khi đang DRAFT");
         SalesOrderResponse before = salesOrderMapper.toResponse(so);
         so.setStatus(SalesOrderStatus.PENDING);
@@ -292,16 +312,16 @@ public class SalesOrderService {
 
     // Thực thi hành động tập trung.
     @Transactional
-    public SalesOrderResponse executeAction(UUID id, SalesOrderActionRequest request) {
+    public SalesOrderResponse executeAction(UUID id, SalesOrderActionRequest request, org.springframework.security.core.Authentication authentication) {
         String action = request.getAction().toLowerCase();
         return switch (action) {
-            case "confirm" -> confirmOrder(id);
-            case "start-picking" -> startPicking(id);
-            case "mark-packed" -> markPacked(id);
-            case "mark-shipped" -> markShipped(id);
-            case "hold" -> hold(id);
-            case "resume" -> resume(id);
-            case "cancel" -> cancel(id);
+            case "confirm" -> confirmOrder(id, authentication);
+            case "start-picking" -> startPicking(id, authentication);
+            case "mark-packed" -> markPacked(id, authentication);
+            case "mark-shipped" -> markShipped(id, authentication);
+            case "hold" -> hold(id, authentication);
+            case "resume" -> resume(id, authentication);
+            case "cancel" -> cancel(id, authentication);
             default -> throw new AppException(ErrorCode.BAD_REQUEST, "Hành động (action) không tồn tại: " + action);
         };
     }
@@ -439,6 +459,12 @@ public class SalesOrderService {
     private SalesOrder getSalesOrder(UUID id) {
         return salesOrderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất"));
+    }
+
+    private void assertVisible(SalesOrder order, Collection<UUID> visibleWarehouseIds) {
+        if (visibleWarehouseIds != null && !visibleWarehouseIds.contains(order.getWarehouseId())) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Bạn không được phân công quản lý kho này");
+        }
     }
 
     private static String stockMutationKey(UUID salesOrderId, UUID pickingItemId, String action,

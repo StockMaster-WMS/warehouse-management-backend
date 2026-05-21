@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,8 +44,9 @@ public class SalesOrderExcelExportService {
     private final ProductService productService;
 
     @Transactional(readOnly = true)
-    public byte[] exportToXlsx(String keyword, String status, UUID warehouseId) {
-        Specification<SalesOrder> spec = SalesOrderSpecification.hasKeyword(keyword)
+    public byte[] exportToXlsx(String keyword, String status, UUID warehouseId, Collection<UUID> visibleWarehouseIds) {
+        Specification<SalesOrder> spec = SalesOrderSpecification.warehouseIdIn(visibleWarehouseIds)
+                .and(SalesOrderSpecification.hasKeyword(keyword))
                 .and(SalesOrderSpecification.hasStatus(status))
                 .and(SalesOrderSpecification.hasWarehouseId(warehouseId));
 

@@ -38,18 +38,12 @@ public class WarehouseAccessService {
         if (canSeeAllWarehouses(authentication)) {
             return null;
         }
-        if (isWarehouseManager(authentication)) {
-            UUID managerId = currentUserId(authentication);
-            return managerId == null ? List.of() : warehouseRepository.findIdsByManagerId(managerId);
-        }
-        return null;
+        UUID userId = currentUserId(authentication);
+        return userId == null ? List.of() : warehouseRepository.findIdsByManagerId(userId);
     }
 
     public void assertCanAccessWarehouse(Authentication authentication, UUID warehouseId) {
         if (warehouseId == null || canSeeAllWarehouses(authentication)) {
-            return;
-        }
-        if (!isWarehouseManager(authentication)) {
             return;
         }
         List<UUID> visibleIds = visibleWarehouseIds(authentication);
@@ -59,7 +53,7 @@ public class WarehouseAccessService {
     }
 
     public UUID scopedWarehouseId(Authentication authentication, UUID requestedWarehouseId) {
-        if (canSeeAllWarehouses(authentication) || !isWarehouseManager(authentication)) {
+        if (canSeeAllWarehouses(authentication)) {
             return requestedWarehouseId;
         }
         List<UUID> visibleIds = visibleWarehouseIds(authentication);
