@@ -6,6 +6,7 @@ import jakarta.persistence.criteria.Join;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.UUID;
 
 public class PickingItemSpecification {
@@ -24,6 +25,19 @@ public class PickingItemSpecification {
 
     public static Specification<PickingItem> hasAssigneeId(UUID assigneeId) {
         return (root, query, cb) -> assigneeId == null ? null : cb.equal(root.get("assigneeId"), assigneeId);
+    }
+
+    public static Specification<PickingItem> hasWarehouseIdIn(Collection<UUID> warehouseIds) {
+        return (root, query, cb) -> {
+            if (warehouseIds == null) {
+                return null;
+            }
+            if (warehouseIds.isEmpty()) {
+                return cb.disjunction();
+            }
+            Join<Object, Object> soItem = root.join("soItem");
+            return soItem.get("salesOrder").get("warehouseId").in(warehouseIds);
+        };
     }
 
     public static Specification<PickingItem> hasStatus(PickingItemStatus status) {

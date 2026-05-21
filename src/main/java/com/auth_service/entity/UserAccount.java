@@ -1,6 +1,7 @@
 package com.auth_service.entity;
 
 import com.common.util.UuidUtils;
+import com.warehouse_service.entity.Warehouse;
 import jakarta.persistence.Column;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Entity;
@@ -55,12 +56,19 @@ public class UserAccount {
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
-        @Builder.Default
-        @ManyToMany(fetch = FetchType.LAZY)
-        @JoinTable(name = "user_roles",
+    @Builder.Default
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "user_roles",
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "role_id"))
-        private Set<Role> roles = new LinkedHashSet<>();
+    private Set<Role> roles = new LinkedHashSet<>();
+
+    @Builder.Default
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "user_warehouses",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "warehouse_id"))
+    private Set<Warehouse> warehouses = new LinkedHashSet<>();
 
     @Column(name = "is_active", nullable = false)
     @Builder.Default
@@ -79,6 +87,9 @@ public class UserAccount {
         }
         if (roles == null) {
             roles = new LinkedHashSet<>();
+        }
+        if (warehouses == null) {
+            warehouses = new LinkedHashSet<>();
         }
         if (isActive == null) {
             isActive = true;

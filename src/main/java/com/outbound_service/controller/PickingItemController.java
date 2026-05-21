@@ -6,6 +6,7 @@ import com.outbound_service.dto.request.CreatePickingItemRequest;
 import com.outbound_service.dto.request.UpdatePickingItemRequest;
 import com.outbound_service.dto.response.PickingItemResponse;
 import com.outbound_service.service.PickingItemService;
+import com.warehouse_service.service.WarehouseAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -39,6 +40,7 @@ import java.util.UUID;
 public class PickingItemController {
 
     private final PickingItemService pickingItemService;
+    private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
@@ -61,7 +63,7 @@ public class PickingItemController {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), resolvedSort));
         return ApiResponse.success("Lấy danh sách picking item thành công",
                 pickingItemService.findAll(pageable, soItemId, productId, locationId, status, createdFrom, createdTo,
-                        staffScopeUserId(authentication)));
+                        staffScopeUserId(authentication), warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PostMapping("/{id}/assign")

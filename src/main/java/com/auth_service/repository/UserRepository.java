@@ -19,13 +19,13 @@ public interface UserRepository extends JpaRepository<UserAccount, UUID>, JpaSpe
     @EntityGraph(attributePaths = "roles")
     Optional<UserAccount> findByUsername(String username);
 
-    @EntityGraph(attributePaths = "roles")
+    @EntityGraph(attributePaths = {"roles", "warehouses"})
     Optional<UserAccount> findByEmail(String email);
 
     @EntityGraph(attributePaths = "roles")
     Optional<UserAccount> findByUsernameOrEmail(String username, String email);
 
-    @EntityGraph(attributePaths = "roles")
+    @EntityGraph(attributePaths = {"roles", "warehouses"})
     Optional<UserAccount> findById(UUID id);
 
     boolean existsByUsername(String username);
@@ -33,10 +33,10 @@ public interface UserRepository extends JpaRepository<UserAccount, UUID>, JpaSpe
     boolean existsByEmail(String email);
 
     @Override
-    @EntityGraph(attributePaths = "roles")
+    @EntityGraph(attributePaths = {"roles", "warehouses"})
     Page<UserAccount> findAll(Specification<UserAccount> spec, Pageable pageable);
 
-    @EntityGraph(attributePaths = "roles")
+    @EntityGraph(attributePaths = {"roles", "warehouses"})
     List<UserAccount> findByUsernameInOrEmailIn(Collection<String> usernames, Collection<String> emails);
 
     long countByIsActive(Boolean isActive);
@@ -49,7 +49,7 @@ public interface UserRepository extends JpaRepository<UserAccount, UUID>, JpaSpe
             """)
     long countByRoleCode(@Param("roleCode") String roleCode);
 
-    @EntityGraph(attributePaths = "roles")
+    @EntityGraph(attributePaths = {"roles", "warehouses"})
     @Query("""
             select distinct u
             from UserAccount u
@@ -57,4 +57,48 @@ public interface UserRepository extends JpaRepository<UserAccount, UUID>, JpaSpe
             where u.isActive = true and r.code in :roleCodes
             """)
     List<UserAccount> findActiveByRoleCodes(@Param("roleCodes") Collection<String> roleCodes);
+
+    @EntityGraph(attributePaths = {"roles", "warehouses"})
+    @Query("""
+            select distinct u
+            from UserAccount u
+            join u.roles r
+            left join u.warehouses w
+            where u.isActive = true
+              and r.code = 'WAREHOUSE_STAFF'
+              and (:warehouseId is null or w.id = :warehouseId)
+            """)
+    List<UserAccount> findActiveWarehouseStaffByWarehouseId(@Param("warehouseId") UUID warehouseId);
+
+    @EntityGraph(attributePaths = {"roles", "warehouses"})
+    @Query("""
+            select distinct u
+            from UserAccount u
+            join u.roles r
+            join u.warehouses w
+            where u.isActive = true
+              and r.code = 'WAREHOUSE_STAFF'
+              and w.id in :warehouseIds
+            """)
+    List<UserAccount> findActiveWarehouseStaffByWarehouseIds(@Param("warehouseIds") Collection<UUID> warehouseIds);
+
+    @Query("""
+            select count(distinct u) > 0
+            from UserAccount u
+            join u.roles r
+            join u.warehouses w
+            where u.id = :userId
+              and u.isActive = true
+              and r.code = 'WAREHOUSE_STAFF'
+              and w.id = :warehouseId
+            """)
+    boolean existsActiveWarehouseStaffInWarehouse(@Param("userId") UUID userId, @Param("warehouseId") UUID warehouseId);
+
+    @Query("""
+            select distinct w.id
+            from UserAccount u
+            join u.warehouses w
+            where u.id = :userId
+            """)
+    List<UUID> findWarehouseIdsByUserId(@Param("userId") UUID userId);
 }

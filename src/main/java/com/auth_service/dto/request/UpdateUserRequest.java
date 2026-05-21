@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 
 import java.util.Set;
+import java.util.UUID;
 
 public record UpdateUserRequest(
         @NotBlank(message = "Username không được để trống")
@@ -22,6 +23,8 @@ public record UpdateUserRequest(
         @NotEmpty(message = "Cần gán ít nhất một vai trò")
         Set<String> roles,
 
-        Boolean isActive
+        Boolean isActive,
+
+        Set<UUID> warehouseIds
 ) {
 }

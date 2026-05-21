@@ -2,6 +2,7 @@ package com.warehouse_service.service;
 
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.auth_service.repository.UserRepository;
 import com.warehouse_service.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -18,6 +19,7 @@ import java.util.UUID;
 public class WarehouseAccessService {
 
     private final WarehouseRepository warehouseRepository;
+    private final UserRepository userRepository;
 
     public boolean canSeeAllWarehouses(Authentication authentication) {
         return hasAuthority(authentication, "ADMIN") || hasAuthority(authentication, "REPORT_VIEWER");
@@ -25,6 +27,10 @@ public class WarehouseAccessService {
 
     public boolean isWarehouseManager(Authentication authentication) {
         return hasAuthority(authentication, "WAREHOUSE_MANAGER");
+    }
+
+    public boolean isWarehouseStaff(Authentication authentication) {
+        return hasAuthority(authentication, "WAREHOUSE_STAFF");
     }
 
     public UUID currentUserId(Authentication authentication) {
@@ -39,7 +45,16 @@ public class WarehouseAccessService {
             return null;
         }
         UUID userId = currentUserId(authentication);
-        return userId == null ? List.of() : warehouseRepository.findIdsByManagerId(userId);
+        if (userId == null) {
+            return List.of();
+        }
+        if (isWarehouseManager(authentication)) {
+            return warehouseRepository.findIdsByManagerId(userId);
+        }
+        if (isWarehouseStaff(authentication)) {
+            return userRepository.findWarehouseIdsByUserId(userId);
+        }
+        return List.of();
     }
 
     public void assertCanAccessWarehouse(Authentication authentication, UUID warehouseId) {
@@ -48,7 +63,7 @@ public class WarehouseAccessService {
         }
         List<UUID> visibleIds = visibleWarehouseIds(authentication);
         if (CollectionUtils.isEmpty(visibleIds) || !visibleIds.contains(warehouseId)) {
-            throw new AppException(ErrorCode.FORBIDDEN, "Bạn không được phân công quản lý kho này");
+            throw new AppException(ErrorCode.FORBIDDEN, "Bạn không được phân quyền thao tác kho này");
         }
     }
 

@@ -1,0 +1,2 @@
+-- Placeholder retained to match databases that already applied this migration.
+-- The current entity model does not require additional RMA approval/report columns.

@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import java.util.Set;
+import java.util.UUID;
 
 public record CreateUserRequest(
     @NotBlank(message = "Username không được để trống")
@@ -23,5 +24,7 @@ public record CreateUserRequest(
     String password,
 
     @NotEmpty(message = "Cần gán ít nhất một vai trò")
-    Set<String> roles
+    Set<String> roles,
+
+    Set<UUID> warehouseIds
 ) {}

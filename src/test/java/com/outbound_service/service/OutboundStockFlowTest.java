@@ -4,6 +4,7 @@ import com.common.api.stock.StockAdjustCommand;
 import com.common.api.stock.StockReserveCommand;
 import com.common.audit.AuditLogService;
 import com.common.notification.NotificationService;
+import com.auth_service.repository.UserRepository;
 import com.outbound_service.dto.request.UpdatePickingItemRequest;
 import com.outbound_service.dto.response.PickingItemResponse;
 import com.outbound_service.dto.response.SalesOrderResponse;
@@ -22,6 +23,7 @@ import com.product_service.service.ProductService;
 import com.warehouse_service.repository.LocationRepository;
 import com.warehouse_service.service.LocationService;
 import com.warehouse_service.service.StockLevelService;
+import com.warehouse_service.service.WarehouseAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -68,6 +70,10 @@ class OutboundStockFlowTest {
     private SalesOrderRepository salesOrderRepository;
     @Mock
     private SalesOrderMapper salesOrderMapper;
+    @Mock
+    private WarehouseAccessService warehouseAccessService;
+    @Mock
+    private UserRepository userRepository;
 
     private PickingItemService pickingItemService;
     private SalesOrderService salesOrderService;
@@ -84,7 +90,9 @@ class OutboundStockFlowTest {
                 productService,
                 locationService,
                 auditLogService,
-                notificationService);
+                notificationService,
+                userRepository);
+
         salesOrderService = new SalesOrderService(
                 salesOrderRepository,
                 salesOrderItemRepository,
@@ -92,7 +100,8 @@ class OutboundStockFlowTest {
                 stockLevelService,
                 salesOrderMapper,
                 auditLogService,
-                notificationService);
+                notificationService,
+                warehouseAccessService);
     }
 
     @Test
@@ -152,7 +161,7 @@ class OutboundStockFlowTest {
         when(salesOrderRepository.save(any(SalesOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(salesOrderMapper.toResponse(any(SalesOrder.class))).thenAnswer(invocation -> salesOrderResponse(invocation.getArgument(0)));
 
-        SalesOrderResponse response = salesOrderService.markShipped(orderId);
+        SalesOrderResponse response = salesOrderService.markShipped(orderId, null);
 
         ArgumentCaptor<StockReserveCommand> reserveCaptor = ArgumentCaptor.forClass(StockReserveCommand.class);
         ArgumentCaptor<StockAdjustCommand> adjustCaptor = ArgumentCaptor.forClass(StockAdjustCommand.class);
@@ -220,6 +229,7 @@ class OutboundStockFlowTest {
                 null,
                 null,
                 null,
+                item.getSoItem().getSalesOrder().getWarehouseId(),
                 item.getAssigneeId());
     }
 

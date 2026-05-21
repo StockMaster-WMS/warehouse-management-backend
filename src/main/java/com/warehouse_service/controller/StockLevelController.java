@@ -54,7 +54,7 @@ public class StockLevelController {
     private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping("/summary")
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'REPORT_VIEWER')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Tổng quan tồn kho", description = "Trả về số liệu tổng quan: tổng SKU, tổng tồn, tồn thấp, sắp hết hạn")
     public ApiResponse<StockSummaryResponse> getSummary(
             @Parameter(description = "Số ngày tính sắp hết hạn") @RequestParam(defaultValue = "30") int nearExpiryDays,

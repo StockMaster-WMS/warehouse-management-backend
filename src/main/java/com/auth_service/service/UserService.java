@@ -22,6 +22,8 @@ import com.common.notification.CreateNotificationCommand;
 import com.common.notification.NotificationService;
 import com.common.notification.NotificationSeverity;
 import com.common.notification.NotificationType;
+import com.warehouse_service.entity.Warehouse;
+import com.warehouse_service.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -49,6 +51,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Collection;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -63,6 +66,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
+    private final WarehouseRepository warehouseRepository;
 
     public PagedResponse<UserResponse> findUsers(Pageable pageable, String keyword, String role, Boolean active) {
         Specification<UserAccount> spec = userSpecification(keyword, role, active);
@@ -73,6 +77,28 @@ public class UserService {
 
     public List<UserResponse> getAllUsers() {
         return userRepository.findAll().stream()
+                .map(this::toUserResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<UserResponse> getActiveWarehouseStaff(UUID warehouseId, Collection<UUID> visibleWarehouseIds) {
+        if (warehouseId != null && !warehouseRepository.existsById(warehouseId)) {
+            throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy kho");
+        }
+        if (visibleWarehouseIds != null) {
+            if (visibleWarehouseIds.isEmpty()) {
+                return List.of();
+            }
+            if (warehouseId != null && !visibleWarehouseIds.contains(warehouseId)) {
+                throw new AppException(ErrorCode.FORBIDDEN, "Bạn không được phân quyền thao tác kho này");
+            }
+            if (warehouseId == null) {
+                return userRepository.findActiveWarehouseStaffByWarehouseIds(visibleWarehouseIds).stream()
+                        .map(this::toUserResponse)
+                        .collect(Collectors.toList());
+            }
+        }
+        return userRepository.findActiveWarehouseStaffByWarehouseId(warehouseId).stream()
                 .map(this::toUserResponse)
                 .collect(Collectors.toList());
     }
@@ -124,6 +150,7 @@ public class UserService {
                 .fullName(normalizeFullName(request.fullName()))
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .roles(resolveRoles(request.roles()))
+                .warehouses(resolveWarehouses(request.warehouseIds()))
                 .isActive(true)
                 .build();
 
@@ -164,6 +191,7 @@ public class UserService {
         user.setEmail(email);
         user.setFullName(normalizeFullName(request.fullName()));
         user.setRoles(roles);
+        user.setWarehouses(resolveWarehouses(request.warehouseIds()));
         if (request.isActive() != null) {
             user.setIsActive(request.isActive());
         }
@@ -250,7 +278,7 @@ public class UserService {
                 UserResponse response;
                 if (dryRun) {
                     response = new UserResponse(null, row.username(), row.email(), row.fullName(),
-                            String.join(",", row.roles()), row.active(), null);
+                            String.join(",", row.roles()), row.active(), null, List.of(), List.of());
                 } else {
                     UserAccount user = UserAccount.builder()
                             .username(row.username())
@@ -410,6 +438,23 @@ public class UserService {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
+    private Set<Warehouse> resolveWarehouses(Set<UUID> warehouseIds) {
+        if (warehouseIds == null || warehouseIds.isEmpty()) {
+            return new LinkedHashSet<>();
+        }
+        Set<Warehouse> warehouses = new LinkedHashSet<>();
+        for (UUID warehouseId : warehouseIds) {
+            Warehouse warehouse = warehouseRepository.findById(warehouseId)
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
+                            "Không tìm thấy kho: " + warehouseId));
+            if (!Boolean.TRUE.equals(warehouse.getIsActive())) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Kho đã ngừng hoạt động: " + warehouse.getCode());
+            }
+            warehouses.add(warehouse);
+        }
+        return warehouses;
+    }
+
     private Set<String> parseRoles(String raw) {
         if (!StringUtils.hasText(raw)) {
             return Set.of();
@@ -497,11 +542,18 @@ public class UserService {
         metadata.put("email", user.getEmail());
         metadata.put("fullName", user.getFullName());
         metadata.put("roles", user.getRoleCodesCsv());
+        metadata.put("warehouseIds", user.getWarehouses() == null ? List.of()
+                : user.getWarehouses().stream().map(Warehouse::getId).toList());
         metadata.put("isActive", user.getIsActive());
         return metadata;
     }
 
     private UserResponse toUserResponse(UserAccount user) {
+        List<Warehouse> warehouses = user.getWarehouses() == null
+                ? List.of()
+                : user.getWarehouses().stream()
+                        .sorted((left, right) -> String.CASE_INSENSITIVE_ORDER.compare(left.getCode(), right.getCode()))
+                        .toList();
         return new UserResponse(
                 user.getId(),
                 user.getUsername(),
@@ -509,7 +561,13 @@ public class UserService {
                 user.getFullName(),
                 user.getRoleCodesCsv(),
                 user.getIsActive(),
-                user.getCreatedAt()
+                user.getCreatedAt(),
+                warehouses.stream().map(Warehouse::getId).toList(),
+                warehouses.stream()
+                        .map(warehouse -> warehouse.getCode() == null
+                                ? warehouse.getName()
+                                : warehouse.getName() + " (" + warehouse.getCode() + ")")
+                        .toList()
         );
     }
 

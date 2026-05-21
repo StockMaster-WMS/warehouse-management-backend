@@ -13,6 +13,7 @@ import com.product_service.entity.Product;
 import com.product_service.repository.ProductRepository;
 import com.product_service.service.ProductService;
 import com.product_service.dto.response.ProductResponse;
+import com.auth_service.repository.UserRepository;
 import com.warehouse_service.entity.Location;
 import com.warehouse_service.repository.LocationRepository;
 import com.warehouse_service.service.LocationService;
@@ -67,6 +68,7 @@ public class PickingItemService {
     private final LocationService locationService;
     private final AuditLogService auditLogService;
     private final NotificationService notificationService;
+    private final UserRepository userRepository;
 
     // Lấy danh sách picking item có phân trang và bộ lọc.
     @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
@@ -78,11 +80,19 @@ public class PickingItemService {
     @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
     public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId,
             UUID locationId, String status, OffsetDateTime createdFrom, OffsetDateTime createdTo, UUID assigneeId) {
+        return findAll(pageable, soItemId, productId, locationId, status, createdFrom, createdTo, assigneeId, null);
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
+    public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId,
+            UUID locationId, String status, OffsetDateTime createdFrom, OffsetDateTime createdTo, UUID assigneeId,
+            Set<UUID> visibleWarehouseIds) {
         PickingItemStatus pickingStatus = parseOptionalPickingStatus(status);
         Specification<PickingItem> spec = PickingItemSpecification.hasSoItemId(soItemId)
                 .and(PickingItemSpecification.hasProductId(productId))
                 .and(PickingItemSpecification.hasLocationId(locationId))
                 .and(PickingItemSpecification.hasAssigneeId(assigneeId))
+                .and(PickingItemSpecification.hasWarehouseIdIn(visibleWarehouseIds))
                 .and(PickingItemSpecification.hasStatus(pickingStatus))
                 .and(PickingItemSpecification.salesOrderCreatedFrom(createdFrom))
                 .and(PickingItemSpecification.salesOrderCreatedTo(createdTo));
@@ -132,6 +142,7 @@ public class PickingItemService {
                 product == null ? null : product.getBarcodeEan13(),
                 locationCode,
                 locationCode,
+                row.warehouseId(),
                 row.assigneeId());
     }
 
@@ -297,6 +308,7 @@ public class PickingItemService {
 
         SalesOrder so = item.getSoItem().getSalesOrder();
         assertSalesOrderAllowsPickingMutation(so);
+        assertAssigneeCanWorkInWarehouse(assigneeId, so.getWarehouseId());
 
         item.setAssigneeId(assigneeId);
         boolean shouldNotifyAssignee = assigneeId != null && !assigneeId.equals(before.assigneeId());
@@ -530,6 +542,16 @@ public class PickingItemService {
                 "Bạn được giao picking cho " + salesOrderNumber + ", productId=" + item.getProductId(),
                 "PICKING_ITEM",
                 item.getId()));
+    }
+
+    private void assertAssigneeCanWorkInWarehouse(UUID assigneeId, UUID warehouseId) {
+        if (assigneeId == null) {
+            return;
+        }
+        if (!userRepository.existsActiveWarehouseStaffInWarehouse(assigneeId, warehouseId)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Nhân viên chưa được phân quyền vào kho của đơn xuất này");
+        }
     }
 
     // Lấy chi tiết picking item đầy đủ dữ liệu cho giao diện picker.

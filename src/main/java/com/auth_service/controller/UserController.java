@@ -12,6 +12,7 @@ import com.auth_service.dto.response.UserStatisticsResponse;
 import com.auth_service.service.UserService;
 import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
+import com.warehouse_service.service.WarehouseAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -45,6 +46,7 @@ import java.util.UUID;
 public class UserController {
 
     private final UserService userService;
+    private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('ADMIN')")
@@ -67,6 +69,15 @@ public class UserController {
     @Operation(summary = "Danh sách người dùng không phân trang")
     public ApiResponse<List<UserResponse>> getAllWithoutPaging() {
         return ApiResponse.success("Lấy danh sách người dùng thành công", userService.getAllUsers());
+    }
+
+    @GetMapping("/warehouse-staff")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
+    @Operation(summary = "Danh sách nhân viên kho đang hoạt động", description = "Dùng cho các màn điều phối nhiệm vụ kho như picking và putaway")
+    public ApiResponse<List<UserResponse>> getActiveWarehouseStaff(@RequestParam(required = false) UUID warehouseId,
+            Authentication authentication) {
+        return ApiResponse.success("Lấy danh sách nhân viên kho thành công",
+                userService.getActiveWarehouseStaff(warehouseId, warehouseAccessService.visibleWarehouseIds(authentication)));
     }
 
     @GetMapping("/statistics")
