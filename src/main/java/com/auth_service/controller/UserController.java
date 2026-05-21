@@ -36,6 +36,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
@@ -59,7 +61,7 @@ public class UserController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String role,
             @RequestParam(required = false) Boolean active) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
+        Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection(sortDir), normalizeSort(sort)));
         return ApiResponse.success("Lấy danh sách người dùng thành công",
                 userService.findUsers(pageable, keyword, role, active));
     }
@@ -170,5 +172,25 @@ public class UserController {
             return null;
         }
         return UUID.fromString(authentication.getName());
+    }
+
+    private Sort.Direction sortDirection(String sortDir) {
+        try {
+            return Sort.Direction.fromString(sortDir);
+        } catch (IllegalArgumentException ex) {
+            return Sort.Direction.ASC;
+        }
+    }
+
+    private String normalizeSort(String sort) {
+        String value = sort == null ? "" : sort.trim();
+        Map<String, String> aliases = Map.of(
+                "name", "fullName",
+                "full_name", "fullName",
+                "status", "isActive",
+                "active", "isActive");
+        String normalized = aliases.getOrDefault(value, value);
+        Set<String> allowed = Set.of("username", "email", "fullName", "isActive", "createdAt");
+        return allowed.contains(normalized) ? normalized : "createdAt";
     }
 }

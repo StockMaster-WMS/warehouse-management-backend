@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.UUID;
 
 public record UpdateSalesOrderRequest(
+        UUID customerId,
+
         @NotBlank(message = "Mã đơn xuất không được để trống")
         @Size(max = 30, message = "Mã đơn xuất không được vượt quá 30 ký tự")
         String soNumber,

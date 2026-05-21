@@ -25,6 +25,9 @@ public class RmaItem {
     @Column(name = "product_id", nullable = false)
     private UUID productId;
 
+    @Column(name = "sales_order_item_id")
+    private UUID salesOrderItemId;
+
     @Column(name = "expected_qty", nullable = false)
     private Integer expectedQty;
 
@@ -33,6 +36,9 @@ public class RmaItem {
 
     @Column(name = "received_location_id")
     private UUID receivedLocationId;
+
+    @Column(name = "return_location_id")
+    private UUID returnLocationId;
 
     @Column(name = "lot_number", length = 50)
     private String lotNumber;

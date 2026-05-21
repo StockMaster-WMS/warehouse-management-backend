@@ -7,8 +7,10 @@ public record RecordCountRequest(
     List<ItemResult> results
 ) {
     public record ItemResult(
+        UUID itemId,
         UUID productId,
         UUID locationId,
+        String lotNumber,
         Integer actualQty,
         String notes
     ) {}
