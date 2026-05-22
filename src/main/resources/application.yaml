@@ -37,7 +37,6 @@ app:
   config-encryption-key: ${APP_CONFIG_ENCRYPTION_KEY:${AUTH_JWT_SECRET:}}
 
 auth:
-  mode: ${AUTH_MODE:public}
   jwt:
     issuer: ${AUTH_JWT_ISSUER:warehouse-app}
     secret: ${AUTH_JWT_SECRET:}

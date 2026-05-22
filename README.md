@@ -74,7 +74,6 @@ WAREHOUSE_DB_USERNAME=postgres
 WAREHOUSE_DB_PASSWORD=postgres
 WAREHOUSE_FLYWAY_ENABLED=true
 
-AUTH_MODE=public
 AUTH_JWT_SECRET=replace-with-a-very-long-random-secret-at-least-32-bytes
 AUTH_JWT_ISSUER=warehouse-app
 AUTH_JWT_ACCESS_EXPIRATION_SECONDS=3600
@@ -142,4 +141,4 @@ Docker Compose khởi chạy:
 
 File `.env` chỉ dùng local và không được đưa credentials thật vào source bundle. Nếu credentials thật đã từng bị chia sẻ, cần rotate trên nhà cung cấp database.
 
-`AUTH_MODE=public` giữ hành vi tương thích dev. Khi làm cứng bảo mật, cần thêm JWT verification filter/resource server cho toàn bộ API rồi chuyển sang `AUTH_MODE=secure`.
+Các API nghiệp vụ yêu cầu access token JWT. `SecurityConfig` cho phép các endpoint đăng nhập, refresh, introspect, health và tài liệu OpenAPI truy cập công khai; các request còn lại đi qua `JwtAuthenticationFilter` trước khi Spring Security kiểm tra quyền.
