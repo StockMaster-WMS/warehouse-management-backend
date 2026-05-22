@@ -54,6 +54,7 @@ public class PickingItemController {
             @Parameter(description = "ID sản phẩm") @RequestParam(required = false) UUID productId,
             @Parameter(description = "ID vị trí") @RequestParam(required = false) UUID locationId,
             @Parameter(description = "Trạng thái picking") @RequestParam(required = false) String status,
+            @Parameter(description = "Trạng thái đơn xuất") @RequestParam(required = false) String salesOrderStatus,
             @Parameter(description = "Từ thời điểm tạo đơn xuất (ISO 8601)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
             @Parameter(description = "Đến thời điểm tạo đơn xuất (ISO 8601)")
@@ -62,7 +63,7 @@ public class PickingItemController {
         String resolvedSort = resolveSortField(sort);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), resolvedSort));
         return ApiResponse.success("Lấy danh sách picking item thành công",
-                pickingItemService.findAll(pageable, soItemId, productId, locationId, status, createdFrom, createdTo,
+                pickingItemService.findAll(pageable, soItemId, productId, locationId, status, salesOrderStatus, createdFrom, createdTo,
                         staffScopeUserId(authentication), warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
