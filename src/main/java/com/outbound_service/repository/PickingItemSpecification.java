@@ -2,6 +2,7 @@ package com.outbound_service.repository;
 
 import com.outbound_service.entity.PickingItem;
 import com.outbound_service.entity.PickingItemStatus;
+import com.outbound_service.entity.SalesOrderStatus;
 import jakarta.persistence.criteria.Join;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -42,6 +43,10 @@ public class PickingItemSpecification {
 
     public static Specification<PickingItem> hasStatus(PickingItemStatus status) {
         return (root, query, cb) -> status == null ? null : cb.equal(root.get("status"), status);
+    }
+
+    public static Specification<PickingItem> hasSalesOrderStatus(SalesOrderStatus status) {
+        return (root, query, cb) -> status == null ? null : cb.equal(root.join("soItem").get("salesOrder").get("status"), status);
     }
 
     public static Specification<PickingItem> salesOrderCreatedFrom(OffsetDateTime createdFrom) {

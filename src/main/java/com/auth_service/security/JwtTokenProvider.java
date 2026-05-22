@@ -2,6 +2,7 @@ package com.auth_service.security;
 
 import com.auth_service.config.AuthProperties;
 import com.auth_service.entity.UserAccount;
+import com.common.util.UuidUtils;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -44,7 +45,7 @@ public class JwtTokenProvider {
     public String generateAccessToken(UserAccount user) {
         Instant now = Instant.now();
         Instant expiresAt = now.plusSeconds(authProperties.jwt().accessTokenExpirationSeconds());
-        String jti = UUID.randomUUID().toString();
+        String jti = UuidUtils.uuidV7().toString();
 
         return Jwts.builder()
                 .issuer(authProperties.jwt().issuer())
@@ -63,7 +64,7 @@ public class JwtTokenProvider {
         Instant now = Instant.now();
         // Refresh token có expiration dài hơn: 7 ngày
         Instant expiresAt = now.plusSeconds(7 * 24 * 60 * 60);
-        String jti = UUID.randomUUID().toString();
+        String jti = UuidUtils.uuidV7().toString();
 
         return Jwts.builder()
                 .issuer(authProperties.jwt().issuer())

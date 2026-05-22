@@ -87,13 +87,23 @@ public class PickingItemService {
     public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId,
             UUID locationId, String status, OffsetDateTime createdFrom, OffsetDateTime createdTo, UUID assigneeId,
             Set<UUID> visibleWarehouseIds) {
+        return findAll(pageable, soItemId, productId, locationId, status, null, createdFrom, createdTo, assigneeId,
+                visibleWarehouseIds);
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.NOT_SUPPORTED)
+    public PagedResponse<PickingItemResponse> findAll(Pageable pageable, UUID soItemId, UUID productId,
+            UUID locationId, String status, String salesOrderStatus, OffsetDateTime createdFrom, OffsetDateTime createdTo,
+            UUID assigneeId, Set<UUID> visibleWarehouseIds) {
         PickingItemStatus pickingStatus = parseOptionalPickingStatus(status);
+        SalesOrderStatus orderStatus = parseOptionalSalesOrderStatus(salesOrderStatus);
         Specification<PickingItem> spec = PickingItemSpecification.hasSoItemId(soItemId)
                 .and(PickingItemSpecification.hasProductId(productId))
                 .and(PickingItemSpecification.hasLocationId(locationId))
                 .and(PickingItemSpecification.hasAssigneeId(assigneeId))
                 .and(PickingItemSpecification.hasWarehouseIdIn(visibleWarehouseIds))
                 .and(PickingItemSpecification.hasStatus(pickingStatus))
+                .and(PickingItemSpecification.hasSalesOrderStatus(orderStatus))
                 .and(PickingItemSpecification.salesOrderCreatedFrom(createdFrom))
                 .and(PickingItemSpecification.salesOrderCreatedTo(createdTo));
         Page<PickingItem> page = pickingItemRepository.findAll(spec, pageable);
@@ -422,6 +432,17 @@ public class PickingItemService {
             return null;
         }
         return parsePickingStatus(raw);
+    }
+
+    private static SalesOrderStatus parseOptionalSalesOrderStatus(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return SalesOrderStatus.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Trạng thái đơn xuất không hợp lệ: " + raw);
+        }
     }
 
     // Kiểm tra tính hợp lệ của qtyToPick, qtyPicked theo trạng thái.
