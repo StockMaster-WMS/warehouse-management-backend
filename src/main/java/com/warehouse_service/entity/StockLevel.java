@@ -37,7 +37,7 @@ public class StockLevel {
     private UUID productId;
 
     @Builder.Default
-    @Column(name = "lot_number", length = 60)
+    @Column(name = "lot_number", length = 60, nullable = false)
     private String lotNumber = "";
 
     @Column(name = "expiry_date")

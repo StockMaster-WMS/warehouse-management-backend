@@ -88,7 +88,7 @@ public class StockLevelController {
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
-    @Operation(summary = "Lấy danh sách tồn kho", description = "Phân trang; lọc theo kho, vị trí hoặc sản phẩm")
+    @Operation(summary = "Lấy danh sách tồn kho", description = "Phân trang; lọc theo kho, vị trí, sản phẩm hoặc keyword")
     public ApiResponse<PagedResponse<?>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -98,6 +98,8 @@ public class StockLevelController {
             @Parameter(description = "ID kho") @RequestParam(required = false) UUID warehouseId,
             @Parameter(description = "ID vị trí") @RequestParam(required = false) UUID locationId,
             @Parameter(description = "ID sản phẩm") @RequestParam(required = false) UUID productId,
+            @Parameter(description = "Tìm theo SKU/tên sản phẩm, mã vị trí, khu/kệ/bin, lô hoặc kho")
+            @RequestParam(required = false) String keyword,
             Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         String e = expand == null ? "" : expand.trim().toLowerCase();
@@ -106,7 +108,7 @@ public class StockLevelController {
         // Backward-compatible "light" mode when explicitly requested
         if (e.equals("ids") || e.equals("none")) {
             PagedResponse<StockLevelResponse> data = stockLevelService.findAll(pageable, warehouseId, locationId,
-                    productId, warehouseAccessService.visibleWarehouseIdSet(authentication));
+                    productId, keyword, warehouseAccessService.visibleWarehouseIdSet(authentication));
             return ApiResponse.success("Lấy danh sách tồn kho thành công", data);
         }
 
@@ -115,7 +117,7 @@ public class StockLevelController {
         boolean expandLocation = e.isBlank() || e.contains("location");
         boolean expandProduct = e.isBlank() || e.contains("product");
         PagedResponse<StockLevelExpandedResponse> data = stockLevelService.findAllExpanded(
-                pageable, warehouseId, locationId, productId, expandWarehouse, expandLocation, expandProduct,
+                pageable, warehouseId, locationId, productId, keyword, expandWarehouse, expandLocation, expandProduct,
                 warehouseAccessService.visibleWarehouseIdSet(authentication));
         return ApiResponse.success("Lấy danh sách tồn kho thành công", data);
     }

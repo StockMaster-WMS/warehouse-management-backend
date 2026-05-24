@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -253,16 +254,18 @@ public class PickingItemService {
         existing.setSoItem(line);
         PickingItemStatus newStatus = parsePickingStatus(request.status());
         existing.setStatus(newStatus);
-
-        validateQuantities(existing.getQtyToPick(), existing.getQtyPicked(), newStatus);
-        validateAllocationAgainstOrderedQty(line, existing.getQtyToPick(), existing.getQtyPicked(), existing.getId());
-
         String newLot = normalizeLot(existing.getLotNumber());
-        boolean allocChanged = !oldLoc.equals(existing.getLocationId())
-                || !oldProd.equals(existing.getProductId())
+        boolean allocChanged = !Objects.equals(oldLoc, existing.getLocationId())
+                || !Objects.equals(oldProd, existing.getProductId())
                 || oldQtyToPick != existing.getQtyToPick()
                 || !oldLot.equals(newLot);
 
+        validateQuantities(existing.getQtyToPick(), existing.getQtyPicked(), newStatus);
+        if (allocChanged) {
+            validateAllocationAgainstOrderedQty(line, existing.getQtyToPick(), existing.getQtyPicked(), existing.getId());
+        } else {
+            validatePickedAgainstOrderedQty(line, existing.getQtyPicked(), existing.getId());
+        }
 
         if (allocChanged) {
             stockLevelService.adjustReserved(reserveCommand(
@@ -481,6 +484,27 @@ public class PickingItemService {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Tổng qtyToPick cho line " + line.getLineNumber()
                             + " vượt orderedQty (" + totalAllocated + "/" + orderedQty + ")");
+        }
+
+        int totalPicked = pickedByOtherPicks + qtyPicked;
+        if (totalPicked > orderedQty) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Tổng qtyPicked cho line " + line.getLineNumber()
+                            + " vượt orderedQty (" + totalPicked + "/" + orderedQty + ")");
+        }
+    }
+
+    private void validatePickedAgainstOrderedQty(SalesOrderItem line, Integer requestedQtyPicked, UUID currentPickingId) {
+        int orderedQty = line.getOrderedQty() == null ? 0 : line.getOrderedQty();
+        int qtyPicked = requestedQtyPicked == null ? 0 : requestedQtyPicked;
+
+        int pickedByOtherPicks = 0;
+        for (PickingItem pick : pickingItemRepository.findBySoItem_Id(line.getId())) {
+            if (currentPickingId != null && currentPickingId.equals(pick.getId())) {
+                continue;
+            }
+
+            pickedByOtherPicks += pick.getQtyPicked() == null ? 0 : pick.getQtyPicked();
         }
 
         int totalPicked = pickedByOtherPicks + qtyPicked;
