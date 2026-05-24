@@ -118,17 +118,17 @@ public class AuthService {
     @Transactional(readOnly = true)
     public LoginResponse.UserInfo me(String accessToken) {
         if (accessToken == null || accessToken.isBlank()) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Thiếu access token");
+            throw new AppException(ErrorCode.UNAUTHORIZED, "Thiếu access token");
         }
 
         try {
             if (!"ACCESS".equals(jwtTokenProvider.getTokenType(accessToken))) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Token không phải access token");
+                throw new AppException(ErrorCode.UNAUTHORIZED, "Token không phải access token");
             }
 
             String jti = jwtTokenProvider.getJti(accessToken);
             if (tokenBlacklistRepository.existsByTokenJti(jti)) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Access token không còn hiệu lực");
+                throw new AppException(ErrorCode.UNAUTHORIZED, "Access token không còn hiệu lực");
             }
 
             var userId = jwtTokenProvider.getUserId(accessToken);
@@ -146,7 +146,7 @@ public class AuthService {
                     user.getFullName(),
                     user.getRoleCodesCsv());
         } catch (JwtException | IllegalArgumentException ex) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Access token không hợp lệ");
+            throw new AppException(ErrorCode.UNAUTHORIZED, "Access token không hợp lệ");
         }
     }
 
@@ -155,18 +155,18 @@ public class AuthService {
     public AuthTokens refresh(String refreshToken) {
         try {
             if (refreshToken == null || refreshToken.isBlank()) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Thiếu refresh token");
+                throw new AppException(ErrorCode.UNAUTHORIZED, "Thiếu refresh token");
             }
 
             // Chỉ chấp nhận đúng refresh token
             if (!"REFRESH".equals(jwtTokenProvider.getTokenType(refreshToken))) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Token không phải refresh token");
+                throw new AppException(ErrorCode.UNAUTHORIZED, "Token không phải refresh token");
             }
 
             // Kiểm tra xem token đã bị blacklist hay chưa
             String jti = jwtTokenProvider.getJti(refreshToken);
             if (tokenBlacklistRepository.existsByTokenJti(jti)) {
-                throw new AppException(ErrorCode.BAD_REQUEST, "Refresh token không còn hiệu lực");
+                throw new AppException(ErrorCode.UNAUTHORIZED, "Refresh token không còn hiệu lực");
             }
 
             // Lấy người dùng từ token
@@ -184,7 +184,7 @@ public class AuthService {
             String newRefreshToken = jwtTokenProvider.generateRefreshToken(user);
             return toAuthTokens(user, newAccessToken, newRefreshToken);
         } catch (JwtException | IllegalArgumentException ex) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Refresh token không hợp lệ");
+            throw new AppException(ErrorCode.UNAUTHORIZED, "Refresh token không hợp lệ");
         }
     }
 

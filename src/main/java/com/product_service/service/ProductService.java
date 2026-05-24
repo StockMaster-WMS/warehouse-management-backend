@@ -19,6 +19,7 @@ import com.product_service.repository.ProductSpecification;
 import com.product_service.repository.SupplierRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -98,6 +99,20 @@ public class ProductService {
             ));
         }
         return result;
+    }
+
+    public List<UUID> findIdsByKeyword(String keyword, int maxResults) {
+        if (keyword == null || keyword.isBlank() || maxResults <= 0) {
+            return List.of();
+        }
+
+        Page<Product> page = productRepository.findAll(
+                ProductSpecification.hasKeyword(keyword),
+                PageRequest.of(0, maxResults));
+
+        return page.getContent().stream()
+                .map(Product::getId)
+                .toList();
     }
 
     // Tạo mới sản phẩm và sinh SKU duy nhất.

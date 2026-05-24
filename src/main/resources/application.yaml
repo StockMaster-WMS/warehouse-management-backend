@@ -3,6 +3,10 @@ server:
   forward-headers-strategy: framework
 
 spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:warehouse-management-backend/.env[.properties]
   application:
     name: warehouse-app
   jmx:
@@ -37,14 +41,13 @@ app:
   config-encryption-key: ${APP_CONFIG_ENCRYPTION_KEY:${AUTH_JWT_SECRET:}}
 
 auth:
-  mode: ${AUTH_MODE:public}
   jwt:
     issuer: ${AUTH_JWT_ISSUER:warehouse-app}
     secret: ${AUTH_JWT_SECRET:}
     access-token-expiration-seconds: ${AUTH_JWT_ACCESS_EXPIRATION_SECONDS:3600}
   cookie:
-    secure: ${AUTH_COOKIE_SECURE:false}
-    same-site: ${AUTH_COOKIE_SAME_SITE:Lax}
+    secure: ${AUTH_COOKIE_SECURE:auto}
+    same-site: ${AUTH_COOKIE_SAME_SITE:auto}
   bootstrap:
     default-users-enabled: ${AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED:false}
 

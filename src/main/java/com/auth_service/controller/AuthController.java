@@ -43,10 +43,10 @@ public class AuthController {
 
     private final AuthService authService;
 
-    @Value("${auth.cookie.secure:false}")
-    private boolean refreshCookieSecure;
+    @Value("${auth.cookie.secure:auto}")
+    private String refreshCookieSecure;
 
-    @Value("${auth.cookie.same-site:Lax}")
+    @Value("${auth.cookie.same-site:auto}")
     private String refreshCookieSameSite;
 
     @PostMapping("/register")
@@ -60,9 +60,10 @@ public class AuthController {
     @Operation(summary = "Đăng nhập")
     public ApiResponse<LoginResponse> login(
             @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest,
             HttpServletResponse response) {
         AuthService.AuthTokens tokens = authService.login(request);
-        addRefreshCookie(response, tokens.refreshToken());
+        addRefreshCookie(httpRequest, response, tokens.refreshToken());
         return ApiResponse.success("Đăng nhập thành công", toLoginResponse(tokens));
     }
 
@@ -87,14 +88,9 @@ public class AuthController {
             HttpServletRequest request,
             HttpServletResponse response) {
         String refreshToken = extractCookieValue(request, REFRESH_COOKIE_NAME);
-        try {
-            AuthService.AuthTokens tokens = authService.refresh(refreshToken);
-            addRefreshCookie(response, tokens.refreshToken());
-            return ApiResponse.success("Làm mới token thành công", toLoginResponse(tokens));
-        } catch (RuntimeException ex) {
-            clearRefreshCookie(response);
-            throw ex;
-        }
+        AuthService.AuthTokens tokens = authService.refresh(refreshToken);
+        addRefreshCookie(request, response, tokens.refreshToken());
+        return ApiResponse.success("Làm mới token thành công", toLoginResponse(tokens));
     }
 
     @PostMapping("/logout")
@@ -106,7 +102,7 @@ public class AuthController {
         String accessToken = extractToken(authHeader);
         String refreshToken = extractCookieValue(request, REFRESH_COOKIE_NAME);
         authService.logout(accessToken, refreshToken);
-        clearRefreshCookie(response);
+        clearRefreshCookie(request, response);
         return ApiResponse.success("Đăng xuất thành công", "OK");
     }
 
@@ -140,26 +136,50 @@ public class AuthController {
                         tokens.roles()));
     }
 
-    private void addRefreshCookie(HttpServletResponse response, String refreshToken) {
+    private void addRefreshCookie(HttpServletRequest request, HttpServletResponse response, String refreshToken) {
+        boolean secure = resolveRefreshCookieSecure(request);
         ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, refreshToken)
                 .httpOnly(true)
-                .secure(refreshCookieSecure)
-                .sameSite(refreshCookieSameSite)
+                .secure(secure)
+                .sameSite(resolveRefreshCookieSameSite(secure))
                 .path(REFRESH_COOKIE_PATH)
                 .maxAge(authService.getRefreshTokenExpirationSeconds())
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
     }
 
-    private void clearRefreshCookie(HttpServletResponse response) {
+    private void clearRefreshCookie(HttpServletRequest request, HttpServletResponse response) {
+        boolean secure = resolveRefreshCookieSecure(request);
         ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, "")
                 .httpOnly(true)
-                .secure(refreshCookieSecure)
-                .sameSite(refreshCookieSameSite)
+                .secure(secure)
+                .sameSite(resolveRefreshCookieSameSite(secure))
                 .path(REFRESH_COOKIE_PATH)
                 .maxAge(0)
                 .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private boolean resolveRefreshCookieSecure(HttpServletRequest request) {
+        if (refreshCookieSecure != null && !refreshCookieSecure.isBlank()
+                && !"auto".equalsIgnoreCase(refreshCookieSecure.trim())) {
+            return Boolean.parseBoolean(refreshCookieSecure.trim());
+        }
+
+        String forwardedProto = request.getHeader("X-Forwarded-Proto");
+        String forwardedSsl = request.getHeader("X-Forwarded-Ssl");
+        return request.isSecure()
+                || "https".equalsIgnoreCase(forwardedProto)
+                || "on".equalsIgnoreCase(forwardedSsl);
+    }
+
+    private String resolveRefreshCookieSameSite(boolean secure) {
+        if (refreshCookieSameSite != null && !refreshCookieSameSite.isBlank()
+                && !"auto".equalsIgnoreCase(refreshCookieSameSite.trim())) {
+            return refreshCookieSameSite.trim();
+        }
+
+        return secure ? "None" : "Lax";
     }
 
     private String extractCookieValue(HttpServletRequest request, String cookieName) {

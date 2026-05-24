@@ -60,6 +60,7 @@ import java.util.UUID;
 @Slf4j
 @Transactional(readOnly = true)
 public class StockLevelService {
+    private static final int STOCK_KEYWORD_PRODUCT_LOOKUP_LIMIT = 500;
 
     private final StockLevelRepository stockLevelRepository;
     private final WarehouseRepository warehouseRepository;
@@ -77,10 +78,16 @@ public class StockLevelService {
 
     public PagedResponse<StockLevelResponse> findAll(Pageable pageable, UUID warehouseId, UUID locationId, UUID productId,
             Collection<UUID> visibleWarehouseIds) {
+        return findAll(pageable, warehouseId, locationId, productId, null, visibleWarehouseIds);
+    }
+
+    public PagedResponse<StockLevelResponse> findAll(Pageable pageable, UUID warehouseId, UUID locationId, UUID productId,
+            String keyword, Collection<UUID> visibleWarehouseIds) {
         Specification<StockLevel> spec = StockLevelSpecification.warehouseIdIn(visibleWarehouseIds)
                 .and(StockLevelSpecification.hasWarehouseId(warehouseId))
                 .and(StockLevelSpecification.hasLocationId(locationId))
-                .and(StockLevelSpecification.hasProductId(productId));
+                .and(StockLevelSpecification.hasProductId(productId))
+                .and(StockLevelSpecification.hasKeyword(keyword, resolveProductIdsForKeyword(keyword)));
         Page<StockLevel> page = stockLevelRepository.findAll(spec, pageable);
         List<StockLevelResponse> content = new ArrayList<>(page.getContent().size());
         for (StockLevel stock : page.getContent()) {
@@ -98,7 +105,7 @@ public class StockLevelService {
     public PagedResponse<StockLevelExpandedResponse> findAllExpanded(Pageable pageable,
             UUID warehouseId, UUID locationId, UUID productId,
             boolean expandWarehouse, boolean expandLocation, boolean expandProduct) {
-        return findAllExpanded(pageable, warehouseId, locationId, productId,
+        return findAllExpanded(pageable, warehouseId, locationId, productId, null,
                 expandWarehouse, expandLocation, expandProduct, null);
     }
 
@@ -106,10 +113,19 @@ public class StockLevelService {
             UUID warehouseId, UUID locationId, UUID productId,
             boolean expandWarehouse, boolean expandLocation, boolean expandProduct,
             Collection<UUID> visibleWarehouseIds) {
+        return findAllExpanded(pageable, warehouseId, locationId, productId, null,
+                expandWarehouse, expandLocation, expandProduct, visibleWarehouseIds);
+    }
+
+    public PagedResponse<StockLevelExpandedResponse> findAllExpanded(Pageable pageable,
+            UUID warehouseId, UUID locationId, UUID productId, String keyword,
+            boolean expandWarehouse, boolean expandLocation, boolean expandProduct,
+            Collection<UUID> visibleWarehouseIds) {
         Specification<StockLevel> spec = StockLevelSpecification.warehouseIdIn(visibleWarehouseIds)
                 .and(StockLevelSpecification.hasWarehouseId(warehouseId))
                 .and(StockLevelSpecification.hasLocationId(locationId))
-                .and(StockLevelSpecification.hasProductId(productId));
+                .and(StockLevelSpecification.hasProductId(productId))
+                .and(StockLevelSpecification.hasKeyword(keyword, resolveProductIdsForKeyword(keyword)));
 
         Page<StockLevel> page = stockLevelRepository.findAll(spec, pageable);
         List<StockLevel> stocks = page.getContent();
@@ -552,6 +568,19 @@ public class StockLevelService {
             // Degrade gracefully: vẫn trả stock, chỉ không expand product
             log.warn("Failed to load product summaries for {} product IDs: {}", ids.size(), e.getMessage());
             return Map.of();
+        }
+    }
+
+    private List<UUID> resolveProductIdsForKeyword(String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return List.of();
+        }
+
+        try {
+            return productService.findIdsByKeyword(keyword, STOCK_KEYWORD_PRODUCT_LOOKUP_LIMIT);
+        } catch (Exception e) {
+            log.warn("Failed to resolve product IDs for stock keyword '{}': {}", keyword, e.getMessage());
+            return List.of();
         }
     }
 
