@@ -3,12 +3,15 @@ package com.common.dashboard;
 import com.common.dashboard.dto.DashboardFlowPointResponse;
 import com.common.dashboard.dto.DashboardMetricResponse;
 import com.common.dashboard.dto.DashboardNoticeResponse;
+import com.common.dashboard.dto.DashboardOperationsResponse;
 import com.common.dashboard.dto.DashboardSummaryResponse;
 import com.inbound_service.entity.PurchaseOrderStatus;
 import com.inbound_service.repository.PurchaseOrderRepository;
 import com.outbound_service.entity.SalesOrderStatus;
+import com.outbound_service.repository.PickingItemRepository;
 import com.outbound_service.repository.SalesOrderRepository;
 import com.warehouse_service.dto.response.StockSummaryResponse;
+import com.warehouse_service.repository.CycleCountRepository;
 import com.warehouse_service.repository.StockMovementRepository;
 import com.warehouse_service.service.StockLevelService;
 import com.outbound_service.repository.CustomerRepository;
@@ -29,8 +32,10 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -40,27 +45,45 @@ public class DashboardService {
     private static final int DEFAULT_NEAR_EXPIRY_DAYS = 30;
     private static final int DEFAULT_FLOW_DAYS = 7;
     private static final int MAX_FLOW_DAYS = 365;
+    private static final int OVERDUE_PICKING_HOURS = 24;
+    private static final int LARGE_VARIANCE_THRESHOLD = 10;
     private static final DateTimeFormatter SHORT_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM");
 
     private final StockLevelService stockLevelService;
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final SalesOrderRepository salesOrderRepository;
+    private final PickingItemRepository pickingItemRepository;
+    private final CycleCountRepository cycleCountRepository;
     private final StockMovementRepository stockMovementRepository;
     private final CustomerRepository customerRepository;
     private final AuditLogRepository auditLogRepository;
 
     public DashboardSummaryResponse getSummary(String period, Integer year) {
+        return getSummary(period, year, null);
+    }
+
+    public DashboardSummaryResponse getSummary(String period, Integer year, Set<UUID> visibleWarehouseIds) {
         DashboardRange range = resolveRange(period, year);
-        StockSummaryResponse stock = stockLevelService.getSummary(DEFAULT_NEAR_EXPIRY_DAYS);
-        long openPurchaseOrders = purchaseOrderRepository.countByStatusNotIn(
-                EnumSet.of(PurchaseOrderStatus.COMPLETED, PurchaseOrderStatus.CANCELLED));
-        long openSalesOrders = salesOrderRepository.countByStatusNotIn(
-                EnumSet.of(SalesOrderStatus.SHIPPED, SalesOrderStatus.CANCELLED));
+        StockSummaryResponse stock = stockLevelService.getSummary(DEFAULT_NEAR_EXPIRY_DAYS, visibleWarehouseIds);
+        boolean scoped = visibleWarehouseIds != null;
+        boolean emptyScope = scoped && visibleWarehouseIds.isEmpty();
+        long openPurchaseOrders = emptyScope ? 0 : scoped
+                ? purchaseOrderRepository.countByStatusNotInAndWarehouseIdIn(
+                        EnumSet.of(PurchaseOrderStatus.COMPLETED, PurchaseOrderStatus.CANCELLED), visibleWarehouseIds)
+                : purchaseOrderRepository.countByStatusNotIn(
+                        EnumSet.of(PurchaseOrderStatus.COMPLETED, PurchaseOrderStatus.CANCELLED));
+        long openSalesOrders = emptyScope ? 0 : scoped
+                ? salesOrderRepository.countByStatusNotInAndWarehouseIdIn(
+                        EnumSet.of(SalesOrderStatus.SHIPPED, SalesOrderStatus.CANCELLED), visibleWarehouseIds)
+                : salesOrderRepository.countByStatusNotIn(
+                        EnumSet.of(SalesOrderStatus.SHIPPED, SalesOrderStatus.CANCELLED));
+        DashboardOperationsResponse operations = buildOperations(stock, visibleWarehouseIds);
 
         return new DashboardSummaryResponse(
-                buildMetrics(stock, openPurchaseOrders, openSalesOrders, range),
-                buildFlow(range),
-                buildNotices(stock, openPurchaseOrders, openSalesOrders),
+                buildMetrics(stock, openPurchaseOrders, openSalesOrders, range, visibleWarehouseIds),
+                operations,
+                buildFlow(range, visibleWarehouseIds),
+                buildNotices(stock, openPurchaseOrders, openSalesOrders, operations),
                 buildRecentActivities());
     }
 
@@ -108,8 +131,13 @@ public class DashboardService {
             StockSummaryResponse stock,
             long openPurchaseOrders,
             long openSalesOrders,
-            DashboardRange range) {
-        java.math.BigDecimal totalRevenue = salesOrderRepository.sumTotalRevenueBetween(range.from(), range.to());
+            DashboardRange range,
+            Set<UUID> visibleWarehouseIds) {
+        boolean scoped = visibleWarehouseIds != null;
+        java.math.BigDecimal totalRevenue = scoped
+                ? visibleWarehouseIds.isEmpty() ? java.math.BigDecimal.ZERO
+                        : salesOrderRepository.sumTotalRevenueBetweenInWarehouses(range.from(), range.to(), visibleWarehouseIds)
+                : salesOrderRepository.sumTotalRevenueBetween(range.from(), range.to());
         long customerCount = customerRepository.count();
 
         return List.of(
@@ -139,6 +167,51 @@ public class DashboardService {
                         stock.lowStockCount() > 0 ? "rose" : "emerald"));
     }
 
+    private DashboardOperationsResponse buildOperations(StockSummaryResponse stock, Set<UUID> visibleWarehouseIds) {
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime overdueCutoff = now.minusHours(OVERDUE_PICKING_HOURS);
+        ZoneId zone = ZoneId.systemDefault();
+        OffsetDateTime todayStart = LocalDate.now(zone).atStartOfDay(zone).toOffsetDateTime();
+        OffsetDateTime tomorrowStart = LocalDate.now(zone).plusDays(1).atStartOfDay(zone).toOffsetDateTime();
+
+        boolean scoped = visibleWarehouseIds != null;
+        boolean emptyScope = scoped && visibleWarehouseIds.isEmpty();
+
+        long pendingPickingOrders = emptyScope ? 0 : scoped
+                ? salesOrderRepository.countByStatusInWarehouses(SalesOrderStatus.PICKING, visibleWarehouseIds)
+                : salesOrderRepository.countByStatus(SalesOrderStatus.PICKING);
+        long overduePickingTasks = emptyScope ? 0 : scoped
+                ? pickingItemRepository.countOverduePickingTasksInWarehouses(overdueCutoff, visibleWarehouseIds)
+                : pickingItemRepository.countOverduePickingTasks(overdueCutoff);
+        long outboundOrdersWithoutPicking = emptyScope ? 0 : scoped
+                ? salesOrderRepository.countWithoutPickingByStatusInWarehouses(SalesOrderStatus.PENDING, visibleWarehouseIds)
+                : salesOrderRepository.countWithoutPickingByStatus(SalesOrderStatus.PENDING);
+
+        long countedItems = emptyScope ? 0 : scoped
+                ? cycleCountRepository.countApprovedCountedItemsInWarehouses(visibleWarehouseIds)
+                : cycleCountRepository.countApprovedCountedItems();
+        long accurateItems = emptyScope ? 0 : scoped
+                ? cycleCountRepository.countAccurateApprovedCountedItemsInWarehouses(visibleWarehouseIds)
+                : cycleCountRepository.countAccurateApprovedCountedItems();
+        double accuracy = countedItems == 0 ? 100.0 : Math.round((accurateItems * 10000.0 / countedItems)) / 100.0;
+        long largeVarianceItems = emptyScope ? 0 : scoped
+                ? cycleCountRepository.countLargeVarianceItemsInWarehouses(LARGE_VARIANCE_THRESHOLD, visibleWarehouseIds)
+                : cycleCountRepository.countLargeVarianceItems(LARGE_VARIANCE_THRESHOLD);
+
+        long completedToday = auditLogRepository.countByModuleActionTypeBetween(
+                "SALES_ORDER", "SHIP", todayStart, tomorrowStart);
+
+        return new DashboardOperationsResponse(
+                pendingPickingOrders,
+                overduePickingTasks,
+                stock.lowStockCount(),
+                stock.nearExpiryCount(),
+                accuracy,
+                completedToday,
+                outboundOrdersWithoutPicking,
+                largeVarianceItems);
+    }
+
     private List<DashboardActivityResponse> buildRecentActivities() {
         return auditLogRepository.findTop5ByOrderByCreatedAtDesc().stream()
                 .map(log -> new DashboardActivityResponse(
@@ -152,9 +225,13 @@ public class DashboardService {
                 .toList();
     }
 
-    private List<DashboardFlowPointResponse> buildFlow(DashboardRange range) {
-        Map<LocalDate, StockMovementRepository.DailyMovementView> movementByDate = stockMovementRepository
-                .sumDailyMovements(range.from(), range.to())
+    private List<DashboardFlowPointResponse> buildFlow(DashboardRange range, Set<UUID> visibleWarehouseIds) {
+        boolean scoped = visibleWarehouseIds != null;
+        List<StockMovementRepository.DailyMovementView> movementRows = scoped
+                ? visibleWarehouseIds.isEmpty() ? List.of()
+                        : stockMovementRepository.sumDailyMovementsInWarehouses(range.from(), range.to(), visibleWarehouseIds)
+                : stockMovementRepository.sumDailyMovements(range.from(), range.to());
+        Map<LocalDate, StockMovementRepository.DailyMovementView> movementByDate = movementRows
                 .stream()
                 .collect(Collectors.toMap(
                         StockMovementRepository.DailyMovementView::getMovementDate,
@@ -207,7 +284,8 @@ public class DashboardService {
     private List<DashboardNoticeResponse> buildNotices(
             StockSummaryResponse stock,
             long openPurchaseOrders,
-            long openSalesOrders) {
+            long openSalesOrders,
+            DashboardOperationsResponse operations) {
         List<DashboardNoticeResponse> notices = new ArrayList<>();
 
         if (stock.lowStockCount() > 0) {
@@ -232,6 +310,29 @@ public class DashboardService {
                     "success",
                     "Hiện tại"));
         }
+        if (operations.outboundOrdersWithoutPicking() > 0) {
+            notices.add(new DashboardNoticeResponse(
+                    "Đơn xuất chưa có picking",
+                    "Có " + operations.outboundOrdersWithoutPicking() + " đơn xuất đang chờ tạo nhiệm vụ lấy hàng.",
+                    "warning",
+                    "Hiện tại"));
+        }
+        if (operations.overduePickingTasks() > 0) {
+            notices.add(new DashboardNoticeResponse(
+                    "Task picking quá hạn",
+                    "Có " + operations.overduePickingTasks() + " nhiệm vụ lấy hàng quá "
+                            + OVERDUE_PICKING_HOURS + " giờ chưa hoàn tất.",
+                    "error",
+                    "Hiện tại"));
+        }
+        if (operations.largeVarianceCycleCountItems() > 0) {
+            notices.add(new DashboardNoticeResponse(
+                    "Kiểm kê lệch lớn",
+                    "Có " + operations.largeVarianceCycleCountItems()
+                            + " dòng kiểm kê lệch từ " + LARGE_VARIANCE_THRESHOLD + " đơn vị trở lên.",
+                    "warning",
+                    "Hiện tại"));
+        }
         if (openPurchaseOrders > 0) {
             notices.add(new DashboardNoticeResponse(
                     "Đơn nhập đang xử lý",
@@ -247,7 +348,7 @@ public class DashboardService {
                     "Hiện tại"));
         }
 
-        return notices.stream().limit(4).toList();
+        return notices.stream().limit(6).toList();
     }
 
     private String dayLabel(DayOfWeek day) {

@@ -26,4 +26,13 @@ public interface PurchaseOrderRepository extends JpaRepository<PurchaseOrder, UU
 	boolean existsBySupplierId(UUID supplierId);
 
 	long countByStatusNotIn(Collection<PurchaseOrderStatus> statuses);
+
+	@Query("""
+			select count(p) from PurchaseOrder p
+			where p.status not in :statuses
+			  and p.warehouseId in :warehouseIds
+			""")
+	long countByStatusNotInAndWarehouseIdIn(
+			@Param("statuses") Collection<PurchaseOrderStatus> statuses,
+			@Param("warehouseIds") Collection<UUID> warehouseIds);
 }
