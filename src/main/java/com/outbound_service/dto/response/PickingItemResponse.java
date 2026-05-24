@@ -19,6 +19,8 @@ public record PickingItemResponse(
         String locationCode,
         String locationName,
         UUID warehouseId,
+        String warehouseCode,
+        String warehouseName,
         UUID assigneeId
 ) {
 }

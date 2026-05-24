@@ -60,7 +60,6 @@ public class SecurityConfig {
                             .requestMatchers(
                                     "/error",
                                     "/api/auth/login",
-                                    "/api/auth/introspect",
                                     "/api/auth/me",
                                     "/api/auth/refresh",
                                     "/api/auth/logout",

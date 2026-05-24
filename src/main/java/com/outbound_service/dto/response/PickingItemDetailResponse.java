@@ -10,6 +10,9 @@ public record PickingItemDetailResponse(
         UUID id,
         UUID soItemId,
         String salesOrderNumber,
+        UUID warehouseId,
+        String warehouseCode,
+        String warehouseName,
         
         // Product info
         UUID productId,

@@ -13,7 +13,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -60,24 +59,6 @@ public class AiController {
     @Operation(summary = "Hỏi đáp dữ liệu dạng Stream (SSE)", description = "Trả về câu trả lời theo thời gian thực")
     public SseEmitter askStream(@RequestBody AiAskRequest request) {
         return openStream(request);
-    }
-
-    // Xử lý câu hỏi AI dạng stream qua SSE.
-    @GetMapping(value = "/ask/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @Operation(summary = "Hỏi đáp dữ liệu dạng Stream legacy (GET)", description = "Giữ tương thích; client mới nên dùng POST body")
-    public SseEmitter askStreamLegacy(
-            @RequestParam String question,
-            @RequestParam(required = false) String sessionId,
-            @RequestParam(required = false) String requestId,
-            @RequestParam(required = false) String provider,
-            @RequestParam(required = false) String model) {
-        AiAskRequest req = new AiAskRequest();
-        req.setQuestion(question);
-        req.setSessionId(sessionId);
-        req.setRequestId(requestId);
-        req.setProvider(provider);
-        req.setModel(model);
-        return openStream(req);
     }
 
     private SseEmitter openStream(AiAskRequest request) {
