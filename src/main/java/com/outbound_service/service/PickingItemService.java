@@ -414,19 +414,23 @@ public class PickingItemService {
             return pickingItemMapper.toResponse(item); // Đã hoàn tất
         }
 
-        UpdatePickingItemRequest request = new UpdatePickingItemRequest(
-            item.getSoItem().getId(),
-            item.getProductId(),
-            item.getLocationId(),
-            item.getQtyToPick(),
-            item.getQtyToPick(), // Hoàn tất nên qtyPicked = qtyToPick
-            "PICKED",
-            item.getPickSequence(),
-            item.getLotNumber()
-        );
+        SalesOrder so = item.getSoItem().getSalesOrder();
+        assertSalesOrderAllowsPickingMutation(so);
+        PickingItemResponse before = pickingItemMapper.toResponse(item);
 
-        // Reuse update validation; stock on-hand is deducted only when the sales order is shipped.
-        return update(id, request);
+        int qtyToPick = item.getQtyToPick() == null ? 0 : item.getQtyToPick();
+        validateQuantities(qtyToPick, qtyToPick, PickingItemStatus.PICKED);
+        validatePickedAgainstOrderedQty(item.getSoItem(), qtyToPick, item.getId());
+
+        item.setQtyPicked(qtyToPick);
+        item.setStatus(PickingItemStatus.PICKED);
+        PickingItem saved = pickingItemRepository.save(item);
+        PickingItemResponse after = pickingItemMapper.toResponse(saved);
+
+        auditLogService.record("PICKING", "PICK", "Hoàn tất picking",
+                "PICKING_ITEM", saved.getId(), pickingEntityName(saved), before, after,
+                null, pickingMetadata(saved));
+        return after;
     }
 
 

@@ -13,6 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -77,6 +78,27 @@ public interface SalesOrderItemRepository
             @Param("toDate") java.time.OffsetDateTime toDate,
             @Param("limit") int limit);
 
+    @Query(value = """
+            select i.product_id as "productId",
+                   i.product_sku as "productSku",
+                   sum(i.shipped_qty) as "totalQty",
+                   sum(i.unit_price * i.shipped_qty) as "totalRevenue"
+            from sales_order_items i
+            join sales_orders o on i.sales_order_id = o.id
+            where o.status = 'SHIPPED'
+              and o.created_at >= :fromDate
+              and o.created_at < :toDate
+              and o.warehouse_id in (:warehouseIds)
+            group by i.product_id, i.product_sku
+            order by sum(i.shipped_qty) desc
+            limit :limit
+            """, nativeQuery = true)
+    List<TopSkuView> findTopSkusBetweenInWarehouses(
+            @Param("fromDate") java.time.OffsetDateTime fromDate,
+            @Param("toDate") java.time.OffsetDateTime toDate,
+            @Param("warehouseIds") java.util.Collection<UUID> warehouseIds,
+            @Param("limit") int limit);
+
     interface DailyRevenueView {
         java.time.LocalDate getOrderDate();
 
@@ -97,4 +119,93 @@ public interface SalesOrderItemRepository
     List<DailyRevenueView> sumDailyRevenue(
             @Param("fromDate") java.time.OffsetDateTime fromDate,
             @Param("toDate") java.time.OffsetDateTime toDate);
+
+    @Query(value = """
+            select cast(o.created_at as date) as "orderDate",
+                   coalesce(sum(i.unit_price * i.shipped_qty), 0) as "revenue"
+            from sales_order_items i
+            join sales_orders o on i.sales_order_id = o.id
+            where o.status = 'SHIPPED'
+              and o.created_at >= :fromDate
+              and o.created_at < :toDate
+              and o.warehouse_id in (:warehouseIds)
+            group by cast(o.created_at as date)
+            order by cast(o.created_at as date)
+            """, nativeQuery = true)
+    List<DailyRevenueView> sumDailyRevenueInWarehouses(
+            @Param("fromDate") java.time.OffsetDateTime fromDate,
+            @Param("toDate") java.time.OffsetDateTime toDate,
+            @Param("warehouseIds") java.util.Collection<UUID> warehouseIds);
+
+    interface ShippedItemReportView {
+        UUID getOrderId();
+
+        String getSoNumber();
+
+        OffsetDateTime getCreatedAt();
+
+        UUID getWarehouseId();
+
+        String getCustomerName();
+
+        UUID getProductId();
+
+        String getProductSku();
+
+        Integer getOrderedQty();
+
+        Integer getShippedQty();
+
+        java.math.BigDecimal getUnitPrice();
+
+        java.math.BigDecimal getRevenue();
+    }
+
+    @Query(value = """
+            select o.id as "orderId",
+                   o.so_number as "soNumber",
+                   o.created_at as "createdAt",
+                   o.warehouse_id as "warehouseId",
+                   o.customer_name as "customerName",
+                   i.product_id as "productId",
+                   i.product_sku as "productSku",
+                   i.ordered_qty as "orderedQty",
+                   i.shipped_qty as "shippedQty",
+                   i.unit_price as "unitPrice",
+                   coalesce(i.unit_price * i.shipped_qty, 0) as "revenue"
+            from sales_order_items i
+            join sales_orders o on i.sales_order_id = o.id
+            where o.status = 'SHIPPED'
+              and o.created_at >= :fromDate
+              and o.created_at < :toDate
+            order by o.created_at desc, o.so_number asc, i.line_number asc
+            """, nativeQuery = true)
+    List<ShippedItemReportView> findShippedItemDetailsBetween(
+            @Param("fromDate") java.time.OffsetDateTime fromDate,
+            @Param("toDate") java.time.OffsetDateTime toDate);
+
+    @Query(value = """
+            select o.id as "orderId",
+                   o.so_number as "soNumber",
+                   o.created_at as "createdAt",
+                   o.warehouse_id as "warehouseId",
+                   o.customer_name as "customerName",
+                   i.product_id as "productId",
+                   i.product_sku as "productSku",
+                   i.ordered_qty as "orderedQty",
+                   i.shipped_qty as "shippedQty",
+                   i.unit_price as "unitPrice",
+                   coalesce(i.unit_price * i.shipped_qty, 0) as "revenue"
+            from sales_order_items i
+            join sales_orders o on i.sales_order_id = o.id
+            where o.status = 'SHIPPED'
+              and o.created_at >= :fromDate
+              and o.created_at < :toDate
+              and o.warehouse_id in (:warehouseIds)
+            order by o.created_at desc, o.so_number asc, i.line_number asc
+            """, nativeQuery = true)
+    List<ShippedItemReportView> findShippedItemDetailsBetweenInWarehouses(
+            @Param("fromDate") java.time.OffsetDateTime fromDate,
+            @Param("toDate") java.time.OffsetDateTime toDate,
+            @Param("warehouseIds") java.util.Collection<UUID> warehouseIds);
 }

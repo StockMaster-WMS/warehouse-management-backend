@@ -6,6 +6,8 @@ import com.common.report.dto.TopSkuResponse;
 import com.outbound_service.entity.SalesOrderStatus;
 import com.outbound_service.repository.SalesOrderItemRepository;
 import com.outbound_service.repository.SalesOrderRepository;
+import com.warehouse_service.entity.Warehouse;
+import com.warehouse_service.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,8 +20,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,34 +33,74 @@ public class ReportService {
 
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderItemRepository salesOrderItemRepository;
+    private final WarehouseRepository warehouseRepository;
 
     public ReportSummaryResponse getSummary() {
-        return getSummary("30d", null);
+        return getSummary("30d", null, null, null, null);
     }
 
     public ReportSummaryResponse getSummary(String period, Integer year) {
-        ReportPeriodRange range = resolvePeriod(period, year);
-        BigDecimal totalRevenue = salesOrderRepository.sumTotalRevenueBetween(range.from(), range.to());
-        long totalOrders = salesOrderRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(
-                range.from(), range.to());
-        long activeOrders = salesOrderRepository.countByStatusNotInBetween(
-                List.of(SalesOrderStatus.CANCELLED, SalesOrderStatus.DRAFT),
-                range.from(),
-                range.to());
-        long shippedOrders = salesOrderRepository.countByStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
-                SalesOrderStatus.SHIPPED,
-                range.from(),
-                range.to());
+        return getSummary(period, year, null, null, null);
+    }
+
+    public ReportSummaryResponse getSummary(String period, Integer year, LocalDate fromDate, LocalDate toDate,
+            Collection<UUID> warehouseIds) {
+        ReportPeriodRange range = resolvePeriod(period, year, fromDate, toDate);
+        boolean scoped = warehouseIds != null;
+        List<UUID> scopedWarehouseIds = scoped ? warehouseIds.stream().distinct().toList() : null;
+
+        BigDecimal totalRevenue = scoped
+                ? scopedWarehouseIds.isEmpty() ? BigDecimal.ZERO
+                        : salesOrderRepository.sumTotalRevenueBetweenInWarehouses(range.from(), range.to(),
+                                scopedWarehouseIds)
+                : salesOrderRepository.sumTotalRevenueBetween(range.from(), range.to());
+        long totalOrders = scoped
+                ? scopedWarehouseIds.isEmpty() ? 0
+                        : salesOrderRepository.countCreatedBetweenInWarehouses(range.from(), range.to(),
+                                scopedWarehouseIds)
+                : salesOrderRepository.countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                        range.from(), range.to());
+        long activeOrders = scoped
+                ? scopedWarehouseIds.isEmpty() ? 0
+                        : salesOrderRepository.countByStatusNotInBetweenInWarehouses(
+                                List.of(SalesOrderStatus.CANCELLED, SalesOrderStatus.DRAFT),
+                                range.from(),
+                                range.to(),
+                                scopedWarehouseIds)
+                : salesOrderRepository.countByStatusNotInBetween(
+                        List.of(SalesOrderStatus.CANCELLED, SalesOrderStatus.DRAFT),
+                        range.from(),
+                        range.to());
+        long shippedOrders = scoped
+                ? scopedWarehouseIds.isEmpty() ? 0
+                        : salesOrderRepository.countByStatusBetweenInWarehouses(
+                                SalesOrderStatus.SHIPPED,
+                                range.from(),
+                                range.to(),
+                                scopedWarehouseIds)
+                : salesOrderRepository.countByStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                        SalesOrderStatus.SHIPPED,
+                        range.from(),
+                        range.to());
         
         double completionRate = activeOrders == 0 ? 0 : (double) shippedOrders * 100 / activeOrders;
         
-        List<RevenueTrendResponse> trend = getRevenueTrend(range);
-        List<TopSkuResponse> topSkus = getTopSkus(5, range.from(), range.to());
+        List<RevenueTrendResponse> trend = getRevenueTrend(range, scopedWarehouseIds);
+        List<TopSkuResponse> topSkus = getTopSkus(10, range.from(), range.to(), scopedWarehouseIds);
+        Warehouse selectedWarehouse = scopedWarehouseIds != null && scopedWarehouseIds.size() == 1
+                ? warehouseRepository.findById(scopedWarehouseIds.get(0)).orElse(null)
+                : null;
 
         return new ReportSummaryResponse(
             totalRevenue,
             totalOrders,
+            activeOrders,
+            shippedOrders,
             BigDecimal.valueOf(completionRate).setScale(2, RoundingMode.HALF_UP).doubleValue(),
+            range.fromDate(),
+            range.toDate().minusDays(1),
+            selectedWarehouse == null ? null : selectedWarehouse.getId(),
+            selectedWarehouse == null ? null : selectedWarehouse.getName(),
             trend,
             topSkus
         );
@@ -71,10 +115,15 @@ public class ReportService {
         return getDailyRevenueTrend(fromDay, days, from, to);
     }
 
-    private List<RevenueTrendResponse> getRevenueTrend(ReportPeriodRange range) {
+    private List<RevenueTrendResponse> getRevenueTrend(ReportPeriodRange range, Collection<UUID> warehouseIds) {
         if (range.yearly()) {
-            Map<Integer, BigDecimal> revenueByMonth = salesOrderItemRepository
-                    .sumDailyRevenue(range.from(), range.to())
+            List<SalesOrderItemRepository.DailyRevenueView> revenueRows = warehouseIds == null
+                    ? salesOrderItemRepository.sumDailyRevenue(range.from(), range.to())
+                    : warehouseIds.isEmpty()
+                            ? List.of()
+                            : salesOrderItemRepository.sumDailyRevenueInWarehouses(range.from(), range.to(),
+                                    warehouseIds);
+            Map<Integer, BigDecimal> revenueByMonth = revenueRows
                     .stream()
                     .collect(Collectors.groupingBy(
                             view -> view.getOrderDate().getMonthValue(),
@@ -92,7 +141,7 @@ public class ReportService {
 
         long days = ChronoUnit.DAYS.between(range.fromDate(), range.toDate());
         int visibleDays = (int) Math.max(1, days);
-        return getDailyRevenueTrend(range.fromDate(), visibleDays, range.from(), range.to());
+        return getDailyRevenueTrend(range.fromDate(), visibleDays, range.from(), range.to(), warehouseIds);
     }
 
     private List<RevenueTrendResponse> getDailyRevenueTrend(
@@ -100,8 +149,21 @@ public class ReportService {
             int days,
             OffsetDateTime from,
             OffsetDateTime to) {
-        Map<LocalDate, BigDecimal> revenueByDate = salesOrderItemRepository
-                .sumDailyRevenue(from, to)
+        return getDailyRevenueTrend(fromDay, days, from, to, null);
+    }
+
+    private List<RevenueTrendResponse> getDailyRevenueTrend(
+            LocalDate fromDay,
+            int days,
+            OffsetDateTime from,
+            OffsetDateTime to,
+            Collection<UUID> warehouseIds) {
+        List<SalesOrderItemRepository.DailyRevenueView> rows = warehouseIds == null
+                ? salesOrderItemRepository.sumDailyRevenue(from, to)
+                : warehouseIds.isEmpty()
+                        ? List.of()
+                        : salesOrderItemRepository.sumDailyRevenueInWarehouses(from, to, warehouseIds);
+        Map<LocalDate, BigDecimal> revenueByDate = rows
                 .stream()
                 .collect(Collectors.toMap(
                         SalesOrderItemRepository.DailyRevenueView::getOrderDate,
@@ -127,6 +189,37 @@ public class ReportService {
                 .toList();
     }
 
+    public List<SalesOrderItemRepository.ShippedItemReportView> getShippedItemDetails(
+            String period,
+            Integer year,
+            LocalDate fromDate,
+            LocalDate toDate,
+            Collection<UUID> warehouseIds) {
+        ReportPeriodRange range = resolvePeriod(period, year, fromDate, toDate);
+        if (warehouseIds == null) {
+            return salesOrderItemRepository.findShippedItemDetailsBetween(range.from(), range.to());
+        }
+        List<UUID> scopedWarehouseIds = warehouseIds.stream().distinct().toList();
+        if (scopedWarehouseIds.isEmpty()) {
+            return List.of();
+        }
+        return salesOrderItemRepository.findShippedItemDetailsBetweenInWarehouses(
+                range.from(), range.to(), scopedWarehouseIds);
+    }
+
+    private List<TopSkuResponse> getTopSkus(int limit, OffsetDateTime from, OffsetDateTime to,
+            Collection<UUID> warehouseIds) {
+        if (warehouseIds == null) {
+            return getTopSkus(limit, from, to);
+        }
+        if (warehouseIds.isEmpty()) {
+            return List.of();
+        }
+        return salesOrderItemRepository.findTopSkusBetweenInWarehouses(from, to, warehouseIds, limit).stream()
+                .map(this::toTopSkuResponse)
+                .toList();
+    }
+
     private TopSkuResponse toTopSkuResponse(SalesOrderItemRepository.TopSkuView v) {
         return new TopSkuResponse(
                 v.getProductId(),
@@ -136,10 +229,28 @@ public class ReportService {
         );
     }
 
-    private ReportPeriodRange resolvePeriod(String rawPeriod, Integer selectedYear) {
+    ReportPeriodRange resolvePeriod(String rawPeriod, Integer selectedYear, LocalDate customFromDate,
+            LocalDate customToDate) {
         String period = rawPeriod == null || rawPeriod.isBlank() ? "30d" : rawPeriod;
         ZoneId zone = ZoneId.systemDefault();
         LocalDate today = LocalDate.now(zone);
+
+        if (customFromDate != null || customToDate != null) {
+            LocalDate fromDate = customFromDate == null ? today.minusDays(29) : customFromDate;
+            LocalDate inclusiveToDate = customToDate == null ? today : customToDate;
+            if (inclusiveToDate.isBefore(fromDate)) {
+                LocalDate swap = fromDate;
+                fromDate = inclusiveToDate;
+                inclusiveToDate = swap;
+            }
+            LocalDate exclusiveToDate = inclusiveToDate.plusDays(1);
+            return new ReportPeriodRange(
+                    fromDate.atStartOfDay(zone).toOffsetDateTime(),
+                    exclusiveToDate.atStartOfDay(zone).toOffsetDateTime(),
+                    fromDate,
+                    exclusiveToDate,
+                    false);
+        }
 
         if ("year".equalsIgnoreCase(period)) {
             int year = selectedYear == null ? today.getYear() : selectedYear;
@@ -168,7 +279,7 @@ public class ReportService {
                 false);
     }
 
-    private record ReportPeriodRange(
+    record ReportPeriodRange(
             OffsetDateTime from,
             OffsetDateTime to,
             LocalDate fromDate,
