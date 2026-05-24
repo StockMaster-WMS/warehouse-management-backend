@@ -35,6 +35,8 @@ public interface PickingItemMapper {
     @Mapping(target = "barcodeEan13", ignore = true)
     @Mapping(target = "locationCode", ignore = true)
     @Mapping(target = "locationName", ignore = true)
+    @Mapping(target = "warehouseCode", ignore = true)
+    @Mapping(target = "warehouseName", ignore = true)
     PickingItemResponse toResponse(PickingItem pickingItem);
 
     @AfterMapping

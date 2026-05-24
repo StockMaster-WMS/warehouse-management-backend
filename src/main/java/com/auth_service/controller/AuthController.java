@@ -2,12 +2,9 @@ package com.auth_service.controller;
 
 import com.auth_service.dto.request.IntrospectRequest;
 import com.auth_service.dto.request.LoginRequest;
-import com.auth_service.dto.request.RegisterRequest;
 import com.auth_service.dto.request.UpdateProfileRequest;
 import com.auth_service.dto.request.ChangePasswordRequest;
-import com.auth_service.dto.response.IntrospectResponse;
 import com.auth_service.dto.response.LoginResponse;
-import com.auth_service.dto.response.RegisterResponse;
 import com.auth_service.service.AuthService;
 import com.common.api.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,7 +18,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -49,13 +45,6 @@ public class AuthController {
     @Value("${auth.cookie.same-site:auto}")
     private String refreshCookieSameSite;
 
-    @PostMapping("/register")
-    @PreAuthorize("hasAuthority('ADMIN')")
-    @Operation(summary = "Đăng ký tài khoản")
-    public ApiResponse<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
-        return ApiResponse.success("Đăng ký thành công", authService.register(request));
-    }
-
     @PostMapping("/login")
     @Operation(summary = "Đăng nhập")
     public ApiResponse<LoginResponse> login(
@@ -65,12 +54,6 @@ public class AuthController {
         AuthService.AuthTokens tokens = authService.login(request);
         addRefreshCookie(httpRequest, response, tokens.refreshToken());
         return ApiResponse.success("Đăng nhập thành công", toLoginResponse(tokens));
-    }
-
-    @PostMapping("/introspect")
-    @Operation(summary = "Kiểm tra token nội bộ")
-    public ApiResponse<IntrospectResponse> introspect(@Valid @RequestBody IntrospectRequest request) {
-        return ApiResponse.success("Kiểm tra token thành công", authService.introspect(request));
     }
 
     @GetMapping("/me")

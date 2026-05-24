@@ -15,7 +15,9 @@ import com.product_service.service.ProductService;
 import com.product_service.dto.response.ProductResponse;
 import com.auth_service.repository.UserRepository;
 import com.warehouse_service.entity.Location;
+import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.repository.LocationRepository;
+import com.warehouse_service.repository.WarehouseRepository;
 import com.warehouse_service.service.LocationService;
 import com.warehouse_service.dto.response.LocationResponse;
 import com.warehouse_service.service.StockLevelService;
@@ -65,6 +67,7 @@ public class PickingItemService {
     private final StockLevelService stockLevelService;
     private final ProductRepository productRepository;
     private final LocationRepository locationRepository;
+    private final WarehouseRepository warehouseRepository;
     private final ProductService productService;
     private final LocationService locationService;
     private final AuditLogService auditLogService;
@@ -113,8 +116,9 @@ public class PickingItemService {
                 .toList();
         Map<UUID, Product> productsById = loadProductsById(mappedRows);
         Map<UUID, Location> locationsById = loadLocationsById(mappedRows);
+        Map<UUID, Warehouse> warehousesById = loadWarehousesById(mappedRows);
         List<PickingItemResponse> rows = mappedRows.stream()
-                .map(row -> enrichListRow(row, productsById, locationsById))
+                .map(row -> enrichListRow(row, productsById, locationsById, warehousesById))
                 .toList();
         return new PagedResponse<>(
                 rows,
@@ -127,9 +131,11 @@ public class PickingItemService {
     // Bổ sung thông tin sản phẩm và vị trí cho dòng hiển thị danh sách.
     private PickingItemResponse enrichListRow(PickingItemResponse row,
             Map<UUID, Product> productsById,
-            Map<UUID, Location> locationsById) {
+            Map<UUID, Location> locationsById,
+            Map<UUID, Warehouse> warehousesById) {
         Product product = productsById.get(row.productId());
         Location location = locationsById.get(row.locationId());
+        Warehouse warehouse = warehousesById.get(row.warehouseId());
 
         String productSku = row.productSku();
         if ((productSku == null || productSku.isBlank()) && product != null) {
@@ -154,6 +160,8 @@ public class PickingItemService {
                 locationCode,
                 locationCode,
                 row.warehouseId(),
+                warehouse == null ? null : warehouse.getCode(),
+                warehouse == null ? null : warehouse.getName(),
                 row.assigneeId());
     }
 
@@ -183,6 +191,20 @@ public class PickingItemService {
         }
         return locationRepository.findAllById(ids).stream()
                 .collect(Collectors.toMap(Location::getId, Function.identity()));
+    }
+
+    private Map<UUID, Warehouse> loadWarehousesById(List<PickingItemResponse> rows) {
+        Set<UUID> ids = new HashSet<>();
+        for (PickingItemResponse row : rows) {
+            if (row.warehouseId() != null) {
+                ids.add(row.warehouseId());
+            }
+        }
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return warehouseRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Warehouse::getId, Function.identity()));
     }
 
     // Tạo mới picking item và cộng lượng reserved tương ứng.
@@ -392,19 +414,23 @@ public class PickingItemService {
             return pickingItemMapper.toResponse(item); // Đã hoàn tất
         }
 
-        UpdatePickingItemRequest request = new UpdatePickingItemRequest(
-            item.getSoItem().getId(),
-            item.getProductId(),
-            item.getLocationId(),
-            item.getQtyToPick(),
-            item.getQtyToPick(), // Hoàn tất nên qtyPicked = qtyToPick
-            "PICKED",
-            item.getPickSequence(),
-            item.getLotNumber()
-        );
+        SalesOrder so = item.getSoItem().getSalesOrder();
+        assertSalesOrderAllowsPickingMutation(so);
+        PickingItemResponse before = pickingItemMapper.toResponse(item);
 
-        // Reuse update validation; stock on-hand is deducted only when the sales order is shipped.
-        return update(id, request);
+        int qtyToPick = item.getQtyToPick() == null ? 0 : item.getQtyToPick();
+        validateQuantities(qtyToPick, qtyToPick, PickingItemStatus.PICKED);
+        validatePickedAgainstOrderedQty(item.getSoItem(), qtyToPick, item.getId());
+
+        item.setQtyPicked(qtyToPick);
+        item.setStatus(PickingItemStatus.PICKED);
+        PickingItem saved = pickingItemRepository.save(item);
+        PickingItemResponse after = pickingItemMapper.toResponse(saved);
+
+        auditLogService.record("PICKING", "PICK", "Hoàn tất picking",
+                "PICKING_ITEM", saved.getId(), pickingEntityName(saved), before, after,
+                null, pickingMetadata(saved));
+        return after;
     }
 
 
@@ -579,14 +605,50 @@ public class PickingItemService {
         String salesOrderNumber = item.getSoItem() == null || item.getSoItem().getSalesOrder() == null
                 ? "đơn xuất"
                 : item.getSoItem().getSalesOrder().getSoNumber();
+        String productLabel = pickingProductLabel(item);
+        String locationLabel = pickingLocationLabel(item);
+        String quantityLabel = item.getQtyToPick() == null ? "" : " · SL " + item.getQtyToPick();
         notificationService.create(new CreateNotificationCommand(
                 item.getAssigneeId(),
                 NotificationType.PICKING_ASSIGNED,
                 NotificationSeverity.INFO,
                 "Bạn được giao nhiệm vụ picking",
-                "Bạn được giao picking cho " + salesOrderNumber + ", productId=" + item.getProductId(),
+                "Đơn " + salesOrderNumber + " · " + productLabel + quantityLabel + " · Vị trí " + locationLabel,
                 "PICKING_ITEM",
                 item.getId()));
+    }
+
+    private String pickingProductLabel(PickingItem item) {
+        try {
+            ProductResponse product = productService.findById(item.getProductId());
+            if (product == null) {
+                return "Sản phẩm chưa rõ";
+            }
+            if (product.sku() != null && !product.sku().isBlank() && product.name() != null && !product.name().isBlank()) {
+                return product.name() + " (" + product.sku() + ")";
+            }
+            if (product.name() != null && !product.name().isBlank()) {
+                return product.name();
+            }
+            if (product.sku() != null && !product.sku().isBlank()) {
+                return product.sku();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to build picking notification product label productId={}", item.getProductId(), e);
+        }
+        return "Sản phẩm chưa rõ";
+    }
+
+    private String pickingLocationLabel(PickingItem item) {
+        try {
+            LocationResponse location = locationService.findById(item.getLocationId());
+            if (location != null && location.code() != null && !location.code().isBlank()) {
+                return location.code();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to build picking notification location label locationId={}", item.getLocationId(), e);
+        }
+        return "chưa rõ";
     }
 
     private void assertAssigneeCanWorkInWarehouse(UUID assigneeId, UUID warehouseId) {
@@ -636,6 +698,8 @@ public class PickingItemService {
             throw new AppException(ErrorCode.INTERNAL_SERVER_ERROR, "Không thể lấy thông tin vị trí kho");
         }
 
+        Warehouse warehouse = warehouseRepository.findById(so.getWarehouseId()).orElse(null);
+
         // Get current available qty at this location for this product+lot
         // Tối ưu: sử dụng getSingleStockRowIfExists thay vì listAllStocksForProduct để
         // giảm API calls
@@ -658,6 +722,9 @@ public class PickingItemService {
                 item.getId(),
                 item.getSoItem().getId(),
                 so.getSoNumber(),
+                so.getWarehouseId(),
+                warehouse == null ? null : warehouse.getCode(),
+                warehouse == null ? null : warehouse.getName(),
 
                 productData.id(),
                 productData.sku(),

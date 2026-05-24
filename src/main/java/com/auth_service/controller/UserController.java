@@ -66,13 +66,6 @@ public class UserController {
                 userService.findUsers(pageable, keyword, role, active));
     }
 
-    @GetMapping("/all")
-    @PreAuthorize("hasAuthority('ADMIN')")
-    @Operation(summary = "Danh sách người dùng không phân trang")
-    public ApiResponse<List<UserResponse>> getAllWithoutPaging() {
-        return ApiResponse.success("Lấy danh sách người dùng thành công", userService.getAllUsers());
-    }
-
     @GetMapping("/warehouse-staff")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Danh sách nhân viên kho đang hoạt động", description = "Dùng cho các màn điều phối nhiệm vụ kho như picking và putaway")

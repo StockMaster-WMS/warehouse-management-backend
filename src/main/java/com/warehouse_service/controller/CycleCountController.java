@@ -117,13 +117,6 @@ public class CycleCountController {
                         staffOnly(authentication)));
     }
 
-    @PostMapping("/{id}/complete")
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
-    @Operation(summary = "Alias cũ của gửi duyệt")
-    public ApiResponse<CycleCountResponse> complete(@PathVariable UUID id, Authentication authentication) {
-        return submit(id, authentication);
-    }
-
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Duyệt kết quả kiểm kê và điều chỉnh tồn kho")

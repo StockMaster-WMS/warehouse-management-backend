@@ -78,6 +78,43 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID>, J
 			@Param("fromDate") java.time.OffsetDateTime fromDate,
 			@Param("toDate") java.time.OffsetDateTime toDate);
 
+	@Query("""
+			SELECT COUNT(o) FROM SalesOrder o
+			WHERE o.createdAt >= :fromDate
+			  AND o.createdAt < :toDate
+			  AND o.warehouseId IN :warehouseIds
+			""")
+	long countCreatedBetweenInWarehouses(
+			@Param("fromDate") java.time.OffsetDateTime fromDate,
+			@Param("toDate") java.time.OffsetDateTime toDate,
+			@Param("warehouseIds") Collection<UUID> warehouseIds);
+
+	@Query("""
+			SELECT COUNT(o) FROM SalesOrder o
+			WHERE o.status = :status
+			  AND o.createdAt >= :fromDate
+			  AND o.createdAt < :toDate
+			  AND o.warehouseId IN :warehouseIds
+			""")
+	long countByStatusBetweenInWarehouses(
+			@Param("status") SalesOrderStatus status,
+			@Param("fromDate") java.time.OffsetDateTime fromDate,
+			@Param("toDate") java.time.OffsetDateTime toDate,
+			@Param("warehouseIds") Collection<UUID> warehouseIds);
+
+	@Query("""
+			SELECT COUNT(o) FROM SalesOrder o
+			WHERE o.status NOT IN :statuses
+			  AND o.createdAt >= :fromDate
+			  AND o.createdAt < :toDate
+			  AND o.warehouseId IN :warehouseIds
+			""")
+	long countByStatusNotInBetweenInWarehouses(
+			@Param("statuses") Collection<SalesOrderStatus> statuses,
+			@Param("fromDate") java.time.OffsetDateTime fromDate,
+			@Param("toDate") java.time.OffsetDateTime toDate,
+			@Param("warehouseIds") Collection<UUID> warehouseIds);
+
 	@Query("SELECT COALESCE(SUM(i.unitPrice * i.shippedQty), 0) " +
 			"FROM SalesOrderItem i JOIN i.salesOrder o " +
 			"WHERE o.status = 'SHIPPED' AND o.createdAt >= :fromDate")
@@ -89,4 +126,13 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID>, J
 	java.math.BigDecimal sumTotalRevenueBetween(
 			@Param("fromDate") java.time.OffsetDateTime fromDate,
 			@Param("toDate") java.time.OffsetDateTime toDate);
+
+	@Query("SELECT COALESCE(SUM(i.unitPrice * i.shippedQty), 0) " +
+			"FROM SalesOrderItem i JOIN i.salesOrder o " +
+			"WHERE o.status = 'SHIPPED' AND o.createdAt >= :fromDate AND o.createdAt < :toDate " +
+			"AND o.warehouseId IN :warehouseIds")
+	java.math.BigDecimal sumTotalRevenueBetweenInWarehouses(
+			@Param("fromDate") java.time.OffsetDateTime fromDate,
+			@Param("toDate") java.time.OffsetDateTime toDate,
+			@Param("warehouseIds") Collection<UUID> warehouseIds);
 }

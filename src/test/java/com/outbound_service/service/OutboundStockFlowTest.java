@@ -5,7 +5,6 @@ import com.common.api.stock.StockReserveCommand;
 import com.common.audit.AuditLogService;
 import com.common.notification.NotificationService;
 import com.auth_service.repository.UserRepository;
-import com.outbound_service.dto.request.UpdatePickingItemRequest;
 import com.outbound_service.dto.response.PickingItemResponse;
 import com.outbound_service.dto.response.SalesOrderResponse;
 import com.outbound_service.entity.PickingItem;
@@ -22,6 +21,7 @@ import com.outbound_service.repository.SalesOrderRepository;
 import com.product_service.repository.ProductRepository;
 import com.product_service.service.ProductService;
 import com.warehouse_service.repository.LocationRepository;
+import com.warehouse_service.repository.WarehouseRepository;
 import com.warehouse_service.service.LocationService;
 import com.warehouse_service.service.StockLevelService;
 import com.warehouse_service.service.WarehouseAccessService;
@@ -39,7 +39,6 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -59,6 +58,8 @@ class OutboundStockFlowTest {
     private ProductRepository productRepository;
     @Mock
     private LocationRepository locationRepository;
+    @Mock
+    private WarehouseRepository warehouseRepository;
     @Mock
     private ProductService productService;
     @Mock
@@ -90,6 +91,7 @@ class OutboundStockFlowTest {
                 stockLevelService,
                 productRepository,
                 locationRepository,
+                warehouseRepository,
                 productService,
                 locationService,
                 auditLogService,
@@ -122,21 +124,9 @@ class OutboundStockFlowTest {
         PickingItem pick = pickingItem(pickId, line, productId, locationId, 5, 0, PickingItemStatus.PENDING);
 
         when(pickingItemRepository.findByIdWithSoAndOrder(pickId)).thenReturn(Optional.of(pick));
-        when(salesOrderItemRepository.findByIdWithSalesOrderForUpdate(lineId)).thenReturn(Optional.of(line));
         when(pickingItemRepository.findBySoItem_Id(lineId)).thenReturn(List.of(pick));
         when(pickingItemRepository.save(any(PickingItem.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(pickingItemMapper.toResponse(any(PickingItem.class))).thenAnswer(invocation -> pickingResponse(invocation.getArgument(0)));
-        doAnswer(invocation -> {
-            UpdatePickingItemRequest request = invocation.getArgument(0);
-            PickingItem target = invocation.getArgument(1);
-            target.setProductId(request.productId());
-            target.setLocationId(request.locationId());
-            target.setQtyToPick(request.qtyToPick());
-            target.setQtyPicked(request.qtyPicked());
-            target.setPickSequence(request.pickSequence());
-            target.setLotNumber(request.lotNumber() == null ? "" : request.lotNumber());
-            return null;
-        }).when(pickingItemMapper).updateEntity(any(UpdatePickingItemRequest.class), any(PickingItem.class));
 
         PickingItemResponse response = pickingItemService.completeMobile(pickId);
 
@@ -234,6 +224,8 @@ class OutboundStockFlowTest {
                 null,
                 null,
                 item.getSoItem().getSalesOrder().getWarehouseId(),
+                null,
+                null,
                 item.getAssigneeId());
     }
 
