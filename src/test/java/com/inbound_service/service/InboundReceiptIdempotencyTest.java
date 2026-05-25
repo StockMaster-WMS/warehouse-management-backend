@@ -15,6 +15,8 @@ import com.inbound_service.repository.PurchaseOrderRepository;
 import com.inbound_service.repository.PutawayTaskRepository;
 import com.product_service.repository.ProductRepository;
 import com.product_service.repository.SupplierRepository;
+import com.warehouse_service.repository.LocationRepository;
+import com.warehouse_service.repository.StockLevelRepository;
 import com.warehouse_service.service.StockLevelService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,6 +63,8 @@ class InboundReceiptIdempotencyTest {
                 mock(AuditLogService.class),
                 mock(SupplierRepository.class),
                 mock(ProductRepository.class),
+                mock(LocationRepository.class),
+                mock(StockLevelRepository.class),
                 objectMapper);
     }
 
@@ -100,6 +104,7 @@ class InboundReceiptIdempotencyTest {
                 List.of(new ReceiveLineRequest(
                         UUID.fromString("00000000-0000-0000-0000-000000000003"),
                         receivedQty,
+                        UUID.fromString("00000000-0000-0000-0000-000000000002"),
                         "line")));
     }
 
@@ -144,6 +149,7 @@ class InboundReceiptIdempotencyTest {
                     Map<String, Object> value = new LinkedHashMap<>();
                     value.put("poItemId", line.poItemId());
                     value.put("receivedQty", line.receivedQty());
+                    value.put("locationId", line.locationId());
                     value.put("note", line.note() == null ? "" : line.note().trim());
                     return value;
                 })

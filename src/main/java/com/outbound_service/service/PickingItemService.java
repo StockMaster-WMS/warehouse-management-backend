@@ -423,8 +423,12 @@ public class PickingItemService {
 
     // Parse chuỗi trạng thái về enum PickingItemStatus.
     private static PickingItemStatus parsePickingStatus(String raw) {
+        String normalized = raw == null ? "" : raw.trim().toUpperCase();
+        if (Set.of("COMPLETED", "COMPLETE", "DONE").contains(normalized)) {
+            return PickingItemStatus.PICKED;
+        }
         try {
-            return PickingItemStatus.valueOf(raw.trim().toUpperCase());
+            return PickingItemStatus.valueOf(normalized);
         } catch (IllegalArgumentException e) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Trạng thái picking không hợp lệ: " + raw);
         }

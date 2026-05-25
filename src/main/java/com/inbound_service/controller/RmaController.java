@@ -3,11 +3,13 @@ package com.inbound_service.controller;
 import com.common.api.ApiResponse;
 import com.inbound_service.dto.request.CancelRmaRequest;
 import com.inbound_service.dto.request.CreateRmaRequest;
+import com.inbound_service.dto.request.DispositionRmaItemRequest;
 import com.inbound_service.dto.request.ReceiveRmaRequest;
 import com.inbound_service.dto.request.RejectRmaRequest;
 import com.inbound_service.dto.response.RmaReportResponse;
 import com.inbound_service.dto.response.RmaResponse;
 import com.inbound_service.service.RmaService;
+import com.warehouse_service.dto.response.LocationResponse;
 import com.warehouse_service.service.WarehouseAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -56,6 +58,19 @@ public class RmaController {
                         warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
+    @GetMapping("/return-locations")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @Operation(summary = "Lấy vị trí nhận hàng trả theo tình trạng")
+    public ApiResponse<List<LocationResponse>> getReturnLocations(
+            @RequestParam UUID warehouseId,
+            @RequestParam(required = false) String condition,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
+        return ApiResponse.success("Lấy vị trí nhận hàng trả thành công",
+                rmaService.getReturnLocations(warehouseId, condition,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
     @Operation(summary = "Lấy chi tiết yêu cầu trả hàng")
@@ -100,6 +115,18 @@ public class RmaController {
             Authentication authentication) {
         return ApiResponse.success("Ghi nhận nhận hàng thành công",
                 rmaService.receiveItem(id, request, currentUserId(authentication),
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
+    }
+
+    @PostMapping("/{id}/items/{itemId}/disposition")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
+    @Operation(summary = "Xử lý sau kiểm định hàng trả")
+    public ApiResponse<RmaResponse> dispositionItem(@PathVariable UUID id,
+            @PathVariable UUID itemId,
+            @Valid @RequestBody DispositionRmaItemRequest request,
+            Authentication authentication) {
+        return ApiResponse.success("Xử lý hàng trả thành công",
+                rmaService.dispositionItem(id, itemId, request, currentUserId(authentication),
                         warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 

@@ -49,12 +49,13 @@ public class LocationController {
             @RequestParam(defaultValue = "desc") String sortDir,
             @Parameter(description = "ID kho") @RequestParam(required = false) UUID warehouseId,
             @Parameter(description = "Zone") @RequestParam(required = false) String zone,
+            @Parameter(description = "Loại vị trí") @RequestParam(required = false) String locationType,
             @RequestParam(required = false) String keyword,
             Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
         return ApiResponse.success("Lấy danh sách vị trí thành công",
-                locationService.findAll(pageable, warehouseId, zone, keyword,
+                locationService.findAll(pageable, warehouseId, zone, locationType, keyword,
                         warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 

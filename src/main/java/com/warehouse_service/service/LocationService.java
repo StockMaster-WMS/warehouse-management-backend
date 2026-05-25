@@ -40,14 +40,20 @@ public class LocationService {
 
     // Lấy danh sách vị trí có phân trang và bộ lọc.
     public PagedResponse<LocationResponse> findAll(Pageable pageable, UUID warehouseId, String zone, String keyword) {
-        return findAll(pageable, warehouseId, zone, keyword, null);
+        return findAll(pageable, warehouseId, zone, null, keyword, null);
     }
 
     public PagedResponse<LocationResponse> findAll(Pageable pageable, UUID warehouseId, String zone, String keyword,
             Collection<UUID> visibleWarehouseIds) {
+        return findAll(pageable, warehouseId, zone, null, keyword, visibleWarehouseIds);
+    }
+
+    public PagedResponse<LocationResponse> findAll(Pageable pageable, UUID warehouseId, String zone, String locationType,
+            String keyword, Collection<UUID> visibleWarehouseIds) {
         Specification<Location> spec = LocationSpecification.warehouseIdIn(visibleWarehouseIds)
                 .and(LocationSpecification.hasWarehouseId(warehouseId))
                 .and(LocationSpecification.hasZone(zone))
+                .and(LocationSpecification.hasLocationType(locationType))
                 .and(LocationSpecification.hasKeyword(keyword));
         Page<Location> page = locationRepository.findAll(spec, pageable);
         Page<LocationResponse> mapped = page.map(locationMapper::toResponse);

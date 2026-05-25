@@ -36,6 +36,13 @@ public interface WarehouseRepository extends JpaRepository<Warehouse, UUID>, Jpa
 	@Query("select distinct w.id from Warehouse w join w.managers m where m.id = :managerId")
 	List<UUID> findIdsByManagerId(@Param("managerId") UUID managerId);
 
+	@EntityGraph(attributePaths = "managers")
+	@Query("select distinct w from Warehouse w join w.managers m where m.id = :managerId")
+	List<Warehouse> findByManagerId(@Param("managerId") UUID managerId);
+
+	@EntityGraph(attributePaths = "managers")
+	List<Warehouse> findByIdIn(Collection<UUID> ids);
+
 	@Query("select count(distinct w) from Warehouse w join w.managers m where m.id = :managerId")
 	long countByManagerId(@Param("managerId") UUID managerId);
 

@@ -8,6 +8,7 @@ public record InboundReceiptItemResponse(
         UUID productId,
         String productSku,
         Integer receivedQty,
+        UUID locationId,
         String note
 ) {
 }

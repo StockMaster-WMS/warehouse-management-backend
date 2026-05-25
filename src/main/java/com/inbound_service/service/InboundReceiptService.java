@@ -14,6 +14,7 @@ import com.product_service.repository.ProductRepository;
 import com.warehouse_service.service.StockLevelService;
 import com.inbound_service.dto.request.CreateInboundReceiptRequest;
 import com.inbound_service.dto.request.ReceiveLineRequest;
+import com.inbound_service.dto.response.InboundLocationSuggestionResponse;
 import com.inbound_service.dto.response.InboundPrintItemResponse;
 import com.inbound_service.dto.response.InboundPrintResponse;
 import com.inbound_service.dto.response.InboundReceiptResponse;
@@ -24,6 +25,10 @@ import com.inbound_service.repository.InboundReceiptSpecification;
 import com.inbound_service.repository.PoItemRepository;
 import com.inbound_service.repository.PurchaseOrderRepository;
 import com.inbound_service.repository.PutawayTaskRepository;
+import com.warehouse_service.entity.Location;
+import com.warehouse_service.entity.StockLevel;
+import com.warehouse_service.repository.LocationRepository;
+import com.warehouse_service.repository.StockLevelRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -52,6 +57,8 @@ public class InboundReceiptService {
     private final AuditLogService auditLogService;
     private final SupplierRepository supplierRepository;
     private final ProductRepository productRepository;
+    private final LocationRepository locationRepository;
+    private final StockLevelRepository stockLevelRepository;
     private final ObjectMapper objectMapper;
 
     private static final EnumSet<PurchaseOrderStatus> RECEIVABLE_STATUSES =
@@ -100,11 +107,15 @@ public class InboundReceiptService {
 
         // 3. Kiểm tra số lượng từng dòng, kể cả khi request chứa nhiều dòng cho cùng một poItem
         Map<UUID, Integer> requestedQtyByPoItem = new HashMap<>();
+        Map<ReceiveLineRequest, UUID> lineLocations = new IdentityHashMap<>();
         for (ReceiveLineRequest line : request.items()) {
             if (line.receivedQty() == null || line.receivedQty() <= 0) {
                 throw new AppException(ErrorCode.BAD_REQUEST, "Số lượng nhận phải lớn hơn 0");
             }
 
+            UUID lineLocationId = resolveLineLocationId(request, line);
+            assertLocationInWarehouse(lineLocationId, po.getWarehouseId());
+            lineLocations.put(line, lineLocationId);
             requestedQtyByPoItem.merge(line.poItemId(), line.receivedQty(), Integer::sum);
         }
 
@@ -141,16 +152,21 @@ public class InboundReceiptService {
                     .productId(poItem.getProductId())
                     .productSku(poItem.getProductSku())
                     .receivedQty(line.receivedQty())
+                    .locationId(lineLocations.get(line))
                     .note(line.note())
                     .build());
         }
 
         // 4. Tạo phiếu nhập kho
+        UUID primaryLocationId = request.locationId() != null
+                ? request.locationId()
+                : receiptItems.get(0).getLocationId();
+
         InboundReceipt receipt = InboundReceipt.builder()
                 .receiptNumber(generateUniqueReceiptNumber())
                 .purchaseOrder(po)
                 .warehouseId(po.getWarehouseId())
-                .locationId(request.locationId())
+                .locationId(primaryLocationId)
                 .status(InboundReceiptStatus.RECEIVED)
                 .note(request.note())
                 .receivedDate(LocalDate.now())
@@ -180,7 +196,7 @@ public class InboundReceiptService {
         for (InboundReceiptItem receiptItem : receiptItems) {
             StockAdjustCommand cmd = new StockAdjustCommand(
                     po.getWarehouseId(),
-                    request.locationId(),
+                    receiptItem.getLocationId(),
                     receiptItem.getProductId(),
                     null,
                     receiptItem.getReceivedQty(),
@@ -200,7 +216,7 @@ public class InboundReceiptService {
                     .inboundReceipt(receipt)
                     .productId(receiptItem.getProductId())
                     .qtyToPutaway(receiptItem.getReceivedQty())
-                    .suggestedLocationId(request.locationId())
+                    .suggestedLocationId(receiptItem.getLocationId())
                     .status(PutawayStatus.PENDING)
                     .build();
             putawayTaskRepository.save(task);
@@ -212,7 +228,8 @@ public class InboundReceiptService {
         metadata.put("purchaseOrderId", po.getId());
         metadata.put("poNumber", po.getPoNumber());
         metadata.put("warehouseId", po.getWarehouseId());
-        metadata.put("locationId", request.locationId());
+        metadata.put("locationId", primaryLocationId);
+        metadata.put("lineLocationIds", receiptItems.stream().map(InboundReceiptItem::getLocationId).toList());
         metadata.put("lineCount", receiptItems.size());
         auditLogService.record("INBOUND_RECEIPT", "CREATE", "Tạo phiếu nhập kho",
                 "INBOUND_RECEIPT", receipt.getId(), receipt.getReceiptNumber(), null, response,
@@ -325,6 +342,79 @@ public class InboundReceiptService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<InboundLocationSuggestionResponse> suggestLocations(UUID warehouseId, UUID productId, int limit) {
+        return suggestLocations(warehouseId, productId, null, limit);
+    }
+
+    @Transactional(readOnly = true)
+    public List<InboundLocationSuggestionResponse> suggestLocations(UUID warehouseId, UUID productId, UUID poItemId, int limit) {
+        if (poItemId != null) {
+            PoItem poItem = poItemRepository.findById(poItemId)
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Khong tim thay dong don nhap"));
+            productId = poItem.getProductId();
+            if (warehouseId == null && poItem.getPurchaseOrder() != null) {
+                warehouseId = poItem.getPurchaseOrder().getWarehouseId();
+            }
+        }
+        if (warehouseId == null || productId == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Can truyen poItemId hoac cap warehouseId/productId");
+        }
+        int max = limit <= 0 ? 20 : Math.min(limit, 50);
+
+        List<Location> allLocations = locationRepository.findByWarehouseId(warehouseId).stream()
+                .filter(this::isInboundStorageLocation)
+                .toList();
+        Map<UUID, Location> locationById = allLocations.stream()
+                .collect(java.util.stream.Collectors.toMap(Location::getId, java.util.function.Function.identity()));
+
+        List<StockLevel> productStocks = stockLevelRepository
+                .findByWarehouseIdAndProductIdWithDetails(warehouseId, productId).stream()
+                .filter(stock -> stock.getLocation() != null)
+                .filter(stock -> safeQty(stock.getQtyOnHand()) > 0)
+                .filter(stock -> locationById.containsKey(stock.getLocation().getId()))
+                .sorted(Comparator
+                        .comparing((StockLevel stock) -> stock.getLocation().getCode(), String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(stock -> normalizeLot(stock.getLotNumber())))
+                .toList();
+
+        Set<UUID> usedLocationIds = stockLevelRepository.findByWarehouseId(warehouseId).stream()
+                .filter(stock -> stock.getLocation() != null)
+                .filter(stock -> safeQty(stock.getQtyOnHand()) > 0)
+                .map(stock -> stock.getLocation().getId())
+                .collect(java.util.stream.Collectors.toSet());
+
+        LinkedHashMap<UUID, InboundLocationSuggestionResponse> suggestions = new LinkedHashMap<>();
+        for (StockLevel stock : productStocks) {
+            Location location = stock.getLocation();
+            suggestions.putIfAbsent(location.getId(), toSuggestion(location, true, false, stock.getQtyOnHand()));
+            if (suggestions.size() >= max) {
+                return new ArrayList<>(suggestions.values());
+            }
+        }
+
+        allLocations.stream()
+                .filter(location -> !usedLocationIds.contains(location.getId()))
+                .sorted(Comparator.comparing(Location::getCode, String.CASE_INSENSITIVE_ORDER))
+                .forEach(location -> {
+                    if (suggestions.size() < max) {
+                        suggestions.putIfAbsent(location.getId(), toSuggestion(location, false, true, 0));
+                    }
+                });
+
+        if (suggestions.size() < max) {
+            allLocations.stream()
+                    .sorted(Comparator.comparing(Location::getCode, String.CASE_INSENSITIVE_ORDER))
+                    .forEach(location -> {
+                        if (suggestions.size() < max) {
+                            suggestions.putIfAbsent(location.getId(), toSuggestion(location, false, false, null));
+                        }
+                    });
+        }
+
+        return new ArrayList<>(suggestions.values());
+    }
+
     // ---- helpers ----
 
     private Optional<InboundReceiptResponse> findExistingIdempotentReceipt(String idempotencyKey, String requestHash) {
@@ -353,6 +443,65 @@ public class InboundReceiptService {
         return key;
     }
 
+    private UUID resolveLineLocationId(CreateInboundReceiptRequest request, ReceiveLineRequest line) {
+        UUID locationId = line.locationId() != null ? line.locationId() : request.locationId();
+        if (locationId == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Moi dong nhan hang phai co locationId hoac phieu phai co locationId fallback");
+        }
+        return locationId;
+    }
+
+    private void assertLocationInWarehouse(UUID locationId, UUID warehouseId) {
+        Location location = locationRepository.findById(locationId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Khong tim thay vi tri nhan hang"));
+        if (location.getWarehouse() == null || !warehouseId.equals(location.getWarehouse().getId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Vi tri nhan hang khong thuoc kho cua don nhap");
+        }
+        if (!isInboundStorageLocation(location)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Vi tri nhan hang phai dang hoat dong, AVAILABLE va khong phai vi tri RMA");
+        }
+    }
+
+    private boolean isInboundStorageLocation(Location location) {
+        if (location == null || !Boolean.TRUE.equals(location.getIsActive())) {
+            return false;
+        }
+        String status = StringUtils.hasText(location.getStatus())
+                ? location.getStatus().trim().toUpperCase(Locale.ROOT)
+                : "AVAILABLE";
+        if (Set.of("BLOCKED", "MAINTENANCE", "INACTIVE", "DISABLED").contains(status)) {
+            return false;
+        }
+        String type = normalizeLocationType(location.getLocationType());
+        return !type.startsWith("RMA_") && !"STAGING".equals(type);
+    }
+
+    private InboundLocationSuggestionResponse toSuggestion(Location location, boolean existingProductLocation,
+            boolean emptyLocation, Integer qtyOnHand) {
+        return new InboundLocationSuggestionResponse(
+                location.getId(),
+                location.getCode(),
+                location.getLocationType(),
+                location.getZone(),
+                existingProductLocation,
+                emptyLocation,
+                qtyOnHand);
+    }
+
+    private int safeQty(Integer qty) {
+        return qty == null ? 0 : qty;
+    }
+
+    private String normalizeLocationType(String locationType) {
+        return StringUtils.hasText(locationType) ? locationType.trim().toUpperCase(Locale.ROOT) : "";
+    }
+
+    private String normalizeLot(String lotNumber) {
+        return lotNumber == null ? "" : lotNumber.trim();
+    }
+
     private String requestHash(CreateInboundReceiptRequest request) {
         Map<String, Object> canonical = new LinkedHashMap<>();
         canonical.put("purchaseOrderId", request.purchaseOrderId());
@@ -363,6 +512,7 @@ public class InboundReceiptService {
                     Map<String, Object> value = new LinkedHashMap<>();
                     value.put("poItemId", line.poItemId());
                     value.put("receivedQty", line.receivedQty());
+                    value.put("locationId", line.locationId());
                     value.put("note", line.note() == null ? "" : line.note().trim());
                     return value;
                 })
