@@ -4,6 +4,7 @@ import com.common.util.UuidUtils;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
@@ -45,6 +46,24 @@ public class RmaItem {
 
     @Column(name = "condition", length = 50)
     private String condition;
+
+    @Column(name = "disposition_action", length = 40)
+    private String dispositionAction;
+
+    @Column(name = "disposition_location_id")
+    private UUID dispositionLocationId;
+
+    @Column(name = "disposition_at")
+    private OffsetDateTime dispositionAt;
+
+    @Column(name = "disposition_by")
+    private UUID dispositionBy;
+
+    @Column(name = "disposition_note", length = 500)
+    private String dispositionNote;
+
+    @Column(name = "supplier_return_rma_id")
+    private UUID supplierReturnRmaId;
 
     private String notes;
 

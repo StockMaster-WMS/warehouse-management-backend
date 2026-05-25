@@ -36,6 +36,9 @@ public class InboundReceiptItem {
     @Column(name = "received_qty", nullable = false)
     private Integer receivedQty;
 
+    @Column(name = "location_id", nullable = false)
+    private UUID locationId;
+
     @Column(name = "note")
     private String note;
 

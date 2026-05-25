@@ -34,6 +34,15 @@ public class LocationSpecification {
         };
     }
 
+    public static Specification<Location> hasLocationType(String locationType) {
+        return (root, query, cb) -> {
+            if (!StringUtils.hasText(locationType)) {
+                return null;
+            }
+            return cb.equal(cb.upper(root.get("locationType")), locationType.trim().toUpperCase());
+        };
+    }
+
     public static Specification<Location> hasKeyword(String keyword) {
         return (root, query, cb) -> {
             if (!StringUtils.hasText(keyword)) {

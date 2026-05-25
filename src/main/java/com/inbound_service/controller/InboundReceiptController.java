@@ -3,6 +3,7 @@ package com.inbound_service.controller;
 import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.inbound_service.dto.request.CreateInboundReceiptRequest;
+import com.inbound_service.dto.response.InboundLocationSuggestionResponse;
 import com.inbound_service.dto.response.InboundPrintResponse;
 import com.inbound_service.dto.response.InboundReceiptResponse;
 import com.inbound_service.entity.InboundReceiptStatus;
@@ -86,6 +87,18 @@ public class InboundReceiptController {
     public ApiResponse<List<InboundReceiptResponse>> getByPurchaseOrder(@PathVariable UUID purchaseOrderId) {
         return ApiResponse.success("Lấy danh sách phiếu nhập thành công",
                 receiptService.findByPurchaseOrderId(purchaseOrderId));
+    }
+
+    @GetMapping("/location-suggestions")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @Operation(summary = "Goi y vi tri nhap hang theo san pham", description = "Uu tien vi tri cu cua san pham trong kho, sau do toi vi tri trong.")
+    public ApiResponse<List<InboundLocationSuggestionResponse>> suggestLocations(
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) UUID productId,
+            @RequestParam(required = false) UUID poItemId,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ApiResponse.success("Goi y vi tri nhap hang thanh cong",
+                receiptService.suggestLocations(warehouseId, productId, poItemId, limit));
     }
 
     @GetMapping(value = "/export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

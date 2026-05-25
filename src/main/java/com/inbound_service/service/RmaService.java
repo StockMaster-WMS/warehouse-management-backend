@@ -10,6 +10,7 @@ import com.common.notification.NotificationSeverity;
 import com.common.notification.NotificationType;
 import com.common.util.CodeGenerator;
 import com.inbound_service.dto.request.CreateRmaRequest;
+import com.inbound_service.dto.request.DispositionRmaItemRequest;
 import com.inbound_service.dto.request.ReceiveRmaRequest;
 import com.inbound_service.dto.response.RmaReportResponse;
 import com.inbound_service.dto.response.RmaResponse;
@@ -26,6 +27,7 @@ import com.product_service.dto.response.ProductSummaryResponse;
 import com.product_service.entity.Supplier;
 import com.product_service.repository.SupplierRepository;
 import com.product_service.service.ProductService;
+import com.warehouse_service.dto.response.LocationResponse;
 import com.warehouse_service.entity.Location;
 import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.repository.LocationRepository;
@@ -65,6 +67,9 @@ public class RmaService {
     private final SupplierRepository supplierRepository;
     private final CustomerRepository customerRepository;
     private final SalesOrderRepository salesOrderRepository;
+
+    private static final Set<String> RMA_LOCATION_TYPES = Set.of(
+            "RMA_DAMAGED", "RMA_EXPIRED", "RMA_QUARANTINE", "RMA_RESTOCK");
 
     public List<RmaResponse> getAll(String keyword, String status, String reason, UUID warehouseId,
             OffsetDateTime createdFrom, OffsetDateTime createdTo) {
@@ -106,6 +111,35 @@ public class RmaService {
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy yêu cầu trả hàng"));
         assertVisible(rma, visibleWarehouseIds);
         return toResponse(rma);
+    }
+
+    public List<LocationResponse> getReturnLocations(UUID warehouseId, String condition,
+            Collection<UUID> visibleWarehouseIds) {
+        if (warehouseId == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "warehouseId là bắt buộc");
+        }
+        if (visibleWarehouseIds != null && !visibleWarehouseIds.contains(warehouseId)) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Bạn không được thao tác kho này");
+        }
+        String preferredType = expectedReturnLocationType(normalizeCondition(condition));
+        return locationRepository.findByWarehouseId(warehouseId).stream()
+                .filter(location -> Boolean.TRUE.equals(location.getIsActive()))
+                .filter(location -> location.getStatus() == null || "AVAILABLE".equalsIgnoreCase(location.getStatus()))
+                .filter(location -> {
+                    String type = normalizeLocationType(location.getLocationType());
+                    return preferredType.equals(type)
+                            || ("RMA_QUARANTINE".equals(preferredType) && RMA_LOCATION_TYPES.contains(type));
+                })
+                .sorted((left, right) -> {
+                    int leftRank = preferredType.equals(normalizeLocationType(left.getLocationType())) ? 0 : 1;
+                    int rightRank = preferredType.equals(normalizeLocationType(right.getLocationType())) ? 0 : 1;
+                    if (leftRank != rightRank) {
+                        return Integer.compare(leftRank, rightRank);
+                    }
+                    return String.CASE_INSENSITIVE_ORDER.compare(left.getCode(), right.getCode());
+                })
+                .map(this::toLocationResponse)
+                .toList();
     }
 
     @Transactional
@@ -195,6 +229,10 @@ public class RmaService {
                 .findFirst()
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy mặt hàng trong RMA"));
 
+        if (StringUtils.hasText(item.getDispositionAction())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Dòng hàng trả đã được xử lý sau kiểm định, không thể sửa nhận hàng");
+        }
+
         if (rma.getStatus() == Rma.RmaStatus.COMPLETED || rma.getStatus() == Rma.RmaStatus.CANCELLED) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không thể nhận hàng cho RMA đã kết thúc");
         }
@@ -217,8 +255,9 @@ public class RmaService {
         if (newReceivedQty > 0 && newLocationId == null) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Cần chọn vị trí nhận hàng trả lại");
         }
+        String normalizedCondition = normalizeCondition(request.condition());
         if (newReceivedQty > 0) {
-            assertLocationInWarehouse(newLocationId, rma.getWarehouseId());
+            assertReturnReceiveLocation(newLocationId, rma.getWarehouseId(), normalizedCondition);
         }
 
         RmaResponse before = toResponse(rma);
@@ -226,7 +265,7 @@ public class RmaService {
 
         item.setReceivedQty(newReceivedQty);
         item.setReceivedLocationId(newReceivedQty > 0 ? newLocationId : null);
-        item.setCondition(normalizeCondition(request.condition()));
+        item.setCondition(normalizedCondition);
         item.setNotes(request.notes());
 
         if (hasAnyReceivedItem(rma)) {
@@ -255,6 +294,52 @@ public class RmaService {
     }
 
     @Transactional
+    public RmaResponse dispositionItem(UUID rmaId, UUID itemId, DispositionRmaItemRequest request,
+            UUID actorId, Collection<UUID> visibleWarehouseIds) {
+        Rma rma = rmaRepository.findByIdWithItemsForUpdate(rmaId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy RMA"));
+        assertVisible(rma, visibleWarehouseIds);
+        if (isSupplierReturn(rma)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Phiếu trả NCC không dùng bước xử lý sau kiểm định hàng khách trả");
+        }
+        if (rma.getStatus() == Rma.RmaStatus.CANCELLED || rma.getStatus() == Rma.RmaStatus.COMPLETED) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không thể xử lý RMA đã kết thúc");
+        }
+
+        RmaItem item = rma.getItems().stream()
+                .filter(i -> i.getId().equals(itemId))
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy dòng hàng trả"));
+        if (safeQty(item.getReceivedQty()) <= 0 || item.getReceivedLocationId() == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Dòng hàng trả chưa được nhận vào vị trí RMA");
+        }
+        if (StringUtils.hasText(item.getDispositionAction())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Dòng hàng trả đã được xử lý sau kiểm định");
+        }
+
+        String action = normalizeDispositionAction(request.action());
+        RmaResponse before = toResponse(rma);
+        UUID supplierReturnRmaId = null;
+        if ("RETURN_TO_SUPPLIER".equals(action)) {
+            supplierReturnRmaId = createLinkedSupplierReturn(rma, item, request.supplierId(), actorId, request.note());
+        }
+        applyDispositionStock(rma, item, action, request.targetLocationId());
+
+        item.setDispositionAction(action);
+        item.setDispositionLocationId("RESTOCK".equals(action) ? request.targetLocationId() : null);
+        item.setDispositionAt(OffsetDateTime.now());
+        item.setDispositionBy(actorId);
+        item.setDispositionNote(StringUtils.hasText(request.note()) ? request.note().trim() : null);
+        item.setSupplierReturnRmaId(supplierReturnRmaId);
+
+        Rma saved = rmaRepository.save(rma);
+        RmaResponse after = toResponse(saved);
+        auditLogService.record("RMA", "DISPOSITION", "Xử lý sau kiểm định hàng trả: " + action,
+                "RMA", saved.getId(), displayRma(saved), before, after, request.note(), rmaMetadata(saved));
+        return after;
+    }
+
+    @Transactional
     public RmaResponse complete(UUID id, UUID completedBy, Collection<UUID> visibleWarehouseIds) {
         Rma rma = rmaRepository.findByIdWithItemsForUpdate(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy RMA"));
@@ -280,6 +365,13 @@ public class RmaService {
         }
 
         RmaResponse before = toResponse(rma);
+        for (RmaItem item : rma.getItems()) {
+            if (!isSupplierReturn(rma) && safeQty(item.getReceivedQty()) > 0
+                    && !StringUtils.hasText(item.getDispositionAction())) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Dòng hàng trả " + item.getId() + " chưa được xử lý sau kiểm định");
+            }
+        }
         rma.setStatus(Rma.RmaStatus.COMPLETED);
         rma.setCompletedAt(OffsetDateTime.now());
         rma.setCompletedBy(completedBy);
@@ -424,6 +516,7 @@ public class RmaService {
                     ProductSummaryResponse product = productMap.get(i.getProductId());
                     Location receivedLocation = i.getReceivedLocationId() == null ? null : locationMap.get(i.getReceivedLocationId());
                     Location returnLocation = i.getReturnLocationId() == null ? null : locationMap.get(i.getReturnLocationId());
+                    Location dispositionLocation = i.getDispositionLocationId() == null ? null : locationMap.get(i.getDispositionLocationId());
                     int expected = safeQty(i.getExpectedQty());
                     int received = safeQty(i.getReceivedQty());
                     return new RmaResponse.ItemResponse(
@@ -441,6 +534,13 @@ public class RmaService {
                             returnLocation == null ? null : returnLocation.getCode(),
                             i.getLotNumber(),
                             i.getCondition(),
+                            i.getDispositionAction(),
+                            i.getDispositionLocationId(),
+                            dispositionLocation == null ? null : dispositionLocation.getCode(),
+                            i.getDispositionAt(),
+                            i.getDispositionBy(),
+                            i.getDispositionNote(),
+                            i.getSupplierReturnRmaId(),
                             i.getNotes()
                     );
                 }).toList();
@@ -641,6 +741,134 @@ public class RmaService {
         }
     }
 
+    private void applyDispositionStock(Rma rma, RmaItem item, String action, UUID targetLocationId) {
+        int receivedQty = safeQty(item.getReceivedQty());
+        UUID rmaLocationId = item.getReceivedLocationId();
+        if ("KEEP_QUARANTINE".equals(action)) {
+            return;
+        }
+        if ("RESTOCK".equals(action)) {
+            if (targetLocationId == null) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "RESTOCK cần chọn vị trí nhập lại tồn bán được");
+            }
+            assertSellableRestockLocation(targetLocationId, rma.getWarehouseId());
+            moveRmaStock(rma, item, rmaLocationId, targetLocationId, receivedQty, "RESTOCK");
+            return;
+        }
+        if ("RETURN_TO_SUPPLIER".equals(action)) {
+            return;
+        }
+        if ("SCRAP".equals(action)) {
+            stockLevelService.adjust(new StockAdjustCommand(
+                    rma.getWarehouseId(),
+                    rmaLocationId,
+                    item.getProductId(),
+                    normalizeLot(item.getLotNumber()),
+                    -receivedQty,
+                    "RMA_DISPOSITION:" + rma.getId() + ":" + item.getId() + ":" + action,
+                    "RMA",
+                    rma.getId()
+            ));
+            return;
+        }
+        throw new AppException(ErrorCode.BAD_REQUEST, "Hành động xử lý RMA không hợp lệ: " + action);
+    }
+
+    private UUID createLinkedSupplierReturn(Rma customerRma, RmaItem sourceItem, UUID supplierId,
+            UUID actorId, String note) {
+        if (supplierId == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "RETURN_TO_SUPPLIER can chon supplierId de tao phieu tra nha cung cap");
+        }
+        Supplier supplier = supplierRepository.findById(supplierId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Khong tim thay nha cung cap"));
+
+        Rma supplierRma = Rma.builder()
+                .rmaNumber(CodeGenerator.generate("RMA"))
+                .returnType("SUPPLIER")
+                .supplierId(supplier.getId())
+                .supplierName(supplier.getName())
+                .warehouseId(customerRma.getWarehouseId())
+                .reason(StringUtils.hasText(note)
+                        ? note.trim()
+                        : "Tao tu xu ly hang khach tra " + customerRma.getRmaNumber())
+                .status(Rma.RmaStatus.REQUESTED)
+                .createdBy(actorId)
+                .build();
+
+        RmaItem supplierItem = RmaItem.builder()
+                .rma(supplierRma)
+                .productId(sourceItem.getProductId())
+                .expectedQty(safeQty(sourceItem.getReceivedQty()))
+                .lotNumber(normalizeLot(sourceItem.getLotNumber()))
+                .returnLocationId(sourceItem.getReceivedLocationId())
+                .notes("Tao tu RMA " + customerRma.getRmaNumber() + ", item " + sourceItem.getId())
+                .build();
+        supplierRma.setItems(List.of(supplierItem));
+
+        Rma saved = rmaRepository.save(supplierRma);
+        RmaResponse response = toResponse(saved);
+        auditLogService.record("RMA", "CREATE", "Tao phieu tra NCC tu hang khach tra",
+                "RMA", saved.getId(), displayRma(saved), null, response, note, rmaMetadata(saved));
+        notifyCreated(saved);
+        return saved.getId();
+    }
+
+    private void moveRmaStock(Rma rma, RmaItem item, UUID fromLocationId, UUID toLocationId, int qty, String action) {
+        stockLevelService.adjust(new StockAdjustCommand(
+                rma.getWarehouseId(),
+                fromLocationId,
+                item.getProductId(),
+                normalizeLot(item.getLotNumber()),
+                -qty,
+                "RMA_DISPOSITION:" + rma.getId() + ":" + item.getId() + ":" + action + ":OUT",
+                "RMA",
+                rma.getId()
+        ));
+        stockLevelService.adjust(new StockAdjustCommand(
+                rma.getWarehouseId(),
+                toLocationId,
+                item.getProductId(),
+                normalizeLot(item.getLotNumber()),
+                qty,
+                "RMA_DISPOSITION:" + rma.getId() + ":" + item.getId() + ":" + action + ":IN",
+                "RMA",
+                rma.getId()
+        ));
+    }
+
+    private String normalizeDispositionAction(String action) {
+        if (!StringUtils.hasText(action)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Hành động xử lý là bắt buộc");
+        }
+        String normalized = action.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "RESTOCK", "PUT_BACK", "SELLABLE" -> "RESTOCK";
+            case "KEEP_QUARANTINE", "QUARANTINE", "HOLD" -> "KEEP_QUARANTINE";
+            case "SCRAP", "DISPOSE", "DESTROY" -> "SCRAP";
+            case "RETURN_TO_SUPPLIER", "SUPPLIER_RETURN", "RETURN_SUPPLIER" -> "RETURN_TO_SUPPLIER";
+            default -> throw new AppException(ErrorCode.BAD_REQUEST, "Hành động xử lý RMA không hợp lệ: " + action);
+        };
+    }
+
+    private void assertSellableRestockLocation(UUID locationId, UUID warehouseId) {
+        Location location = locationRepository.findById(locationId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy vị trí nhập lại tồn"));
+        if (location.getWarehouse() == null || !warehouseId.equals(location.getWarehouse().getId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Vị trí nhập lại tồn không thuộc kho của RMA");
+        }
+        if (!Boolean.TRUE.equals(location.getIsActive())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Vị trí nhập lại tồn đã bị vô hiệu hóa");
+        }
+        if (location.getStatus() != null && !"AVAILABLE".equalsIgnoreCase(location.getStatus())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Vị trí nhập lại tồn không ở trạng thái AVAILABLE");
+        }
+        String type = normalizeLocationType(location.getLocationType());
+        if (RMA_LOCATION_TYPES.contains(type) || "STAGING".equals(type)) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "RESTOCK phải chọn vị trí tồn bán được, không chọn vị trí RMA/STAGING");
+        }
+    }
+
     private void assertVisible(Rma rma, Collection<UUID> visibleWarehouseIds) {
         if (visibleWarehouseIds != null
                 && (visibleWarehouseIds.isEmpty() || !visibleWarehouseIds.contains(rma.getWarehouseId()))) {
@@ -654,6 +882,71 @@ public class RmaService {
         if (location.getWarehouse() == null || !warehouseId.equals(location.getWarehouse().getId())) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Vị trí nhận hàng trả không thuộc kho của RMA");
         }
+    }
+
+    private void assertReturnReceiveLocation(UUID locationId, UUID warehouseId, String condition) {
+        Location location = locationRepository.findById(locationId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy vị trí nhận hàng trả"));
+        if (location.getWarehouse() == null || !warehouseId.equals(location.getWarehouse().getId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Vị trí nhận hàng trả không thuộc kho của RMA");
+        }
+        if (!Boolean.TRUE.equals(location.getIsActive())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Vị trí nhận hàng trả đã bị vô hiệu hóa");
+        }
+        if (location.getStatus() != null && !"AVAILABLE".equalsIgnoreCase(location.getStatus())) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Vị trí nhận hàng trả không ở trạng thái AVAILABLE");
+        }
+        String actualType = normalizeLocationType(location.getLocationType());
+        String expectedType = expectedReturnLocationType(condition);
+        if (!RMA_LOCATION_TYPES.contains(actualType)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Vị trí nhận hàng trả phải là vị trí RMA riêng, không được chọn vị trí thường");
+        }
+        if (!expectedType.equals(actualType) && !"RMA_QUARANTINE".equals(actualType)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Tình trạng " + (condition == null ? "chưa xác định" : condition)
+                            + " phải nhận vào vị trí " + expectedType + " hoặc RMA_QUARANTINE");
+        }
+    }
+
+    private String expectedReturnLocationType(String condition) {
+        String normalized = condition == null ? "" : condition.trim().toUpperCase(Locale.ROOT);
+        if (Set.of("EXPIRED", "EXPIRY", "HET_HAN", "HẾT_HẠN", "QUA_HAN", "OUT_OF_DATE").contains(normalized)) {
+            return "RMA_EXPIRED";
+        }
+        if (Set.of("DAMAGED", "DEFECTIVE", "BROKEN", "FAULTY", "ERROR", "LOI", "LỖI", "HU_HONG", "HƯ_HỎNG").contains(normalized)) {
+            return "RMA_DAMAGED";
+        }
+        if (Set.of("GOOD", "OK", "SELLABLE", "RESTOCK", "NEW", "NORMAL").contains(normalized)) {
+            return "RMA_RESTOCK";
+        }
+        return "RMA_QUARANTINE";
+    }
+
+    private String normalizeLocationType(String locationType) {
+        return StringUtils.hasText(locationType) ? locationType.trim().toUpperCase(Locale.ROOT) : "";
+    }
+
+    private LocationResponse toLocationResponse(Location location) {
+        return new LocationResponse(
+                location.getId(),
+                location.getWarehouse() == null ? null : location.getWarehouse().getId(),
+                location.getCode(),
+                location.getZone(),
+                location.getAisle(),
+                location.getRack(),
+                location.getLevel(),
+                location.getBin(),
+                location.getLocationType(),
+                location.getMaxWeightKg(),
+                location.getMaxVolumeCm3(),
+                location.getPickSequence(),
+                location.getStatus(),
+                location.getIsActive(),
+                location.getIsColdZone(),
+                location.getIsHazmatZone(),
+                location.getIsHeavyZone(),
+                location.getCreatedAt());
     }
 
     private void approveCustomerReturn(Rma rma) {
@@ -775,7 +1068,10 @@ public class RmaService {
             return Map.of();
         }
         List<UUID> ids = rma.getItems().stream()
-                .flatMap(item -> java.util.stream.Stream.of(item.getReceivedLocationId(), item.getReturnLocationId()))
+                .flatMap(item -> java.util.stream.Stream.of(
+                        item.getReceivedLocationId(),
+                        item.getReturnLocationId(),
+                        item.getDispositionLocationId()))
                 .filter(Objects::nonNull)
                 .distinct()
                 .toList();

@@ -8,15 +8,14 @@ import java.util.List;
 import java.util.UUID;
 
 public record CreateInboundReceiptRequest(
-        @NotNull(message = "Đơn nhập không được để trống")
+        @NotNull(message = "Don nhap khong duoc de trong")
         UUID purchaseOrderId,
 
-        @NotNull(message = "Vị trí nhận hàng không được để trống")
         UUID locationId,
 
         String note,
 
-        @NotEmpty(message = "Cần ít nhất một dòng nhận hàng")
+        @NotEmpty(message = "Can it nhat mot dong nhan hang")
         @Valid
         List<ReceiveLineRequest> items
 ) {

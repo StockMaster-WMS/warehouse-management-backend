@@ -51,6 +51,13 @@ public record RmaResponse(
         String returnLocationCode,
         String lotNumber,
         String condition,
+        String dispositionAction,
+        UUID dispositionLocationId,
+        String dispositionLocationCode,
+        OffsetDateTime dispositionAt,
+        UUID dispositionBy,
+        String dispositionNote,
+        UUID supplierReturnRmaId,
         String notes
     ) {}
 }

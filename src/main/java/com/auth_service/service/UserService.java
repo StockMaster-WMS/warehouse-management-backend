@@ -144,17 +144,21 @@ public class UserService {
             throw new AppException(ErrorCode.BAD_REQUEST, "Email đã tồn tại");
         }
 
+        Set<Role> roles = resolveRoles(request.roles());
+        Set<Warehouse> requestedWarehouses = resolveWarehouses(request.warehouseIds());
+
         UserAccount user = UserAccount.builder()
                 .username(username)
                 .email(email)
                 .fullName(normalizeFullName(request.fullName()))
                 .passwordHash(passwordEncoder.encode(request.password()))
-                .roles(resolveRoles(request.roles()))
-                .warehouses(resolveWarehouses(request.warehouseIds()))
+                .roles(roles)
+                .warehouses(hasRole(roles, "WAREHOUSE_STAFF") ? requestedWarehouses : new LinkedHashSet<>())
                 .isActive(true)
                 .build();
 
         UserAccount saved = userRepository.save(user);
+        syncManagerWarehouses(saved, roles, request.warehouseIds());
         UserResponse response = toUserResponse(saved);
         auditLogService.record("USER", "CREATE", "Tạo người dùng",
                 "USER", saved.getId(), saved.getUsername(), null, response, null, userMetadata(saved));
@@ -190,13 +194,15 @@ public class UserService {
         user.setUsername(username);
         user.setEmail(email);
         user.setFullName(normalizeFullName(request.fullName()));
+        Set<Warehouse> requestedWarehouses = resolveWarehouses(request.warehouseIds());
         user.setRoles(roles);
-        user.setWarehouses(resolveWarehouses(request.warehouseIds()));
+        user.setWarehouses(hasRole(roles, "WAREHOUSE_STAFF") ? requestedWarehouses : new LinkedHashSet<>());
         if (request.isActive() != null) {
             user.setIsActive(request.isActive());
         }
 
         UserAccount saved = userRepository.save(user);
+        syncManagerWarehouses(saved, roles, request.warehouseIds());
         UserResponse response = toUserResponse(saved);
         auditLogService.record("USER", "UPDATE", "Cập nhật người dùng",
                 "USER", saved.getId(), saved.getUsername(), before, response, null, userMetadata(saved));
@@ -455,6 +461,68 @@ public class UserService {
         return warehouses;
     }
 
+    private void syncManagerWarehouses(UserAccount user, Set<Role> roles, Set<UUID> requestedWarehouseIds) {
+        List<Warehouse> currentManagedWarehouses = warehouseRepository.findByManagerId(user.getId());
+        Set<UUID> targetIds = hasRole(roles, "WAREHOUSE_MANAGER")
+                ? (requestedWarehouseIds == null ? Set.of() : requestedWarehouseIds)
+                : Set.of();
+
+        for (Warehouse warehouse : currentManagedWarehouses) {
+            if (!targetIds.contains(warehouse.getId())) {
+                warehouse.getManagers().remove(user);
+                refreshManagerName(warehouse);
+                warehouseRepository.save(warehouse);
+            }
+        }
+
+        if (targetIds.isEmpty()) {
+            return;
+        }
+
+        List<Warehouse> selectedWarehouses = warehouseRepository.findByIdIn(targetIds);
+        Set<UUID> foundIds = selectedWarehouses.stream()
+                .map(Warehouse::getId)
+                .collect(Collectors.toSet());
+        for (UUID warehouseId : targetIds) {
+            if (!foundIds.contains(warehouseId)) {
+                throw new AppException(ErrorCode.RESOURCE_NOT_FOUND, "KhÃ´ng tÃ¬m tháº¥y kho: " + warehouseId);
+            }
+        }
+        for (Warehouse warehouse : selectedWarehouses) {
+            if (!Boolean.TRUE.equals(warehouse.getIsActive())) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Kho Ä‘Ã£ ngá»«ng hoáº¡t Ä‘á»™ng: " + warehouse.getCode());
+            }
+            warehouse.getManagers().add(user);
+            refreshManagerName(warehouse);
+            warehouseRepository.save(warehouse);
+        }
+    }
+
+    private void refreshManagerName(Warehouse warehouse) {
+        if (warehouse.getManagers() == null || warehouse.getManagers().isEmpty()) {
+            warehouse.setManagerName(null);
+            return;
+        }
+        warehouse.setManagerName(warehouse.getManagers().stream()
+                .map(manager -> StringUtils.hasText(manager.getFullName()) ? manager.getFullName() : manager.getUsername())
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .collect(Collectors.joining(", ")));
+    }
+
+    private List<Warehouse> assignedWarehouses(UserAccount user) {
+        Map<UUID, Warehouse> warehouses = new LinkedHashMap<>();
+        if (user.getWarehouses() != null) {
+            user.getWarehouses().forEach(warehouse -> warehouses.put(warehouse.getId(), warehouse));
+        }
+        if (user.getRoles() != null && hasRole(user.getRoles(), "WAREHOUSE_MANAGER")) {
+            warehouseRepository.findByManagerId(user.getId())
+                    .forEach(warehouse -> warehouses.put(warehouse.getId(), warehouse));
+        }
+        return warehouses.values().stream()
+                .sorted((left, right) -> String.CASE_INSENSITIVE_ORDER.compare(left.getCode(), right.getCode()))
+                .toList();
+    }
+
     private Set<String> parseRoles(String raw) {
         if (!StringUtils.hasText(raw)) {
             return Set.of();
@@ -542,18 +610,13 @@ public class UserService {
         metadata.put("email", user.getEmail());
         metadata.put("fullName", user.getFullName());
         metadata.put("roles", user.getRoleCodesCsv());
-        metadata.put("warehouseIds", user.getWarehouses() == null ? List.of()
-                : user.getWarehouses().stream().map(Warehouse::getId).toList());
+        metadata.put("warehouseIds", assignedWarehouses(user).stream().map(Warehouse::getId).toList());
         metadata.put("isActive", user.getIsActive());
         return metadata;
     }
 
     private UserResponse toUserResponse(UserAccount user) {
-        List<Warehouse> warehouses = user.getWarehouses() == null
-                ? List.of()
-                : user.getWarehouses().stream()
-                        .sorted((left, right) -> String.CASE_INSENSITIVE_ORDER.compare(left.getCode(), right.getCode()))
-                        .toList();
+        List<Warehouse> warehouses = assignedWarehouses(user);
         return new UserResponse(
                 user.getId(),
                 user.getUsername(),
