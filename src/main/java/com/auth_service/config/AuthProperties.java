@@ -14,7 +14,8 @@ public record AuthProperties(
     public record Jwt(
             String issuer,
             String secret,
-            long accessTokenExpirationSeconds
+            long accessTokenExpirationSeconds,
+            long refreshTokenExpirationSeconds
     ) {
     }
 }

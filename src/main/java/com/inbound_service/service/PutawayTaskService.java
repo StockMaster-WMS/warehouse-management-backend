@@ -7,6 +7,7 @@ import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
 import com.inbound_service.dto.request.CompletePutawayRequest;
 import com.inbound_service.dto.request.UpdatePutawayTaskRequest;
+import com.inbound_service.dto.response.PutawayLocationSuggestionResponse;
 import com.inbound_service.dto.response.PutawayTaskResponse;
 import com.inbound_service.entity.InboundReceipt;
 import com.inbound_service.entity.InboundReceiptStatus;
@@ -17,7 +18,9 @@ import com.inbound_service.repository.InboundReceiptRepository;
 import com.inbound_service.repository.PutawayTaskRepository;
 import com.inbound_service.repository.PutawayTaskSpecification;
 import com.warehouse_service.entity.Location;
+import com.warehouse_service.entity.StockLevel;
 import com.warehouse_service.repository.LocationRepository;
+import com.warehouse_service.repository.StockLevelRepository;
 import com.warehouse_service.service.StockLevelService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -25,13 +28,19 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -51,6 +60,7 @@ public class PutawayTaskService {
     private final AuditLogService auditLogService;
     private final StockLevelService stockLevelService;
     private final LocationRepository locationRepository;
+    private final StockLevelRepository stockLevelRepository;
 
     public PagedResponse<PutawayTaskResponse> findAll(Pageable pageable, UUID poItemId, String status) {
         return findAll(pageable, poItemId, status, (Collection<UUID>) null);
@@ -85,6 +95,69 @@ public class PutawayTaskService {
         return putawayTaskMapper.toResponse(task);
     }
 
+    public List<PutawayLocationSuggestionResponse> suggestLocations(UUID id, int limit,
+            Collection<UUID> visibleWarehouseIds) {
+        PutawayTask task = getTask(id);
+        assertPutawayWarehouseVisible(task, visibleWarehouseIds);
+
+        UUID warehouseId = receiptWarehouseId(task);
+        if (warehouseId == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Nhiem vu xep hang chua gan voi phieu nhap kho hop le");
+        }
+
+        int max = limit <= 0 ? 30 : Math.min(limit, 100);
+        List<Location> allLocations = locationRepository.findByWarehouseId(warehouseId).stream()
+                .filter(this::isPutawayStorageLocation)
+                .sorted(Comparator.comparing(Location::getCode, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+
+        Map<UUID, Location> locationById = new LinkedHashMap<>();
+        for (Location location : allLocations) {
+            locationById.put(location.getId(), location);
+        }
+
+        Set<UUID> usedLocationIds = new HashSet<>();
+        for (StockLevel stock : stockLevelRepository.findByWarehouseId(warehouseId)) {
+            if (stock.getLocation() != null && safeQty(stock.getQtyOnHand()) > 0) {
+                usedLocationIds.add(stock.getLocation().getId());
+            }
+        }
+
+        Map<UUID, Integer> qtyByProductLocation = new LinkedHashMap<>();
+        for (StockLevel stock : stockLevelRepository
+                .findByWarehouseIdAndProductIdWithDetails(warehouseId, task.getProductId())) {
+            if (stock.getLocation() != null
+                    && safeQty(stock.getQtyOnHand()) > 0
+                    && locationById.containsKey(stock.getLocation().getId())) {
+                qtyByProductLocation.merge(stock.getLocation().getId(), stock.getQtyOnHand(), Integer::sum);
+            }
+        }
+
+        LinkedHashMap<UUID, PutawayLocationSuggestionResponse> suggestions = new LinkedHashMap<>();
+        addSuggestion(suggestions, locationById.get(task.getSuggestedLocationId()), task, usedLocationIds,
+                qtyByProductLocation);
+
+        qtyByProductLocation.keySet().stream()
+                .map(locationById::get)
+                .filter(location -> location != null)
+                .sorted(Comparator.comparing(Location::getCode, String.CASE_INSENSITIVE_ORDER))
+                .forEach(location -> addSuggestion(suggestions, location, task, usedLocationIds, qtyByProductLocation));
+
+        allLocations.stream()
+                .filter(location -> !usedLocationIds.contains(location.getId()))
+                .forEach(location -> addSuggestion(suggestions, location, task, usedLocationIds, qtyByProductLocation));
+
+        if (suggestions.size() < max) {
+            allLocations.forEach(location -> addSuggestion(suggestions, location, task, usedLocationIds,
+                    qtyByProductLocation));
+        }
+
+        return new ArrayList<>(suggestions.values()).stream()
+                .limit(max)
+                .toList();
+    }
+
     @Transactional
     public PutawayTaskResponse update(UUID id, UpdatePutawayTaskRequest request) {
         return update(id, request, null);
@@ -102,6 +175,7 @@ public class PutawayTaskService {
 
         if (request.suggestedLocationId() != null) {
             assertLocationInReceiptWarehouse(task, request.suggestedLocationId());
+            assertPutawayLocationEligible(request.suggestedLocationId());
             task.setSuggestedLocationId(request.suggestedLocationId());
         }
 
@@ -141,10 +215,18 @@ public class PutawayTaskService {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Chỉ hoàn tất nhiệm vụ xếp hàng ở trạng thái PENDING hoặc IN_PROGRESS");
         }
-        assertLocationInReceiptWarehouse(task, request.actualLocationId());
+        UUID actualLocationId = request != null && request.actualLocationId() != null
+                ? request.actualLocationId()
+                : task.getSuggestedLocationId();
+        if (actualLocationId == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Can chon vi tri thuc te de hoan tat nhiem vu xep hang");
+        }
+        assertLocationInReceiptWarehouse(task, actualLocationId);
+        assertPutawayLocationEligible(actualLocationId);
 
         PutawayTaskResponse before = putawayTaskMapper.toResponse(task);
-        task.setActualLocationId(request.actualLocationId());
+        task.setActualLocationId(actualLocationId);
         task.setStatus(PutawayStatus.COMPLETED);
         task.setCompletedAt(OffsetDateTime.now());
         PutawayTask saved = putawayTaskRepository.save(task);
@@ -184,9 +266,21 @@ public class PutawayTaskService {
     }
 
     private void moveStockFromReceivingLocation(PutawayTask task) {
+        UUID sourceLocationId = task.getSuggestedLocationId() != null
+                ? task.getSuggestedLocationId()
+                : task.getInboundReceipt().getLocationId();
+        UUID targetLocationId = task.getActualLocationId();
+        if (sourceLocationId == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Nhiem vu xep hang chua co vi tri nguon de chuyen ton");
+        }
+        if (sourceLocationId != null && sourceLocationId.equals(targetLocationId)) {
+            return;
+        }
+
         StockAdjustCommand deductCmd = new StockAdjustCommand(
                 task.getInboundReceipt().getWarehouseId(),
-                task.getInboundReceipt().getLocationId(),
+                sourceLocationId,
                 task.getProductId(),
                 null,
                 -task.getQtyToPutaway(),
@@ -198,7 +292,7 @@ public class PutawayTaskService {
 
         StockAdjustCommand addCmd = new StockAdjustCommand(
                 task.getInboundReceipt().getWarehouseId(),
-                task.getActualLocationId(),
+                targetLocationId,
                 task.getProductId(),
                 null,
                 task.getQtyToPutaway(),
@@ -260,6 +354,54 @@ public class PutawayTaskService {
         if (location.getWarehouse() == null || !warehouseId.equals(location.getWarehouse().getId())) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Vị trí lưu kho không thuộc kho của phiếu nhập");
+        }
+    }
+
+    private void addSuggestion(LinkedHashMap<UUID, PutawayLocationSuggestionResponse> suggestions,
+            Location location, PutawayTask task, Set<UUID> usedLocationIds, Map<UUID, Integer> qtyByProductLocation) {
+        if (location == null || suggestions.containsKey(location.getId())) {
+            return;
+        }
+        UUID locationId = location.getId();
+        boolean existingProductLocation = qtyByProductLocation.containsKey(locationId);
+        suggestions.put(locationId, new PutawayLocationSuggestionResponse(
+                locationId,
+                location.getCode(),
+                location.getLocationType(),
+                location.getZone(),
+                locationId.equals(task.getSuggestedLocationId()),
+                existingProductLocation,
+                !usedLocationIds.contains(locationId),
+                existingProductLocation ? qtyByProductLocation.get(locationId) : 0));
+    }
+
+    private boolean isPutawayStorageLocation(Location location) {
+        if (location == null || !Boolean.TRUE.equals(location.getIsActive())) {
+            return false;
+        }
+        String status = StringUtils.hasText(location.getStatus())
+                ? location.getStatus().trim().toUpperCase(Locale.ROOT)
+                : "AVAILABLE";
+        if (Set.of("BLOCKED", "MAINTENANCE", "INACTIVE", "DISABLED").contains(status)) {
+            return false;
+        }
+        String type = StringUtils.hasText(location.getLocationType())
+                ? location.getLocationType().trim().toUpperCase(Locale.ROOT)
+                : "";
+        return !type.startsWith("RMA_") && !"STAGING".equals(type);
+    }
+
+    private int safeQty(Integer qty) {
+        return qty == null ? 0 : qty;
+    }
+
+    private void assertPutawayLocationEligible(UUID locationId) {
+        Location location = locationRepository.findById(locationId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
+                        "Khong tim thay vi tri luu kho"));
+        if (!isPutawayStorageLocation(location)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Vi tri xep hang phai dang hoat dong, khong bi khoa va khong phai vi tri RMA/STAGING");
         }
     }
 

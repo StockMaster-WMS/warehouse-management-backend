@@ -8,6 +8,8 @@ import com.inbound_service.dto.request.ReceiveRmaRequest;
 import com.inbound_service.dto.request.RejectRmaRequest;
 import com.inbound_service.dto.response.RmaReportResponse;
 import com.inbound_service.dto.response.RmaResponse;
+import com.inbound_service.dto.response.SupplierReturnLocationOptionResponse;
+import com.inbound_service.dto.response.SupplierReturnProductOptionResponse;
 import com.inbound_service.service.RmaService;
 import com.warehouse_service.dto.response.LocationResponse;
 import com.warehouse_service.service.WarehouseAccessService;
@@ -68,6 +70,34 @@ public class RmaController {
         warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
         return ApiResponse.success("Lấy vị trí nhận hàng trả thành công",
                 rmaService.getReturnLocations(warehouseId, condition,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
+    }
+
+    @GetMapping("/supplier-return/products")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @Operation(summary = "Lay san pham co the tra NCC", description = "Loc theo kho, nha cung cap va ton kha dung")
+    public ApiResponse<List<SupplierReturnProductOptionResponse>> getSupplierReturnProducts(
+            @RequestParam UUID warehouseId,
+            @RequestParam UUID supplierId,
+            @RequestParam(required = false) String keyword,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
+        return ApiResponse.success("Lay san pham tra NCC thanh cong",
+                rmaService.getSupplierReturnProducts(warehouseId, supplierId, keyword,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
+    }
+
+    @GetMapping("/supplier-return/locations")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @Operation(summary = "Lay vi tri ton cua san pham de tra NCC", description = "Chi tra vi tri/lot dang co ton kha dung cua san pham trong kho da chon")
+    public ApiResponse<List<SupplierReturnLocationOptionResponse>> getSupplierReturnLocations(
+            @RequestParam UUID warehouseId,
+            @RequestParam UUID supplierId,
+            @RequestParam UUID productId,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
+        return ApiResponse.success("Lay vi tri tra NCC thanh cong",
+                rmaService.getSupplierReturnLocations(warehouseId, supplierId, productId,
                         warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 

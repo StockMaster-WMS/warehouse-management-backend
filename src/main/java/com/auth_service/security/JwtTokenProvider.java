@@ -52,7 +52,7 @@ public class JwtTokenProvider {
                 .subject(user.getId().toString())
                 .id(jti)
                 .claim("username", user.getUsername())
-            .claim("roles", user.getRoleCodesCsv())
+                .claim("roles", user.getRoleCodesCsv())
                 .claim("token_type", "ACCESS")
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiresAt))
@@ -62,8 +62,7 @@ public class JwtTokenProvider {
 
     public String generateRefreshToken(UserAccount user) {
         Instant now = Instant.now();
-        // Refresh token có expiration dài hơn: 7 ngày
-        Instant expiresAt = now.plusSeconds(7 * 24 * 60 * 60);
+        Instant expiresAt = now.plusSeconds(authProperties.jwt().refreshTokenExpirationSeconds());
         String jti = UuidUtils.uuidV7().toString();
 
         return Jwts.builder()
@@ -115,6 +114,6 @@ public class JwtTokenProvider {
     }
 
     public long getRefreshTokenExpirationSeconds() {
-        return 7 * 24 * 60 * 60; // 7 ngày
+        return authProperties.jwt().refreshTokenExpirationSeconds();
     }
 }

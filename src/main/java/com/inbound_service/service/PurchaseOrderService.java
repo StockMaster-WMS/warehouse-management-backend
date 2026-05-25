@@ -37,6 +37,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -60,10 +61,17 @@ public class PurchaseOrderService {
     // Lấy danh sách đơn nhập có phân trang và bộ lọc.
     public PagedResponse<PurchaseOrderResponse> findAll(Pageable pageable, String keyword, String status,
             UUID supplierId, UUID warehouseId, OffsetDateTime createdFrom, OffsetDateTime createdTo) {
+        return findAll(pageable, keyword, status, supplierId, warehouseId, createdFrom, createdTo, null);
+    }
+
+    public PagedResponse<PurchaseOrderResponse> findAll(Pageable pageable, String keyword, String status,
+            UUID supplierId, UUID warehouseId, OffsetDateTime createdFrom, OffsetDateTime createdTo,
+            Collection<UUID> visibleWarehouseIds) {
         Specification<PurchaseOrder> spec = PurchaseOrderSpecification.hasKeyword(keyword)
                 .and(PurchaseOrderSpecification.hasStatus(status))
                 .and(PurchaseOrderSpecification.hasSupplierId(supplierId))
                 .and(PurchaseOrderSpecification.hasWarehouseId(warehouseId))
+                .and(PurchaseOrderSpecification.warehouseIdIn(visibleWarehouseIds))
                 .and(PurchaseOrderSpecification.createdFrom(createdFrom))
                 .and(PurchaseOrderSpecification.createdTo(createdTo));
         Page<PurchaseOrder> page = purchaseOrderRepository.findAll(spec, pageable);
@@ -78,10 +86,23 @@ public class PurchaseOrderService {
 
     // Lấy chi tiết đơn nhập theo id.
     public PurchaseOrderResponse findById(UUID id) {
-        return purchaseOrderMapper.toResponse(getPurchaseOrder(id));
+        return findById(id, null);
+    }
+
+    public PurchaseOrderResponse findById(UUID id, Collection<UUID> visibleWarehouseIds) {
+        PurchaseOrder purchaseOrder = getPurchaseOrder(id);
+        assertVisible(purchaseOrder, visibleWarehouseIds);
+        return purchaseOrderMapper.toResponse(purchaseOrder);
     }
 
     // Lấy chi tiết đơn nhập theo mã PO.
+    public PurchaseOrderResponse findByPoNumberScoped(String poNumber, Collection<UUID> visibleWarehouseIds) {
+        PurchaseOrder purchaseOrder = purchaseOrderRepository.findByPoNumber(poNumber)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Khong tim thay don nhap"));
+        assertVisible(purchaseOrder, visibleWarehouseIds);
+        return purchaseOrderMapper.toResponse(purchaseOrder);
+    }
+
     public PurchaseOrderResponse findByPoNumber(String poNumber) {
         return purchaseOrderMapper.toResponse(purchaseOrderRepository.findByPoNumber(poNumber)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập")));
@@ -89,7 +110,12 @@ public class PurchaseOrderService {
 
     // Lấy đầy đủ thông tin đơn nhập gồm dòng hàng, putaway và phiếu nhập.
     public PurchaseOrderDetailResponse findDetail(UUID id) {
+        return findDetail(id, null);
+    }
+
+    public PurchaseOrderDetailResponse findDetail(UUID id, Collection<UUID> visibleWarehouseIds) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(id);
+        assertVisible(purchaseOrder, visibleWarehouseIds);
         List<PoItem> items = poItemRepository.findByPurchaseOrderId(id);
         List<PutawayTask> putawayTasks = putawayTaskRepository.findByPurchaseOrderIdWithPoItem(id);
         List<InboundReceipt> receipts = receiptRepository.findByPurchaseOrderId(id);
@@ -237,6 +263,13 @@ public class PurchaseOrderService {
     private PurchaseOrder getPurchaseOrder(UUID id) {
         return purchaseOrderRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
+    }
+
+    private void assertVisible(PurchaseOrder purchaseOrder, Collection<UUID> visibleWarehouseIds) {
+        if (visibleWarehouseIds != null
+                && (visibleWarehouseIds.isEmpty() || !visibleWarehouseIds.contains(purchaseOrder.getWarehouseId()))) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Ban khong duoc thao tac don nhap cua kho nay");
+        }
     }
 
     private void requirePoDraft(PurchaseOrder purchaseOrder, String message) {

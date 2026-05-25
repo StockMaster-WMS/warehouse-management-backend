@@ -7,6 +7,7 @@ import com.inbound_service.dto.request.UpdatePurchaseOrderRequest;
 import com.inbound_service.dto.response.PurchaseOrderDetailResponse;
 import com.inbound_service.dto.response.PurchaseOrderResponse;
 import com.inbound_service.service.PurchaseOrderService;
+import com.warehouse_service.service.WarehouseAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -36,6 +38,7 @@ import java.util.UUID;
 public class PurchaseOrderController {
 
     private final PurchaseOrderService purchaseOrderService;
+    private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
@@ -50,30 +53,32 @@ public class PurchaseOrderController {
             @RequestParam(required = false) UUID supplierId,
             @RequestParam(required = false) UUID warehouseId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo,
+            Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách đơn nhập thành công",
-                purchaseOrderService.findAll(pageable, keyword, status, supplierId, warehouseId, createdFrom, createdTo));
+                purchaseOrderService.findAll(pageable, keyword, status, supplierId, warehouseId, createdFrom, createdTo,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy đơn nhập theo ID", description = "Trả về chi tiết purchase order theo UUID")
-    public ApiResponse<PurchaseOrderResponse> getById(@PathVariable UUID id) {
+    public ApiResponse<PurchaseOrderResponse> getById(@PathVariable UUID id, Authentication authentication) {
         return ApiResponse.success("Lấy đơn nhập thành công", purchaseOrderService.findById(id));
     }
 
     @GetMapping("/{id}/detail")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy chi tiết PO cho màn hình nhập hàng", description = "Trả về PO + danh sách dòng hàng + putaway tasks + tiến độ nhận")
-    public ApiResponse<PurchaseOrderDetailResponse> getDetail(@PathVariable UUID id) {
+    public ApiResponse<PurchaseOrderDetailResponse> getDetail(@PathVariable UUID id, Authentication authentication) {
         return ApiResponse.success("Lấy chi tiết đơn nhập thành công", purchaseOrderService.findDetail(id));
     }
 
     @GetMapping("/number/{poNumber}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy đơn nhập theo mã", description = "Tìm purchase order bằng poNumber")
-    public ApiResponse<PurchaseOrderResponse> getByPoNumber(@PathVariable String poNumber) {
+    public ApiResponse<PurchaseOrderResponse> getByPoNumber(@PathVariable String poNumber, Authentication authentication) {
         return ApiResponse.success("Lấy đơn nhập thành công", purchaseOrderService.findByPoNumber(poNumber));
     }
 
