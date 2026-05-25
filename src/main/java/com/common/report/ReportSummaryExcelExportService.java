@@ -12,7 +12,7 @@ import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.streaming.SXSSFWorkbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -41,8 +41,7 @@ public class ReportSummaryExcelExportService {
         ReportSummaryResponse summary = reportService.getSummary(period, year, fromDate, toDate, warehouseIds);
         var detailRows = reportService.getShippedItemDetails(period, year, fromDate, toDate, warehouseIds);
         Map<UUID, Warehouse> warehouses = loadWarehouses(detailRows);
-        try (SXSSFWorkbook workbook = new SXSSFWorkbook(200); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            workbook.setCompressTempFiles(true);
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             CellStyle headerStyle = createHeaderStyle(workbook);
             writeMetadataSheet(workbook, summary, period, year, fromDate, toDate, warehouseIds, headerStyle);
             writeOverviewSheet(workbook, summary, period, year, headerStyle);
@@ -50,7 +49,6 @@ public class ReportSummaryExcelExportService {
             writeTopSkusSheet(workbook, summary, headerStyle);
             writeDetailSheet(workbook, detailRows, warehouses, headerStyle);
             workbook.write(out);
-            workbook.dispose();
             return out.toByteArray();
         } catch (IOException e) {
             throw new IllegalStateException("Không thể tạo file báo cáo", e);

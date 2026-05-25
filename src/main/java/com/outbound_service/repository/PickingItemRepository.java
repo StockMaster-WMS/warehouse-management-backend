@@ -13,6 +13,8 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.OffsetDateTime;
+import java.util.Collection;
 
 public interface PickingItemRepository extends JpaRepository<PickingItem, UUID>, JpaSpecificationExecutor<PickingItem> {
 
@@ -35,4 +37,27 @@ public interface PickingItemRepository extends JpaRepository<PickingItem, UUID>,
 
 	@Query("SELECT p FROM PickingItem p JOIN FETCH p.soItem s JOIN FETCH s.salesOrder WHERE p.id = :id")
 	Optional<PickingItem> findByIdWithSoAndOrder(@Param("id") UUID id);
+
+	@Query("""
+			SELECT COUNT(p) FROM PickingItem p
+			JOIN p.soItem s
+			JOIN s.salesOrder o
+			WHERE p.status <> 'PICKED'
+			  AND o.status = 'PICKING'
+			  AND o.createdAt < :cutoff
+			""")
+	long countOverduePickingTasks(@Param("cutoff") OffsetDateTime cutoff);
+
+	@Query("""
+			SELECT COUNT(p) FROM PickingItem p
+			JOIN p.soItem s
+			JOIN s.salesOrder o
+			WHERE p.status <> 'PICKED'
+			  AND o.status = 'PICKING'
+			  AND o.createdAt < :cutoff
+			  AND o.warehouseId IN :warehouseIds
+			""")
+	long countOverduePickingTasksInWarehouses(
+			@Param("cutoff") OffsetDateTime cutoff,
+			@Param("warehouseIds") Collection<UUID> warehouseIds);
 }

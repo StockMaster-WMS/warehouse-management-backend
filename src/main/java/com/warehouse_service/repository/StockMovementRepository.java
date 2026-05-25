@@ -15,6 +15,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Collection;
 
 public interface StockMovementRepository extends JpaRepository<StockMovement, UUID>,
         JpaSpecificationExecutor<StockMovement> {
@@ -46,4 +47,20 @@ public interface StockMovementRepository extends JpaRepository<StockMovement, UU
     List<DailyMovementView> sumDailyMovements(
             @Param("fromDate") OffsetDateTime fromDate,
             @Param("toDate") OffsetDateTime toDate);
+
+    @Query(value = """
+            select cast(created_at as date) as "movementDate",
+                   coalesce(sum(case when qty_change > 0 then qty_change else 0 end), 0) as "inboundQty",
+                   coalesce(sum(case when qty_change < 0 then abs(qty_change) else 0 end), 0) as "outboundQty"
+            from stock_movements
+            where created_at >= :fromDate
+              and created_at < :toDate
+              and warehouse_id in (:warehouseIds)
+            group by cast(created_at as date)
+            order by cast(created_at as date)
+            """, nativeQuery = true)
+    List<DailyMovementView> sumDailyMovementsInWarehouses(
+            @Param("fromDate") OffsetDateTime fromDate,
+            @Param("toDate") OffsetDateTime toDate,
+            @Param("warehouseIds") Collection<UUID> warehouseIds);
 }

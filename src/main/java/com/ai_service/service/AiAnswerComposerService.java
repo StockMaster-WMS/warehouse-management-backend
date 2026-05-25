@@ -128,6 +128,34 @@ public class AiAnswerComposerService {
                 case CYCLE_COUNT_VARIANCE -> "Hiện chưa ghi nhận dòng kiểm kê đang lệch tồn hoặc đang chờ đếm.";
                 case CYCLE_COUNT_STATUS -> "Tôi chưa tìm thấy session kiểm kê phù hợp.";
                 case RMA_PENDING -> "Hiện không có yêu cầu trả hàng RMA nào đang chờ xử lý.";
+                case NOTIFICATION_LIST -> "Hiện bạn chưa có thông báo phù hợp.";
+                case CATEGORY_LIST -> "Hiện chưa có danh mục sản phẩm phù hợp.";
+                case PRODUCT_BY_CATEGORY -> "Tôi chưa tìm thấy sản phẩm nào thuộc danh mục này.";
+                case STOCK_BY_LOCATION -> "Vị trí này hiện chưa có tồn kho phù hợp.";
+                case STOCK_BY_LOT -> "Tôi chưa tìm thấy tồn kho cho lô bạn hỏi.";
+                case DEAD_STOCK -> "Hiện chưa có SKU nào thuộc nhóm hàng chết theo điều kiện này.";
+                case STOCK_AT_RISK -> "Hiện chưa có lô tồn kho rủi ro theo điều kiện này.";
+                case REORDER_SUGGESTION -> "Hiện chưa có SKU nào cần gợi ý đặt/nhập bổ sung.";
+                case INVENTORY_VALUE_BY_WAREHOUSE -> "Hiện chưa có dữ liệu giá trị tồn kho theo kho phù hợp.";
+                case LONGEST_EXPIRY_STOCK -> "Hiện chưa có lô hàng còn tồn với hạn sử dụng để xếp hạng.";
+                case INBOUND_PRODUCT_QTY -> "Tôi chưa tìm thấy dữ liệu nhập kho phù hợp với sản phẩm/kỳ bạn hỏi.";
+                case INBOUND_PENDING_PUTAWAY -> "Hiện chưa có phiếu nhập hoặc task nào đang chờ putaway.";
+                case OUTBOUND_DELAYED -> "Hiện chưa có đơn xuất nào đang trễ hoặc có nguy cơ trễ theo dữ liệu hiện tại.";
+                case STOCK_FASTEST_DECREASE -> "Hiện chưa có biến động giảm tồn kho trong 7 ngày qua.";
+                case PICK_LOCATION_USAGE -> "Hiện chưa có dữ liệu vị trí lấy hàng phù hợp.";
+                case OUTBOUND_DELAY_REASON -> "Hiện chưa ghi nhận lý do xuất chậm trong audit log.";
+                case CYCLE_COUNT_RECOUNT_SKUS -> "Hiện chưa có SKU cần kiểm kê lại theo dữ liệu sai lệch.";
+                case RMA_QC_REQUIRED -> "Hiện chưa có RMA đang chờ kiểm tra chất lượng.";
+                case RMA_DETAIL -> "Tôi chưa tìm thấy RMA phù hợp.";
+                case RMA_LATEST_REASON -> "Hiện chưa có RMA nào trong dữ liệu.";
+                case RMA_BY_SKU -> "Tôi chưa tìm thấy RMA liên quan SKU/sản phẩm bạn hỏi.";
+                case RMA_SUPPLIER_RETURN -> "Hiện chưa có RMA nào cần gửi về nhà cung cấp.";
+                case TOP_CUSTOMERS -> "Hiện chưa có dữ liệu khách hàng phù hợp để xếp hạng.";
+                case SUPPLIER_PERFORMANCE -> "Hiện chưa có dữ liệu hiệu suất nhà cung cấp phù hợp.";
+                case WAREHOUSE_CAPACITY -> "Hiện chưa có dữ liệu công suất kho phù hợp.";
+                case PICKING_PRODUCTIVITY -> "Hiện chưa có dữ liệu năng suất picking.";
+                case USER_LOOKUP -> "Tôi chưa tìm thấy người dùng phù hợp.";
+                case ROLE_LIST -> "Hiện chưa có dữ liệu vai trò.";
                 default -> "Tôi chưa tìm thấy dữ liệu phù hợp với câu hỏi này.";
             };
         }
@@ -162,7 +190,27 @@ public class AiAnswerComposerService {
                 case OUTBOUND_REPORT -> outboundReportReply(map, route);
                 case MONTHLY_REPORT -> monthlyReportReply(map);
                 case INVENTORY_VALUE -> inventoryValueReply(map);
+                case INACTIVE_PRODUCT_WITH_STOCK -> inactiveProductWithStockReply(map);
+                case INBOUND_PRODUCT_QTY -> inboundProductQtyReply(map);
+                case INBOUND_AVG_DAILY -> inboundAvgDailyReply(map);
+                case OUTBOUND_TOTAL_QTY -> outboundTotalQtyReply(map);
+                case OUTBOUND_CANCELLED_OR_RETURNED -> outboundCancelledOrReturnedReply(map);
+                case OUTBOUND_SHORTAGE -> outboundShortageReply(map);
+                case PICKING_COMPLETED_COUNT -> pickingCompletedCountReply(map);
+                case PICKING_COMPLETION_RATE -> pickingCompletionRateReply(map);
+                case PICKING_STOCK_CHECK -> pickingStockCheckReply(map);
+                case CYCLE_COUNT_SUMMARY -> cycleCountSummaryReply(map);
+                case CYCLE_COUNT_COMPLETION_RATE -> cycleCountCompletionRateReply(map);
+                case RMA_RATE -> rmaRateReply(map);
+                case RMA_PROCESSING_AVG -> rmaProcessingAvgReply(map);
+                case RMA_VALUE -> rmaValueReply(map);
+                case TASK_COMPLETION_RATE -> taskCompletionRateReply(map);
+                case EMPLOYEE_OPERATION_PRODUCTIVITY -> employeeOperationProductivityReply(map);
+                case OVERDUE_TASKS -> overdueTasksReply(map);
+                case OPERATION_ISSUE_REPORT -> operationIssueReportReply(map);
                 case MONTH_OVER_MONTH_FLOW -> monthOverMonthFlowReply(map);
+                case FULFILLMENT_RATE -> fulfillmentRateReply(map);
+                case MY_TASKS -> myTasksReply(map);
                 default -> null;
             };
         }
@@ -212,6 +260,33 @@ public class AiAnswerComposerService {
                 case LOCATION_SEARCH -> locationReply(list);
                 case AUDIT_LOG -> auditLogReply(list);
                 case AI_AUDIT_LOG -> aiAuditLogReply(list);
+                case NOTIFICATION_LIST -> notificationReply(list);
+                case CATEGORY_LIST -> categoryReply(list);
+                case PRODUCT_BY_CATEGORY -> productByCategoryReply(list);
+                case STOCK_BY_LOCATION -> stockByLocationReply(list);
+                case STOCK_BY_LOT -> stockByLotReply(list);
+                case DEAD_STOCK -> deadStockReply(list);
+                case STOCK_AT_RISK -> stockAtRiskReply(list);
+                case REORDER_SUGGESTION -> reorderSuggestionReply(list);
+                case INVENTORY_VALUE_BY_WAREHOUSE -> inventoryValueByWarehouseReply(list);
+                case LONGEST_EXPIRY_STOCK -> longestExpiryReply(list);
+                case INBOUND_PENDING_PUTAWAY -> inboundPendingPutawayReply(list);
+                case OUTBOUND_DELAYED -> outboundDelayedReply(list);
+                case STOCK_FASTEST_DECREASE -> stockFastestDecreaseReply(list);
+                case PICK_LOCATION_USAGE -> pickLocationUsageReply(list);
+                case OUTBOUND_DELAY_REASON -> outboundDelayReasonReply(list);
+                case CYCLE_COUNT_RECOUNT_SKUS -> cycleCountRecountSkusReply(list);
+                case RMA_DETAIL -> rmaDetailReply(list);
+                case RMA_LATEST_REASON -> latestRmaReasonReply(list);
+                case RMA_BY_SKU -> rmaBySkuReply(list);
+                case RMA_SUPPLIER_RETURN -> rmaSupplierReturnReply(list);
+                case RMA_QC_REQUIRED -> rmaQcRequiredReply(list);
+                case TOP_CUSTOMERS -> topCustomersReply(list);
+                case WAREHOUSE_CAPACITY -> warehouseCapacityReply(list);
+                case PICKING_PRODUCTIVITY -> pickingProductivityReply(list);
+                case SUPPLIER_PERFORMANCE -> supplierPerformanceReply(list);
+                case USER_LOOKUP -> userLookupReply(list);
+                case ROLE_LIST -> roleListReply(list);
                 default -> null;
             };
         }
@@ -729,6 +804,44 @@ public class AiAnswerComposerService {
                         + ", trạng thái " + value(row, "status"));
     }
 
+    private String rmaDetailReply(List<?> list) {
+        Object first = list.get(0);
+        return value(first, "rma_number") + " đang " + returnStatusLabel(value(first, "status"))
+                + ", khách hàng " + value(first, "customer_name")
+                + ", lý do: " + value(first, "reason")
+                + ". Dòng hàng: " + joinRows(limit(list, 5), row -> value(row, "sku")
+                + " - " + value(row, "product_name") + ", SL " + value(row, "expected_qty"));
+    }
+
+    private String latestRmaReasonReply(List<?> list) {
+        Object first = list.get(0);
+        return "Nguyên nhân trả hàng trong RMA mới nhất " + value(first, "rma_number")
+                + " là: " + value(first, "reason") + ".";
+    }
+
+    private String rmaBySkuReply(List<?> list) {
+        return "Có " + list.size() + " dòng RMA liên quan SKU/sản phẩm bạn hỏi: "
+                + joinRows(limit(list, 6), row -> value(row, "rma_number") + " - "
+                + value(row, "sku") + " " + value(row, "product_name")
+                + ", trạng thái " + value(row, "status")
+                + ", SL " + value(row, "expected_qty"));
+    }
+
+    private String rmaSupplierReturnReply(List<?> list) {
+        return "Các RMA cần gửi về nhà cung cấp: " + joinRows(limit(list, 6), row ->
+                value(row, "rma_number") + " - " + value(row, "customer_name")
+                        + ", trạng thái " + value(row, "status")
+                        + ", SL " + value(row, "expected_qty"));
+    }
+
+    private String rmaQcRequiredReply(List<?> list) {
+        return "Các RMA cần kiểm tra chất lượng trước khi nhập lại: "
+                + joinRows(limit(list, 6), row -> value(row, "rma_number") + " - "
+                + value(row, "customer_name") + ", trạng thái " + value(row, "status")
+                + ", SL " + value(row, "received_qty") + "/" + value(row, "expected_qty")
+                + ", lý do " + value(row, "reason"));
+    }
+
     private String locationReply(List<?> list) {
         return "Tìm thấy " + list.size() + " vị trí: " + joinRows(limit(list, 8), row ->
                 value(row, "warehouse_code") + "/" + value(row, "code")
@@ -816,6 +929,202 @@ public class AiAnswerComposerService {
                 + value(row, "inventory_value"));
     }
 
+    private String inventoryValueByWarehouseReply(List<?> list) {
+        if (list.size() >= 2) {
+            Object first = list.get(0);
+            Object second = list.get(1);
+            return "So sánh giá trị tồn kho: " + value(first, "warehouse_code") + " khoảng "
+                    + value(first, "inventory_value") + ", " + value(second, "warehouse_code")
+                    + " khoảng " + value(second, "inventory_value") + ". Cao hơn: "
+                    + value(first, "warehouse_code") + ".";
+        }
+        Object row = list.get(0);
+        return "Giá trị tồn kho " + value(row, "warehouse_code") + " khoảng "
+                + value(row, "inventory_value") + ", tồn " + value(row, "qty_on_hand") + " đơn vị.";
+    }
+
+    private String inactiveProductWithStockReply(Map<?, ?> map) {
+        return "Có " + nestedValue(map, "summary", "product_count")
+                + " sản phẩm đang không ở trạng thái ACTIVE nhưng vẫn còn tồn, tổng "
+                + nestedValue(map, "summary", "qty_on_hand") + " đơn vị. Một số SKU: "
+                + joinRowsFromMapList(map, "items", row -> value(row, "sku") + " - "
+                + value(row, "product_name") + ", trạng thái " + value(row, "status")
+                + ", tồn " + value(row, "qty_on_hand"));
+    }
+
+    private String longestExpiryReply(List<?> list) {
+        Object first = list.get(0);
+        return "Lô có hạn sử dụng dài nhất còn lại là " + value(first, "lot_number")
+                + " của " + value(first, "sku") + " - " + value(first, "product_name")
+                + ", hạn " + value(first, "expiry_date")
+                + ", còn khoảng " + value(first, "days_remaining") + " ngày tại kho "
+                + value(first, "warehouse_code") + ", tồn " + value(first, "qty_on_hand") + ".";
+    }
+
+    private String inboundProductQtyReply(Map<?, ?> map) {
+        return "Số lượng nhập kho trong phạm vi bạn hỏi là "
+                + nestedValue(map, "summary", "received_qty") + " đơn vị trên "
+                + nestedValue(map, "summary", "receipts") + " phiếu nhập. Chi tiết: "
+                + joinRowsFromMapList(map, "items", row -> value(row, "receipt_number")
+                + " - " + value(row, "product_name") + " SL " + value(row, "received_qty"));
+    }
+
+    private String inboundPendingPutawayReply(List<?> list) {
+        return "Có " + list.size() + " dòng/phiếu nhập đang chờ putaway: "
+                + joinRows(limit(list, 6), row -> value(row, "po_number")
+                + " / " + value(row, "receipt_number")
+                + " - " + value(row, "product_name")
+                + ", trạng thái " + value(row, "putaway_status")
+                + ", SL " + value(row, "qty_to_putaway"));
+    }
+
+    private String inboundAvgDailyReply(Map<?, ?> map) {
+        return "Trung bình " + value(map, "avg_receipts_per_day")
+                + " lô/phiếu nhập mỗi ngày trong " + value(map, "days")
+                + " ngày gần đây; trung bình số lượng nhập " + value(map, "avg_qty_per_day")
+                + " đơn vị/ngày.";
+    }
+
+    private String outboundTotalQtyReply(Map<?, ?> map) {
+        return "Tổng xuất kho trong phạm vi bạn hỏi: " + value(map, "shipped_qty")
+                + " đơn vị đã giao trên " + value(map, "ordered_qty")
+                + " đơn vị đặt, gồm " + value(map, "sales_orders") + " đơn xuất.";
+    }
+
+    private String outboundDelayedReply(List<?> list) {
+        return "Có " + list.size() + " đơn xuất đang trễ hoặc có nguy cơ trễ: "
+                + joinRows(limit(list, 6), row -> value(row, "so_number")
+                + " - " + value(row, "customer_name")
+                + ", trạng thái " + value(row, "status")
+                + ", tạo lúc " + value(row, "created_at"));
+    }
+
+    private String stockFastestDecreaseReply(List<?> list) {
+        Object first = list.get(0);
+        return "Sản phẩm giảm tồn nhanh nhất trong 7 ngày qua là " + value(first, "sku")
+                + " - " + value(first, "product_name") + " tại " + value(first, "warehouse_code")
+                + ", giảm " + value(first, "decreased_qty") + " đơn vị. Top: "
+                + joinRows(limit(list, 5), row -> value(row, "sku") + " giảm "
+                + value(row, "decreased_qty"));
+    }
+
+    private String pickLocationUsageReply(List<?> list) {
+        Object first = list.get(0);
+        return "Vị trí lấy hàng được dùng nhiều nhất là " + value(first, "warehouse_code")
+                + "/" + value(first, "location_code") + " với " + value(first, "pick_lines")
+                + " dòng pick, tổng cần pick " + value(first, "qty_to_pick") + " đơn vị.";
+    }
+
+    private String outboundDelayReasonReply(List<?> list) {
+        Object first = list.get(0);
+        return "Lý do xuất chậm/lỗi xuất được ghi nhận nhiều nhất là: "
+                + value(first, "reason") + " (" + value(first, "issue_count")
+                + " lần). Các lý do khác: " + joinRows(limit(list, 5), row ->
+                value(row, "reason") + " " + value(row, "issue_count") + " lần");
+    }
+
+    private String outboundShortageReply(Map<?, ?> map) {
+        return "Có " + nestedValue(map, "summary", "orders")
+                + " đơn xuất có dòng picking chưa đủ hàng, tổng thiếu/chưa pick "
+                + nestedValue(map, "summary", "shortage_qty") + " đơn vị. Một số dòng: "
+                + joinRowsFromMapList(map, "items", row -> value(row, "so_number")
+                + " - " + value(row, "sku") + ", thiếu " + value(row, "shortage_qty"));
+    }
+
+    private String cycleCountRecountSkusReply(List<?> list) {
+        return "Các SKU cần kiểm kê lại sau sai lệch: " + joinRows(limit(list, 8), row ->
+                value(row, "sku") + " - " + value(row, "product_name")
+                        + ", chênh lệch tuyệt đối " + value(row, "total_abs_discrepancy")
+                        + ", " + value(row, "variance_lines") + " dòng lệch");
+    }
+
+    private String outboundCancelledOrReturnedReply(Map<?, ?> map) {
+        return "Đơn xuất bị hủy: " + nestedValue(map, "cancelled", "orders")
+                + " đơn, số lượng " + nestedValue(map, "cancelled", "ordered_qty")
+                + ". RMA/trả lại trong tháng: " + nestedValue(map, "returned", "rma_orders")
+                + " yêu cầu, số lượng nhận " + nestedValue(map, "returned", "received_qty") + ".";
+    }
+
+    private String pickingCompletedCountReply(Map<?, ?> map) {
+        return "Hoàn thành picking: " + value(map, "completed_orders")
+                + " đơn, " + value(map, "completed_lines")
+                + " dòng, tổng đã pick " + value(map, "qty_picked") + " đơn vị.";
+    }
+
+    private String pickingCompletionRateReply(Map<?, ?> map) {
+        return "Tỷ lệ hoàn thành picking là " + value(map, "line_completion_rate")
+                + "% theo dòng task và " + value(map, "qty_completion_rate")
+                + "% theo số lượng đã pick.";
+    }
+
+    private String pickingStockCheckReply(Map<?, ?> map) {
+        return "SKU " + value(map, "sku") + " hiện khả dụng " + value(map, "qty_available")
+                + " đơn vị; nhu cầu pick " + value(map, "requested_qty")
+                + " đơn vị, kết luận: " + ("true".equalsIgnoreCase(value(map, "enough")) ? "đủ hàng." : "không đủ hàng.");
+    }
+
+    private String cycleCountSummaryReply(Map<?, ?> map) {
+        return "Kết quả kiểm kê tháng này: thực tế " + nestedValue(map, "summary", "counted_qty")
+                + ", hệ thống " + nestedValue(map, "summary", "system_qty")
+                + ", chênh lệch ròng " + nestedValue(map, "summary", "net_discrepancy")
+                + "; thừa " + nestedValue(map, "summary", "over_qty")
+                + ", thiếu " + nestedValue(map, "summary", "under_qty") + ".";
+    }
+
+    private String cycleCountCompletionRateReply(Map<?, ?> map) {
+        return "Tỷ lệ hoàn thành kiểm kê hiện đạt " + value(map, "completion_rate")
+                + "%, đã hoàn thành " + value(map, "completed_counts")
+                + " trên tổng " + value(map, "total_counts") + " phiếu.";
+    }
+
+    private String rmaRateReply(Map<?, ?> map) {
+        return "Tỷ lệ RMA được chấp nhận hiện là " + value(map, "accepted_rate")
+                + "%: " + value(map, "accepted_rma") + " / " + value(map, "total_rma")
+                + " RMA; bị từ chối/hủy " + value(map, "rejected_rma") + ".";
+    }
+
+    private String rmaProcessingAvgReply(Map<?, ?> map) {
+        return "Thời gian xử lý RMA trung bình là " + value(map, "avg_days")
+                + " ngày trên " + value(map, "completed_rma") + " RMA đã hoàn tất.";
+    }
+
+    private String rmaValueReply(Map<?, ?> map) {
+        return "Tổng giá trị hàng RMA trong phạm vi bạn hỏi khoảng " + value(map, "rma_value")
+                + ", gồm " + value(map, "total_rma") + " RMA, số lượng nhận "
+                + value(map, "received_qty") + " đơn vị.";
+    }
+
+    private String taskCompletionRateReply(Map<?, ?> map) {
+        return "Tỷ lệ hoàn thành picking là " + nestedValue(map, "picking", "line_completion_rate")
+                + "% theo dòng task; putaway là " + nestedValue(map, "putaway", "completion_rate")
+                + "%, đã hoàn thành " + nestedValue(map, "putaway", "completed_tasks")
+                + " / " + nestedValue(map, "putaway", "total_tasks") + " task.";
+    }
+
+    private String employeeOperationProductivityReply(Map<?, ?> map) {
+        return "Hiệu suất nhân viên: picking - " + joinRowsFromMapList(map, "picking", row ->
+                value(row, "assignee") + " pick " + value(row, "qty_picked") + "/"
+                        + value(row, "qty_to_pick"))
+                + "; putaway - " + joinRowsFromMapList(map, "putaway", row ->
+                value(row, "assignee") + " hoàn thành " + value(row, "completed_lines")
+                        + "/" + value(row, "task_lines") + " task");
+    }
+
+    private String overdueTasksReply(Map<?, ?> map) {
+        return "Task quá hạn ước tính: picking " + nestedValue(map, "picking", "task_lines")
+                + " dòng trên " + nestedValue(map, "picking", "orders")
+                + " đơn, còn " + nestedValue(map, "picking", "remaining_qty")
+                + " đơn vị; putaway " + nestedValue(map, "putaway", "task_lines")
+                + " task, số lượng " + nestedValue(map, "putaway", "qty_to_putaway") + ".";
+    }
+
+    private String operationIssueReportReply(Map<?, ?> map) {
+        return "Lỗi/sự cố vận hành hôm nay: " + joinRowsFromMapList(map, "audit_issues", row ->
+                value(row, "module") + "/" + value(row, "action_type")
+                        + " - " + value(row, "reason") + ": " + value(row, "issue_count") + " lần")
+                + ". " + value(map, "message");
+    }
+
     private String monthOverMonthFlowReply(Map<?, ?> map) {
         return "So với tháng trước, tháng này nhập " + nestedValue(map, "current_inbound", "received_qty")
                 + " (chênh " + nestedValue(map, "delta", "received_qty") + "), xuất đặt "
@@ -832,6 +1141,121 @@ public class AiAnswerComposerService {
                 + ", khách hàng " + listSize(map, "customers")
                 + ", PO " + listSize(map, "purchase_orders")
                 + ", SO " + listSize(map, "sales_orders") + ".";
+    }
+
+    private String fulfillmentRateReply(Map<?, ?> map) {
+        return "Tỷ lệ fulfillment hiện là " + value(map, "fulfillment_rate") + "%: đã giao "
+                + value(map, "shipped_qty") + " / " + value(map, "ordered_qty")
+                + " đơn vị trên " + value(map, "sales_orders") + " đơn xuất.";
+    }
+
+    private String myTasksReply(Map<?, ?> map) {
+        return "Việc được giao hiện tại: putaway " + listSize(map, "putaway")
+                + ", picking " + listSize(map, "picking")
+                + ", kiểm kê " + listSize(map, "cycle_counts") + ". "
+                + "Picking: " + joinRowsFromMapList(map, "picking", row -> value(row, "so_number")
+                + " - " + value(row, "sku") + ", cần " + value(row, "qty_to_pick")
+                + ", đã pick " + value(row, "qty_picked"))
+                + ". Putaway: " + joinRowsFromMapList(map, "putaway", row -> value(row, "sku")
+                + " - " + value(row, "product_name") + ", SL " + value(row, "qty_to_putaway")
+                + ", trạng thái " + value(row, "status")) + ".";
+    }
+
+    private String notificationReply(List<?> list) {
+        return "Bạn có " + list.size() + " thông báo gần nhất: " + joinRows(limit(list, 6), row ->
+                value(row, "severity") + " - " + value(row, "title")
+                        + " (" + value(row, "created_at") + ")");
+    }
+
+    private String categoryReply(List<?> list) {
+        return "Có " + list.size() + " danh mục: " + joinRows(limit(list, 8), row ->
+                value(row, "code") + " - " + value(row, "name")
+                        + ", sản phẩm " + value(row, "product_count"));
+    }
+
+    private String productByCategoryReply(List<?> list) {
+        return "Tìm thấy " + list.size() + " sản phẩm trong danh mục: " + joinRows(limit(list, 8), row ->
+                value(row, "sku") + " - " + value(row, "product_name")
+                        + ", tồn " + value(row, "qty_on_hand"));
+    }
+
+    private String stockByLocationReply(List<?> list) {
+        return "Vị trí đang chứa: " + joinRows(limit(list, 8), row ->
+                value(row, "warehouse_code") + "/" + value(row, "location_code")
+                        + " - " + value(row, "sku") + " " + value(row, "product_name")
+                        + ", lot " + value(row, "lot_number")
+                        + ", tồn " + value(row, "qty_on_hand"));
+    }
+
+    private String stockByLotReply(List<?> list) {
+        long total = sumLong(list, "qty_on_hand");
+        return "Lô này còn tổng " + formatNumber(total) + " đơn vị: " + joinRows(limit(list, 8), row ->
+                value(row, "sku") + " tại " + value(row, "warehouse_code") + "/" + value(row, "location_code")
+                        + ", tồn " + value(row, "qty_on_hand")
+                        + ", hết hạn " + value(row, "expiry_date"));
+    }
+
+    private String deadStockReply(List<?> list) {
+        return "Có " + list.size() + " SKU thuộc nhóm hàng chết/tồn lâu: " + joinRows(limit(list, 6), row ->
+                value(row, "sku") + " - " + value(row, "product_name")
+                        + ", tồn " + value(row, "qty_on_hand")
+                        + ", giao dịch cuối " + value(row, "last_movement_at"));
+    }
+
+    private String stockAtRiskReply(List<?> list) {
+        return "Có " + list.size() + " lô tồn kho rủi ro: " + joinRows(limit(list, 6), row ->
+                value(row, "sku") + " lot " + value(row, "lot_number")
+                        + ", hết hạn " + value(row, "expiry_date")
+                        + ", tồn " + value(row, "qty_on_hand"));
+    }
+
+    private String reorderSuggestionReply(List<?> list) {
+        return "Gợi ý nhập bổ sung: " + joinRows(limit(list, 8), row ->
+                value(row, "sku") + " - " + value(row, "product_name")
+                        + ", khả dụng " + value(row, "qty_available")
+                        + ", tối thiểu " + value(row, "min_stock_qty")
+                        + ", đề xuất " + value(row, "suggested_qty"));
+    }
+
+    private String topCustomersReply(List<?> list) {
+        return "Top khách hàng: " + joinRows(limit(list, 8), row ->
+                value(row, "customer_name") + ": " + value(row, "order_count")
+                        + " đơn, giá trị đã giao " + value(row, "shipped_value"));
+    }
+
+    private String warehouseCapacityReply(List<?> list) {
+        return "Công suất kho: " + joinRows(limit(list, 8), row ->
+                value(row, "warehouse_code") + " dùng " + value(row, "capacity_used_pct")
+                        + "% (" + value(row, "occupied_locations") + "/"
+                        + value(row, "total_locations") + " vị trí).");
+    }
+
+    private String pickingProductivityReply(List<?> list) {
+        return "Năng suất picking: " + joinRows(limit(list, 8), row ->
+                value(row, "assignee") + " đã pick " + value(row, "qty_picked")
+                        + "/" + value(row, "qty_to_pick") + " đơn vị, "
+                        + value(row, "completed_lines") + " dòng hoàn tất.");
+    }
+
+    private String supplierPerformanceReply(List<?> list) {
+        return "Hiệu suất NCC: " + joinRows(limit(list, 8), row ->
+                value(row, "supplier_code") + " - " + value(row, "supplier_name")
+                        + ": " + value(row, "purchase_orders") + " PO, hoàn tất "
+                        + value(row, "completed_orders") + ", đúng hạn "
+                        + value(row, "on_time_orders"));
+    }
+
+    private String userLookupReply(List<?> list) {
+        return "Tìm thấy " + list.size() + " người dùng: " + joinRows(limit(list, 8), row ->
+                value(row, "username") + " - " + value(row, "full_name")
+                        + ", vai trò " + value(row, "roles")
+                        + ", kho " + value(row, "warehouses"));
+    }
+
+    private String roleListReply(List<?> list) {
+        return "Hệ thống có " + list.size() + " vai trò: " + joinRows(limit(list, 10), row ->
+                value(row, "code") + " - " + value(row, "name")
+                        + " (" + value(row, "user_count") + " user)");
     }
 
     private String routeQuery(AiIntentResult route) {

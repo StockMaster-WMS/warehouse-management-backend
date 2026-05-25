@@ -5,12 +5,14 @@ import com.common.dashboard.dto.DashboardSummaryResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import com.warehouse_service.service.WarehouseAccessService;
 
 @RestController
 @RequiredArgsConstructor
@@ -21,12 +23,15 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 public class DashboardController {
 
     private final DashboardService dashboardService;
+    private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping("/summary")
     @Operation(summary = "Tổng quan dashboard", description = "Trả về thẻ số liệu, biểu đồ xuất/nhập và thông báo vận hành")
     public ApiResponse<DashboardSummaryResponse> getSummary(
             @RequestParam(defaultValue = "7d") String period,
-            @RequestParam(required = false) Integer year) {
-        return ApiResponse.success("Lấy tổng quan dashboard thành công", dashboardService.getSummary(period, year));
+            @RequestParam(required = false) Integer year,
+            Authentication authentication) {
+        return ApiResponse.success("Lấy tổng quan dashboard thành công",
+                dashboardService.getSummary(period, year, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 }

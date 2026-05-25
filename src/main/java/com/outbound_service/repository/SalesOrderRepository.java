@@ -58,6 +58,47 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID>, J
 
 	long countByStatusNotIn(Collection<SalesOrderStatus> statuses);
 
+	@Query("""
+			SELECT COUNT(o) FROM SalesOrder o
+			WHERE o.status NOT IN :statuses
+			  AND o.warehouseId IN :warehouseIds
+			""")
+	long countByStatusNotInAndWarehouseIdIn(
+			@Param("statuses") Collection<SalesOrderStatus> statuses,
+			@Param("warehouseIds") Collection<UUID> warehouseIds);
+
+	@Query("""
+			SELECT COUNT(o) FROM SalesOrder o
+			WHERE o.status = :status
+			  AND o.warehouseId IN :warehouseIds
+			""")
+	long countByStatusInWarehouses(
+			@Param("status") SalesOrderStatus status,
+			@Param("warehouseIds") Collection<UUID> warehouseIds);
+
+	@Query("""
+			SELECT COUNT(DISTINCT o) FROM SalesOrder o
+			WHERE o.status = :status
+			  AND NOT EXISTS (
+			      SELECT p.id FROM PickingItem p
+			      WHERE p.soItem.salesOrder = o
+			  )
+			""")
+	long countWithoutPickingByStatus(@Param("status") SalesOrderStatus status);
+
+	@Query("""
+			SELECT COUNT(DISTINCT o) FROM SalesOrder o
+			WHERE o.status = :status
+			  AND o.warehouseId IN :warehouseIds
+			  AND NOT EXISTS (
+			      SELECT p.id FROM PickingItem p
+			      WHERE p.soItem.salesOrder = o
+			  )
+			""")
+	long countWithoutPickingByStatusInWarehouses(
+			@Param("status") SalesOrderStatus status,
+			@Param("warehouseIds") Collection<UUID> warehouseIds);
+
 	long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(
 			java.time.OffsetDateTime fromDate,
 			java.time.OffsetDateTime toDate);
