@@ -2,6 +2,7 @@ package com.auth_service.controller;
 
 import com.auth_service.dto.request.IntrospectRequest;
 import com.auth_service.dto.request.LoginRequest;
+import com.auth_service.dto.request.RefreshTokenRequest;
 import com.auth_service.dto.request.UpdateProfileRequest;
 import com.auth_service.dto.request.ChangePasswordRequest;
 import com.auth_service.dto.response.LoginResponse;
@@ -68,9 +69,10 @@ public class AuthController {
     @PostMapping("/refresh")
     @Operation(summary = "Lấy token mới bằng refresh token")
     public ApiResponse<LoginResponse> refresh(
+            @RequestBody(required = false) RefreshTokenRequest refreshRequest,
             HttpServletRequest request,
             HttpServletResponse response) {
-        String refreshToken = extractCookieValue(request, REFRESH_COOKIE_NAME);
+        String refreshToken = extractRefreshToken(request, refreshRequest);
         AuthService.AuthTokens tokens = authService.refresh(refreshToken);
         addRefreshCookie(request, response, tokens.refreshToken());
         return ApiResponse.success("Làm mới token thành công", toLoginResponse(tokens));
@@ -111,6 +113,8 @@ public class AuthController {
     private LoginResponse toLoginResponse(AuthService.AuthTokens tokens) {
         return new LoginResponse(
                 tokens.accessToken(),
+                authService.getAccessTokenExpirationSeconds(),
+                authService.getRefreshTokenExpirationSeconds(),
                 new LoginResponse.UserInfo(
                         tokens.userId(),
                         tokens.username(),
@@ -177,6 +181,14 @@ public class AuthController {
             }
         }
         return null;
+    }
+
+    private String extractRefreshToken(HttpServletRequest request, RefreshTokenRequest refreshRequest) {
+        String cookieToken = extractCookieValue(request, REFRESH_COOKIE_NAME);
+        if (cookieToken != null && !cookieToken.isBlank()) {
+            return cookieToken;
+        }
+        return refreshRequest == null ? null : refreshRequest.refreshToken();
     }
 
     private String extractToken(String rawValue) {

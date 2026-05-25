@@ -279,6 +279,10 @@ public class AuthService {
         return jwtTokenProvider.getRefreshTokenExpirationSeconds();
     }
 
+    public long getAccessTokenExpirationSeconds() {
+        return jwtTokenProvider.getAccessTokenExpirationSeconds();
+    }
+
     public record AuthTokens(
             String accessToken,
             String refreshToken,

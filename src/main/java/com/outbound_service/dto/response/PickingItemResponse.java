@@ -1,5 +1,6 @@
 package com.outbound_service.dto.response;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record PickingItemResponse(
@@ -21,6 +22,7 @@ public record PickingItemResponse(
         UUID warehouseId,
         String warehouseCode,
         String warehouseName,
-        UUID assigneeId
+        UUID assigneeId,
+        OffsetDateTime completedAt
 ) {
 }

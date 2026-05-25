@@ -9,6 +9,7 @@ import com.inbound_service.dto.response.InboundReceiptResponse;
 import com.inbound_service.entity.InboundReceiptStatus;
 import com.inbound_service.service.InboundReceiptExcelExportService;
 import com.inbound_service.service.InboundReceiptService;
+import com.warehouse_service.service.WarehouseAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -23,6 +24,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 
 import java.time.OffsetDateTime;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +39,7 @@ public class InboundReceiptController {
 
     private final InboundReceiptService receiptService;
     private final InboundReceiptExcelExportService receiptExcelExportService;
+    private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
@@ -51,10 +54,12 @@ public class InboundReceiptController {
             @RequestParam(required = false) java.util.UUID warehouseId,
             @RequestParam(required = false) InboundReceiptStatus status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo,
+            Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
         return ApiResponse.success("Lấy danh sách phiếu nhập thành công",
-                receiptService.findAll(pageable, keyword, purchaseOrderId, warehouseId, status, createdFrom, createdTo));
+                receiptService.findAll(pageable, keyword, purchaseOrderId, warehouseId, status, createdFrom, createdTo,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PostMapping
@@ -62,9 +67,11 @@ public class InboundReceiptController {
     @Operation(summary = "Tạo phiếu nhập kho", description = "Nhận hàng theo PO: kiểm tra số lượng → tạo phiếu → cập nhật tồn kho → cập nhật trạng thái PO")
     public ApiResponse<InboundReceiptResponse> create(
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @Valid @RequestBody CreateInboundReceiptRequest request) {
+            @Valid @RequestBody CreateInboundReceiptRequest request,
+            Authentication authentication) {
         return ApiResponse.success("Tạo phiếu nhập kho thành công",
-                receiptService.createReceipt(request, idempotencyKey));
+                receiptService.createReceipt(request, idempotencyKey,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping("/{id}")

@@ -162,7 +162,8 @@ public class PickingItemService {
                 row.warehouseId(),
                 warehouse == null ? null : warehouse.getCode(),
                 warehouse == null ? null : warehouse.getName(),
-                row.assigneeId());
+                row.assigneeId(),
+                row.completedAt());
     }
 
     private Map<UUID, Product> loadProductsById(List<PickingItemResponse> rows) {
@@ -226,6 +227,9 @@ public class PickingItemService {
         PickingItem item = pickingItemMapper.toEntity(request);
         item.setSoItem(line);
         item.setStatus(status);
+        if (status == PickingItemStatus.PICKED) {
+            item.setCompletedAt(OffsetDateTime.now());
+        }
 
         PickingItem saved = pickingItemRepository.save(item);
         
@@ -301,6 +305,11 @@ public class PickingItemService {
                             existing.getLocationId(), existing.getProductId(), newLot, existing.getQtyToPick())));
         }
 
+        if (existing.getStatus() == PickingItemStatus.PICKED && existing.getCompletedAt() == null) {
+            existing.setCompletedAt(OffsetDateTime.now());
+        } else if (existing.getStatus() != PickingItemStatus.PICKED) {
+            existing.setCompletedAt(null);
+        }
         PickingItem saved = pickingItemRepository.save(existing);
         PickingItemResponse after = pickingItemMapper.toResponse(saved);
 
@@ -378,6 +387,7 @@ public class PickingItemService {
         // tạm thời đặt qtyPicked = 0.
         item.setStatus(PickingItemStatus.PENDING);
         item.setQtyPicked(0);
+        item.setCompletedAt(null);
         PickingItem saved = pickingItemRepository.save(item);
         
         PickingItemResponse after = pickingItemMapper.toResponse(saved);
@@ -424,6 +434,7 @@ public class PickingItemService {
 
         item.setQtyPicked(qtyToPick);
         item.setStatus(PickingItemStatus.PICKED);
+        item.setCompletedAt(OffsetDateTime.now());
         PickingItem saved = pickingItemRepository.save(item);
         PickingItemResponse after = pickingItemMapper.toResponse(saved);
 

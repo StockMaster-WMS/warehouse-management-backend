@@ -14,6 +14,8 @@ import com.inbound_service.dto.request.DispositionRmaItemRequest;
 import com.inbound_service.dto.request.ReceiveRmaRequest;
 import com.inbound_service.dto.response.RmaReportResponse;
 import com.inbound_service.dto.response.RmaResponse;
+import com.inbound_service.dto.response.SupplierReturnLocationOptionResponse;
+import com.inbound_service.dto.response.SupplierReturnProductOptionResponse;
 import com.inbound_service.entity.Rma;
 import com.inbound_service.entity.RmaItem;
 import com.inbound_service.repository.RmaRepository;
@@ -24,13 +26,17 @@ import com.outbound_service.entity.SalesOrderStatus;
 import com.outbound_service.repository.CustomerRepository;
 import com.outbound_service.repository.SalesOrderRepository;
 import com.product_service.dto.response.ProductSummaryResponse;
+import com.product_service.entity.Product;
 import com.product_service.entity.Supplier;
+import com.product_service.repository.ProductRepository;
 import com.product_service.repository.SupplierRepository;
 import com.product_service.service.ProductService;
 import com.warehouse_service.dto.response.LocationResponse;
 import com.warehouse_service.entity.Location;
+import com.warehouse_service.entity.StockLevel;
 import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.repository.LocationRepository;
+import com.warehouse_service.repository.StockLevelRepository;
 import com.warehouse_service.repository.WarehouseRepository;
 import com.warehouse_service.service.StockLevelService;
 import lombok.RequiredArgsConstructor;
@@ -63,7 +69,9 @@ public class RmaService {
     private final AuditLogService auditLogService;
     private final WarehouseRepository warehouseRepository;
     private final LocationRepository locationRepository;
+    private final StockLevelRepository stockLevelRepository;
     private final ProductService productService;
+    private final ProductRepository productRepository;
     private final SupplierRepository supplierRepository;
     private final CustomerRepository customerRepository;
     private final SalesOrderRepository salesOrderRepository;
@@ -142,6 +150,72 @@ public class RmaService {
                 .toList();
     }
 
+    public List<SupplierReturnProductOptionResponse> getSupplierReturnProducts(UUID warehouseId, UUID supplierId,
+            String keyword, Collection<UUID> visibleWarehouseIds) {
+        assertWarehouseVisible(warehouseId, visibleWarehouseIds);
+        Supplier supplier = supplierRepository.findById(supplierId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Khong tim thay nha cung cap"));
+        String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim().toLowerCase(Locale.ROOT) : null;
+
+        Map<UUID, List<StockLevel>> stockByProduct = stockLevelRepository.findByWarehouseId(warehouseId).stream()
+                .filter(stock -> safeAvailableQty(stock) > 0)
+                .collect(Collectors.groupingBy(StockLevel::getProductId, LinkedHashMap::new, Collectors.toList()));
+        if (stockByProduct.isEmpty()) {
+            return List.of();
+        }
+
+        return productRepository.findAllById(stockByProduct.keySet()).stream()
+                .filter(product -> productBelongsToSupplier(product, supplierId))
+                .filter(product -> isActiveProduct(product))
+                .filter(product -> normalizedKeyword == null
+                        || containsIgnoreCase(product.getSku(), normalizedKeyword)
+                        || containsIgnoreCase(product.getName(), normalizedKeyword))
+                .sorted((left, right) -> String.CASE_INSENSITIVE_ORDER.compare(left.getSku(), right.getSku()))
+                .map(product -> {
+                    List<StockLevel> stocks = stockByProduct.getOrDefault(product.getId(), List.of());
+                    int totalAvailable = stocks.stream().mapToInt(this::safeAvailableQty).sum();
+                    long locationCount = stocks.stream()
+                            .filter(stock -> stock.getLocation() != null)
+                            .map(stock -> stock.getLocation().getId())
+                            .distinct()
+                            .count();
+                    return new SupplierReturnProductOptionResponse(
+                            product.getId(),
+                            product.getSku(),
+                            product.getName(),
+                            supplier.getId(),
+                            supplier.getName(),
+                            totalAvailable,
+                            (int) locationCount);
+                })
+                .filter(option -> option.totalQtyAvailable() > 0)
+                .toList();
+    }
+
+    public List<SupplierReturnLocationOptionResponse> getSupplierReturnLocations(UUID warehouseId, UUID supplierId,
+            UUID productId, Collection<UUID> visibleWarehouseIds) {
+        assertWarehouseVisible(warehouseId, visibleWarehouseIds);
+        supplierRepository.findById(supplierId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Khong tim thay nha cung cap"));
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Khong tim thay san pham"));
+        assertProductBelongsToSupplier(product, supplierId);
+
+        return stockLevelRepository.findByWarehouseIdAndProductIdWithDetails(warehouseId, productId).stream()
+                .filter(stock -> stock.getLocation() != null)
+                .filter(stock -> safeAvailableQty(stock) > 0)
+                .sorted((left, right) -> {
+                    int byLocation = String.CASE_INSENSITIVE_ORDER.compare(
+                            left.getLocation().getCode(), right.getLocation().getCode());
+                    if (byLocation != 0) {
+                        return byLocation;
+                    }
+                    return normalizeLot(left.getLotNumber()).compareToIgnoreCase(normalizeLot(right.getLotNumber()));
+                })
+                .map(this::toSupplierReturnLocationOption)
+                .toList();
+    }
+
     @Transactional
     public RmaResponse create(CreateRmaRequest request) {
         return create(request, null);
@@ -170,6 +244,7 @@ public class RmaService {
         SalesOrder salesOrder = resolveCustomerSalesOrder(returnType, request);
         Customer customer = resolveCustomer(returnType, request, salesOrder);
         validateCustomerReturnItems(returnType, request, salesOrder);
+        validateSupplierReturnItems(returnType, request, supplier);
 
         Rma rma = Rma.builder()
                 .rmaNumber(CodeGenerator.generate("RMA"))
@@ -700,6 +775,51 @@ public class RmaService {
                         Collectors.summingInt(item -> safeQty(item.getExpectedQty()))));
     }
 
+    private void validateSupplierReturnItems(String returnType, CreateRmaRequest request, Supplier supplier) {
+        if (!"SUPPLIER".equals(returnType)) {
+            return;
+        }
+        if (supplier == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Phieu tra NCC phai co nha cung cap hop le");
+        }
+
+        Map<SupplierReturnStockKey, Integer> requestedByStock = new LinkedHashMap<>();
+        for (CreateRmaRequest.ItemRequest item : request.items()) {
+            if (item.locationId() == null) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Phieu tra NCC can chon vi tri xuat tra cho tung dong");
+            }
+            Product product = productRepository.findById(item.productId())
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
+                            "Khong tim thay san pham " + item.productId()));
+            assertProductBelongsToSupplier(product, supplier.getId());
+
+            assertLocationInWarehouse(item.locationId(), request.warehouseId());
+            SupplierReturnStockKey key = new SupplierReturnStockKey(
+                    item.locationId(), item.productId(), normalizeLot(item.lotNumber()));
+            requestedByStock.merge(key, safeQty(item.expectedQty()), Integer::sum);
+        }
+
+        requestedByStock.forEach((key, requestedQty) -> {
+            StockLevel stock = stockLevelRepository
+                    .findByLocationIdAndProductIdAndLotNumber(key.locationId(), key.productId(), key.lotNumber())
+                    .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST,
+                            "San pham khong co ton tai vi tri/so lo da chon"));
+            if (stock.getWarehouse() == null || !request.warehouseId().equals(stock.getWarehouse().getId())) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Vi tri ton khong thuoc kho xuat tra da chon");
+            }
+            int available = safeAvailableQty(stock);
+            if (requestedQty > available) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "So luong tra vuot ton kha dung tai vi tri "
+                                + (stock.getLocation() == null ? key.locationId() : stock.getLocation().getCode())
+                                + " / lo " + (StringUtils.hasText(key.lotNumber()) ? key.lotNumber() : "khong lo")
+                                + " (toi da " + available + ", dang tra " + requestedQty + ")");
+            }
+        });
+    }
+
     private void replaceRestockedQuantity(Rma rma, RmaItem item,
             int oldReceivedQty, UUID oldLocationId,
             int newReceivedQty, UUID newLocationId) {
@@ -956,6 +1076,7 @@ public class RmaService {
     }
 
     private void approveSupplierReturn(Rma rma) {
+        validateSupplierReturnStockAtApproval(rma);
         for (RmaItem item : rma.getItems()) {
             UUID locationId = item.getReturnLocationId();
             if (locationId == null) {
@@ -973,6 +1094,41 @@ public class RmaService {
                     rma.getId()
             ));
         }
+    }
+
+    private void validateSupplierReturnStockAtApproval(Rma rma) {
+        Map<SupplierReturnStockKey, Integer> requestedByStock = new LinkedHashMap<>();
+        for (RmaItem item : rma.getItems()) {
+            UUID locationId = item.getReturnLocationId();
+            if (locationId == null) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "Phieu tra NCC thieu vi tri xuat tra");
+            }
+            Product product = productRepository.findById(item.getProductId())
+                    .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
+                            "Khong tim thay san pham " + item.getProductId()));
+            assertProductBelongsToSupplier(product, rma.getSupplierId());
+            requestedByStock.merge(new SupplierReturnStockKey(
+                    locationId, item.getProductId(), normalizeLot(item.getLotNumber())),
+                    safeQty(item.getExpectedQty()), Integer::sum);
+        }
+
+        requestedByStock.forEach((key, requestedQty) -> {
+            StockLevel stock = stockLevelRepository
+                    .findByLocationIdAndProductIdAndLotNumber(key.locationId(), key.productId(), key.lotNumber())
+                    .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST,
+                            "San pham khong co ton tai vi tri/so lo da chon"));
+            if (stock.getWarehouse() == null || !rma.getWarehouseId().equals(stock.getWarehouse().getId())) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "Vi tri ton khong thuoc kho xuat tra da chon");
+            }
+            int available = safeAvailableQty(stock);
+            if (requestedQty > available) {
+                throw new AppException(ErrorCode.BAD_REQUEST,
+                        "So luong tra NCC vuot ton kha dung tai vi tri "
+                                + (stock.getLocation() == null ? key.locationId() : stock.getLocation().getCode())
+                                + " (toi da " + available + ", dang tra " + requestedQty + ")");
+            }
+        });
     }
 
     private Supplier resolveSupplier(String returnType, CreateRmaRequest request) {
@@ -1099,6 +1255,62 @@ public class RmaService {
         return qty == null ? 0 : qty;
     }
 
+    private int safeAvailableQty(StockLevel stock) {
+        if (stock == null) {
+            return 0;
+        }
+        if (stock.getQtyAvailable() != null) {
+            return Math.max(stock.getQtyAvailable(), 0);
+        }
+        return Math.max(safeQty(stock.getQtyOnHand()) - safeQty(stock.getQtyReserved()), 0);
+    }
+
+    private boolean isActiveProduct(Product product) {
+        return product != null
+                && (!StringUtils.hasText(product.getStatus())
+                || "ACTIVE".equalsIgnoreCase(product.getStatus().trim()));
+    }
+
+    private boolean productBelongsToSupplier(Product product, UUID supplierId) {
+        return product != null
+                && supplierId != null
+                && product.getPrimarySupplier() != null
+                && supplierId.equals(product.getPrimarySupplier().getId());
+    }
+
+    private void assertProductBelongsToSupplier(Product product, UUID supplierId) {
+        if (!productBelongsToSupplier(product, supplierId)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "San pham khong thuoc nha cung cap da chon");
+        }
+    }
+
+    private void assertWarehouseVisible(UUID warehouseId, Collection<UUID> visibleWarehouseIds) {
+        if (warehouseId == null) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "warehouseId la bat buoc");
+        }
+        if (visibleWarehouseIds != null && (visibleWarehouseIds.isEmpty() || !visibleWarehouseIds.contains(warehouseId))) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Ban khong duoc thao tac kho nay");
+        }
+    }
+
+    private SupplierReturnLocationOptionResponse toSupplierReturnLocationOption(StockLevel stock) {
+        Location location = stock.getLocation();
+        int available = safeAvailableQty(stock);
+        return new SupplierReturnLocationOptionResponse(
+                stock.getId(),
+                location.getId(),
+                location.getCode(),
+                location.getZone(),
+                stock.getProductId(),
+                normalizeLot(stock.getLotNumber()),
+                stock.getExpiryDate(),
+                safeQty(stock.getQtyOnHand()),
+                safeQty(stock.getQtyReserved()),
+                available,
+                available);
+    }
+
     private String normalizeLot(String lotNumber) {
         return lotNumber == null ? "" : lotNumber.trim();
     }
@@ -1160,5 +1372,8 @@ public class RmaService {
 
     private boolean containsIgnoreCase(String value, String lowercaseNeedle) {
         return value != null && value.toLowerCase(Locale.ROOT).contains(lowercaseNeedle);
+    }
+
+    private record SupplierReturnStockKey(UUID locationId, UUID productId, String lotNumber) {
     }
 }

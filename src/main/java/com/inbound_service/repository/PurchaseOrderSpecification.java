@@ -6,6 +6,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.UUID;
 
 public class PurchaseOrderSpecification {
@@ -40,6 +41,18 @@ public class PurchaseOrderSpecification {
 
     public static Specification<PurchaseOrder> hasWarehouseId(UUID warehouseId) {
         return (root, query, cb) -> warehouseId == null ? null : cb.equal(root.get("warehouseId"), warehouseId);
+    }
+
+    public static Specification<PurchaseOrder> warehouseIdIn(Collection<UUID> warehouseIds) {
+        return (root, query, cb) -> {
+            if (warehouseIds == null) {
+                return null;
+            }
+            if (warehouseIds.isEmpty()) {
+                return cb.disjunction();
+            }
+            return root.get("warehouseId").in(warehouseIds);
+        };
     }
 
     public static Specification<PurchaseOrder> createdFrom(OffsetDateTime createdFrom) {

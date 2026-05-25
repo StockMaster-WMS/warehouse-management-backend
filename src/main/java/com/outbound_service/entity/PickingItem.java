@@ -4,6 +4,7 @@ import com.common.util.UuidUtils;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
@@ -54,6 +55,9 @@ public class PickingItem {
 
     @Column(name = "assignee_id")
     private UUID assigneeId;
+
+    @Column(name = "completed_at")
+    private OffsetDateTime completedAt;
 
     @PrePersist
     void prePersist() {

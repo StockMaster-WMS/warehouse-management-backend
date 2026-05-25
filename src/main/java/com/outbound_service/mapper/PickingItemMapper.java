@@ -18,6 +18,7 @@ public interface PickingItemMapper {
     @Mapping(target = "soItem", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "assigneeId", ignore = true)
+    @Mapping(target = "completedAt", ignore = true)
     PickingItem toEntity(CreatePickingItemRequest request);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
@@ -25,6 +26,7 @@ public interface PickingItemMapper {
     @Mapping(target = "soItem", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "assigneeId", ignore = true)
+    @Mapping(target = "completedAt", ignore = true)
     void updateEntity(UpdatePickingItemRequest request, @MappingTarget PickingItem pickingItem);
 
     @Mapping(target = "soItemId", source = "soItem.id")

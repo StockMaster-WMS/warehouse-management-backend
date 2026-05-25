@@ -4,6 +4,7 @@ import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.inbound_service.dto.request.CompletePutawayRequest;
 import com.inbound_service.dto.request.UpdatePutawayTaskRequest;
+import com.inbound_service.dto.response.PutawayLocationSuggestionResponse;
 import com.inbound_service.dto.response.PutawayTaskResponse;
 import com.inbound_service.service.PutawayTaskService;
 import com.warehouse_service.service.WarehouseAccessService;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -60,6 +62,17 @@ public class PutawayTaskController {
     public ApiResponse<PutawayTaskResponse> getById(@PathVariable UUID id, Authentication authentication) {
         return ApiResponse.success("Lấy putaway thành công",
                 putawayTaskService.findById(id, warehouseAccessService.visibleWarehouseIdSet(authentication)));
+    }
+
+    @GetMapping("/{id}/location-suggestions")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @Operation(summary = "Goi y vi tri xep hang", description = "Tra vi tri hien tai, vi tri cu cua san pham va vi tri trong de FE chon khi sua putaway")
+    public ApiResponse<List<PutawayLocationSuggestionResponse>> suggestLocations(@PathVariable UUID id,
+            @RequestParam(defaultValue = "30") int limit,
+            Authentication authentication) {
+        return ApiResponse.success("Lay danh sach vi tri xep hang thanh cong",
+                putawayTaskService.suggestLocations(id, limit,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PatchMapping("/{id}")

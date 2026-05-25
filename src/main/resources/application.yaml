@@ -45,6 +45,7 @@ auth:
     issuer: ${AUTH_JWT_ISSUER:warehouse-app}
     secret: ${AUTH_JWT_SECRET:}
     access-token-expiration-seconds: ${AUTH_JWT_ACCESS_EXPIRATION_SECONDS:3600}
+    refresh-token-expiration-seconds: ${AUTH_JWT_REFRESH_EXPIRATION_SECONDS:604800}
   cookie:
     secure: ${AUTH_COOKIE_SECURE:auto}
     same-site: ${AUTH_COOKIE_SAME_SITE:auto}
