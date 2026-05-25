@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Arrays;
 import java.util.UUID;
 
 @RestController
@@ -151,9 +152,37 @@ public class AuthController {
 
         String forwardedProto = request.getHeader("X-Forwarded-Proto");
         String forwardedSsl = request.getHeader("X-Forwarded-Ssl");
+        String forwarded = request.getHeader("Forwarded");
         return request.isSecure()
-                || "https".equalsIgnoreCase(forwardedProto)
-                || "on".equalsIgnoreCase(forwardedSsl);
+                || containsHeaderValue(forwardedProto, "https")
+                || "on".equalsIgnoreCase(forwardedSsl)
+                || forwardedHasHttpsProto(forwarded)
+                || isHttpsUrl(request.getHeader("Origin"))
+                || isHttpsUrl(request.getHeader("Referer"));
+    }
+
+    private boolean containsHeaderValue(String rawValue, String expectedValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return false;
+        }
+
+        return Arrays.stream(rawValue.split(","))
+                .map(String::trim)
+                .anyMatch(value -> expectedValue.equalsIgnoreCase(value));
+    }
+
+    private boolean forwardedHasHttpsProto(String forwarded) {
+        if (forwarded == null || forwarded.isBlank()) {
+            return false;
+        }
+
+        return Arrays.stream(forwarded.split("[,;]"))
+                .map(String::trim)
+                .anyMatch(part -> part.equalsIgnoreCase("proto=https"));
+    }
+
+    private boolean isHttpsUrl(String rawUrl) {
+        return rawUrl != null && rawUrl.regionMatches(true, 0, "https://", 0, 8);
     }
 
     private String resolveRefreshCookieSameSite(boolean secure) {
