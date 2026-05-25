@@ -207,4 +207,104 @@ class AiIntentRouterServiceTest {
         assertThat(picking.getIntent()).isEqualTo(AiIntent.PICKING_STATUS);
         assertThat(picking.safeParameters()).containsEntry("pickingTaskCode", "PK-2026-009");
     }
+
+    @Test
+    void routesNewAiCoverageIntents() {
+        assertThat(router.route("Tôi có thông báo mới nào không?", List.of()).getIntent())
+                .isEqualTo(AiIntent.NOTIFICATION_LIST);
+        assertThat(router.route("Hôm nay tôi được giao việc gì?", List.of()).getIntent())
+                .isEqualTo(AiIntent.MY_TASKS);
+        assertThat(router.route("Hệ thống có những vai trò nào?", List.of()).getIntent())
+                .isEqualTo(AiIntent.ROLE_LIST);
+        assertThat(router.route("User an.nguyen có vai trò gì?", List.of()).getIntent())
+                .isEqualTo(AiIntent.USER_LOOKUP);
+        assertThat(router.route("Có những danh mục sản phẩm nào?", List.of()).getIntent())
+                .isEqualTo(AiIntent.CATEGORY_LIST);
+        assertThat(router.route("Sản phẩm nào thuộc danh mục Điện thoại?", List.of()).getIntent())
+                .isEqualTo(AiIntent.PRODUCT_BY_CATEGORY);
+        assertThat(router.route("Vị trí A-01-02 đang chứa hàng gì?", List.of()).getIntent())
+                .isEqualTo(AiIntent.STOCK_BY_LOCATION);
+        assertThat(router.route("Lô L20260315 còn bao nhiêu, ở đâu?", List.of()).getIntent())
+                .isEqualTo(AiIntent.STOCK_BY_LOT);
+        assertThat(router.route("Hàng chết trên 90 ngày gồm SKU nào?", List.of()).getIntent())
+                .isEqualTo(AiIntent.DEAD_STOCK);
+        assertThat(router.route("Lô gần hết hạn còn tồn lớn có rủi ro không?", List.of()).getIntent())
+                .isEqualTo(AiIntent.STOCK_AT_RISK);
+        assertThat(router.route("Gợi ý SKU cần đặt hàng bổ sung", List.of()).getIntent())
+                .isEqualTo(AiIntent.REORDER_SUGGESTION);
+        assertThat(router.route("Top khách hàng theo doanh số tháng này?", List.of()).getIntent())
+                .isEqualTo(AiIntent.TOP_CUSTOMERS);
+        assertThat(router.route("Tỷ lệ fulfillment đơn xuất tháng này là bao nhiêu?", List.of()).getIntent())
+                .isEqualTo(AiIntent.FULFILLMENT_RATE);
+        assertThat(router.route("Tỷ lệ lấp đầy kho WH-002 là bao nhiêu?", List.of()).getIntent())
+                .isEqualTo(AiIntent.WAREHOUSE_CAPACITY);
+        assertThat(router.route("Năng suất picking theo người hôm nay?", List.of()).getIntent())
+                .isEqualTo(AiIntent.PICKING_PRODUCTIVITY);
+        assertThat(router.route("Hiệu suất nhà cung cấp giao đúng hạn tháng này?", List.of()).getIntent())
+                .isEqualTo(AiIntent.SUPPLIER_PERFORMANCE);
+    }
+
+    @Test
+    void routesExpandedOperationalAnalyticsIntents() {
+        assertThat(router.route("Giá trị tồn kho của kho WH-003 so với WH-001 như thế nào?", List.of()).getIntent())
+                .isEqualTo(AiIntent.INVENTORY_VALUE_BY_WAREHOUSE);
+        assertThat(router.route("Lô hàng nào có hạn sử dụng dài nhất còn lại?", List.of()).getIntent())
+                .isEqualTo(AiIntent.LONGEST_EXPIRY_STOCK);
+        assertThat(router.route("Có bao nhiêu sản phẩm đang ở trạng thái ngừng kinh doanh nhưng vẫn còn tồn?", List.of()).getIntent())
+                .isEqualTo(AiIntent.INACTIVE_PRODUCT_WITH_STOCK);
+        assertThat(router.route("Số lượng nhập kho của sản phẩm \"Quả Lê Cao Cấp\" trong tuần này?", List.of()).getIntent())
+                .isEqualTo(AiIntent.INBOUND_PRODUCT_QTY);
+        assertThat(router.route("Phiếu nhập kho nào đã được duyệt nhưng chưa putaway?", List.of()).getIntent())
+                .isEqualTo(AiIntent.INBOUND_PENDING_PUTAWAY);
+        assertThat(router.route("Số lượng lô hàng nhập kho trung bình mỗi ngày trong tuần qua?", List.of()).getIntent())
+                .isEqualTo(AiIntent.INBOUND_AVG_DAILY);
+        assertThat(router.route("Tổng số lượng xuất kho trong ngày hôm nay là bao nhiêu?", List.of()).getIntent())
+                .isEqualTo(AiIntent.OUTBOUND_TOTAL_QTY);
+        assertThat(router.route("Những đơn xuất kho nào có nguy cơ trễ hạn giao hàng?", List.of()).getIntent())
+                .isEqualTo(AiIntent.OUTBOUND_DELAYED);
+        assertThat(router.route("Tổng số đơn xuất kho đã hoàn thành picking trong tuần qua?", List.of()).getIntent())
+                .isEqualTo(AiIntent.PICKING_COMPLETED_COUNT);
+        assertThat(router.route("Sản phẩm Rovi Bút bi xanh loại cao cấp có đủ hàng để picking 30 cái không?", List.of()).getIntent())
+                .isEqualTo(AiIntent.PICKING_STOCK_CHECK);
+        assertThat(router.route("Tỷ lệ hoàn thành kiểm kê theo kế hoạch hiện là bao nhiêu?", List.of()).getIntent())
+                .isEqualTo(AiIntent.CYCLE_COUNT_COMPLETION_RATE);
+        assertThat(router.route("Nguyên nhân trả hàng được ghi trong RMA mới nhất là gì?", List.of()).getIntent())
+                .isEqualTo(AiIntent.RMA_LATEST_REASON);
+        assertThat(router.route("Tỷ lệ RMA được chấp nhận so với tổng RMA là bao nhiêu?", List.of()).getIntent())
+                .isEqualTo(AiIntent.RMA_RATE);
+        assertThat(router.route("Tỷ lệ hoàn thành picking và putaway trong tuần qua?", List.of()).getIntent())
+                .isEqualTo(AiIntent.TASK_COMPLETION_RATE);
+    }
+
+    @Test
+    void routesNextOperationalGapIntents() {
+        assertThat(router.route("Sản phẩm nào giảm tồn kho nhanh nhất trong kho WH-001 trong 7 ngày qua?", List.of()).getIntent())
+                .isEqualTo(AiIntent.STOCK_FASTEST_DECREASE);
+        assertThat(router.route("Hiệu suất pick/putaway/packing của nhân viên cụ thể là thế nào?", List.of()).getIntent())
+                .isEqualTo(AiIntent.EMPLOYEE_OPERATION_PRODUCTIVITY);
+        assertThat(router.route("Có bao nhiêu task đang quá hạn xử lý?", List.of()).getIntent())
+                .isEqualTo(AiIntent.OVERDUE_TASKS);
+        assertThat(router.route("Vị trí lấy hàng nào đang được dùng nhiều nhất cho xuất kho?", List.of()).getIntent())
+                .isEqualTo(AiIntent.PICK_LOCATION_USAGE);
+        assertThat(router.route("Có bao nhiêu đơn xuất kho bị dừng do thiếu hàng?", List.of()).getIntent())
+                .isEqualTo(AiIntent.OUTBOUND_SHORTAGE);
+        assertThat(router.route("Lý do xuất chậm nhiều nhất thường là gì?", List.of()).getIntent())
+                .isEqualTo(AiIntent.OUTBOUND_DELAY_REASON);
+        assertThat(router.route("Danh sách SKU cần kiểm kê lại sau khi phát hiện sai số.", List.of()).getIntent())
+                .isEqualTo(AiIntent.CYCLE_COUNT_RECOUNT_SKUS);
+        assertThat(router.route("RMA nào cần kiểm tra chất lượng hàng trước khi nhập lại?", List.of()).getIntent())
+                .isEqualTo(AiIntent.RMA_QC_REQUIRED);
+        assertThat(router.route("Có bao nhiêu lỗi ghi nhận được báo cáo hôm nay?", List.of()).getIntent())
+                .isEqualTo(AiIntent.OPERATION_ISSUE_REPORT);
+    }
+
+    @Test
+    void routesCurrentUserTaskPhrasesToMyTasks() {
+        assertThat(router.route("Đơn nào tôi đang pick dở?", List.of()).getIntent())
+                .isEqualTo(AiIntent.MY_TASKS);
+        assertThat(router.route("Task putaway nào đang chờ tôi xử lý?", List.of()).getIntent())
+                .isEqualTo(AiIntent.MY_TASKS);
+        assertThat(router.route("Hôm nay tôi còn việc gì chưa xong?", List.of()).getIntent())
+                .isEqualTo(AiIntent.MY_TASKS);
+    }
 }
