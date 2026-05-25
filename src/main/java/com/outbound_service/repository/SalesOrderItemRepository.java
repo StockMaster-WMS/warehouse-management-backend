@@ -13,7 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -142,7 +142,7 @@ public interface SalesOrderItemRepository
 
         String getSoNumber();
 
-        OffsetDateTime getCreatedAt();
+        Instant getCreatedAt();
 
         UUID getWarehouseId();
 

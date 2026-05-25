@@ -18,9 +18,12 @@ import com.outbound_service.repository.CustomerRepository;
 import com.common.audit.AuditLogRepository;
 import com.common.dashboard.dto.DashboardActivityResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.criteria.Predicate;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -84,7 +87,7 @@ public class DashboardService {
                 operations,
                 buildFlow(range, visibleWarehouseIds),
                 buildNotices(stock, openPurchaseOrders, openSalesOrders, operations),
-                buildRecentActivities());
+                buildRecentActivities(visibleWarehouseIds));
     }
 
     private DashboardRange resolveRange(String period, Integer requestedYear) {
@@ -138,7 +141,9 @@ public class DashboardService {
                 ? visibleWarehouseIds.isEmpty() ? java.math.BigDecimal.ZERO
                         : salesOrderRepository.sumTotalRevenueBetweenInWarehouses(range.from(), range.to(), visibleWarehouseIds)
                 : salesOrderRepository.sumTotalRevenueBetween(range.from(), range.to());
-        long customerCount = customerRepository.count();
+        long customerCount = scoped
+                ? visibleWarehouseIds.isEmpty() ? 0 : salesOrderRepository.countDistinctCustomersInWarehouses(visibleWarehouseIds)
+                : customerRepository.count();
 
         return List.of(
                 new DashboardMetricResponse(
@@ -198,8 +203,11 @@ public class DashboardService {
                 ? cycleCountRepository.countLargeVarianceItemsInWarehouses(LARGE_VARIANCE_THRESHOLD, visibleWarehouseIds)
                 : cycleCountRepository.countLargeVarianceItems(LARGE_VARIANCE_THRESHOLD);
 
-        long completedToday = auditLogRepository.countByModuleActionTypeBetween(
-                "SALES_ORDER", "SHIP", todayStart, tomorrowStart);
+        long completedToday = emptyScope ? 0 : scoped
+                ? salesOrderRepository.countByStatusBetweenInWarehouses(
+                        SalesOrderStatus.SHIPPED, todayStart, tomorrowStart, visibleWarehouseIds)
+                : salesOrderRepository.countByStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                        SalesOrderStatus.SHIPPED, todayStart, tomorrowStart);
 
         return new DashboardOperationsResponse(
                 pendingPickingOrders,
@@ -212,8 +220,21 @@ public class DashboardService {
                 largeVarianceItems);
     }
 
-    private List<DashboardActivityResponse> buildRecentActivities() {
-        return auditLogRepository.findTop5ByOrderByCreatedAtDesc().stream()
+    private List<DashboardActivityResponse> buildRecentActivities(Set<UUID> visibleWarehouseIds) {
+        boolean scoped = visibleWarehouseIds != null;
+        boolean emptyScope = scoped && visibleWarehouseIds.isEmpty();
+        List<com.common.audit.AuditLog> logs = emptyScope ? List.of() : scoped
+                ? auditLogRepository.findAll((root, query, cb) -> {
+                    List<Predicate> predicates = new ArrayList<>();
+                    predicates.add(root.get("metadata").isNotNull());
+                    predicates.add(cb.or(visibleWarehouseIds.stream()
+                            .map(id -> cb.like(root.get("metadata"), "%" + id + "%"))
+                            .toArray(Predicate[]::new)));
+                    return cb.and(predicates.toArray(Predicate[]::new));
+                }, PageRequest.of(0, 5, Sort.by(Sort.Direction.DESC, "createdAt"))).getContent()
+                : auditLogRepository.findTop5ByOrderByCreatedAtDesc();
+
+        return logs.stream()
                 .map(log -> new DashboardActivityResponse(
                         log.getId(),
                         log.getModule(),
