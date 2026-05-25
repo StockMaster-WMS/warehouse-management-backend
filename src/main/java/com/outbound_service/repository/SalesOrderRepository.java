@@ -176,4 +176,11 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID>, J
 			@Param("fromDate") java.time.OffsetDateTime fromDate,
 			@Param("toDate") java.time.OffsetDateTime toDate,
 			@Param("warehouseIds") Collection<UUID> warehouseIds);
+
+	@Query("""
+			SELECT COUNT(DISTINCT o.customerId) FROM SalesOrder o
+			WHERE o.customerId IS NOT NULL
+			  AND o.warehouseId IN :warehouseIds
+			""")
+	long countDistinctCustomersInWarehouses(@Param("warehouseIds") Collection<UUID> warehouseIds);
 }
