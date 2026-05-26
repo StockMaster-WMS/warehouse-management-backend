@@ -3,6 +3,7 @@ package com.inbound_service.service;
 import com.common.api.PagedResponse;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.inbound_service.dto.request.AddPurchaseOrderItemRequest;
 import com.inbound_service.dto.request.CreatePoItemRequest;
 import com.inbound_service.dto.request.UpdatePoItemRequest;
 import com.inbound_service.dto.response.PoItemResponse;
@@ -68,6 +69,31 @@ public class PoItemService {
         PoItem item = poItemMapper.toEntity(request);
         item.setPurchaseOrder(purchaseOrder);
         item.setReceivedQty(0);
+
+        return poItemMapper.toResponse(poItemRepository.save(item));
+    }
+
+    @Transactional
+    public PoItemResponse addToPurchaseOrder(UUID purchaseOrderId, AddPurchaseOrderItemRequest request,
+            Collection<UUID> visibleWarehouseIds) {
+        PurchaseOrder purchaseOrder = getPurchaseOrder(purchaseOrderId);
+        assertPoVisible(purchaseOrder, visibleWarehouseIds);
+        requirePoEditable(purchaseOrder);
+        validateOrderedQty(request.orderedQty());
+
+        short lineNumber = resolveLineNumber(purchaseOrderId, request.lineNumber());
+        ensureLineNumberUnique(purchaseOrderId, lineNumber, null);
+
+        PoItem item = PoItem.builder()
+                .purchaseOrder(purchaseOrder)
+                .lineNumber(lineNumber)
+                .productId(request.productId())
+                .productSku(request.productSku())
+                .productName(request.productName())
+                .orderedQty(request.orderedQty())
+                .receivedQty(0)
+                .unitPrice(request.unitPrice())
+                .build();
 
         return poItemMapper.toResponse(poItemRepository.save(item));
     }
@@ -140,6 +166,20 @@ public class PoItemService {
                 .ifPresent(existing -> {
                     throw new AppException(ErrorCode.BAD_REQUEST, "Số dòng đã tồn tại trong đơn nhập");
                 });
+    }
+
+    private short resolveLineNumber(UUID purchaseOrderId, Short requestedLineNumber) {
+        if (requestedLineNumber != null) {
+            if (requestedLineNumber <= 0) {
+                throw new AppException(ErrorCode.BAD_REQUEST, "So dong phai lon hon 0");
+            }
+            return requestedLineNumber;
+        }
+        short currentMax = poItemRepository.findMaxLineNumberByPurchaseOrderId(purchaseOrderId);
+        if (currentMax == Short.MAX_VALUE) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Don nhap da dat toi da so dong cho phep");
+        }
+        return (short) (currentMax + 1);
     }
 
     // Bắt buộc PO ở trạng thái DRAFT mới cho sửa dòng.
