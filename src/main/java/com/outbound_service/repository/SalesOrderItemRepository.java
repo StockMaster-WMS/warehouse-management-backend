@@ -50,13 +50,13 @@ public interface SalesOrderItemRepository
     @Query(value = """
             select i.product_id as "productId",
                    i.product_sku as "productSku",
-                   sum(i.shipped_qty) as "totalQty",
-                   sum(i.unit_price * i.shipped_qty) as "totalRevenue"
+                   coalesce(sum(coalesce(i.shipped_qty, 0)), 0) as "totalQty",
+                   coalesce(sum(coalesce(i.unit_price, 0) * coalesce(i.shipped_qty, 0)), 0) as "totalRevenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
             where o.status in ('SHIPPED', 'COMPLETED')
             group by i.product_id, i.product_sku
-            order by sum(i.shipped_qty) desc
+            order by coalesce(sum(coalesce(i.shipped_qty, 0)), 0) desc
             limit :limit
             """, nativeQuery = true)
     List<TopSkuView> findTopSkus(@Param("limit") int limit);
@@ -64,15 +64,15 @@ public interface SalesOrderItemRepository
     @Query(value = """
             select i.product_id as "productId",
                    i.product_sku as "productSku",
-                   sum(i.shipped_qty) as "totalQty",
-                   sum(i.unit_price * i.shipped_qty) as "totalRevenue"
+                   coalesce(sum(coalesce(i.shipped_qty, 0)), 0) as "totalQty",
+                   coalesce(sum(coalesce(i.unit_price, 0) * coalesce(i.shipped_qty, 0)), 0) as "totalRevenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
             where o.status in ('SHIPPED', 'COMPLETED')
               and o.created_at >= :fromDate
               and o.created_at < :toDate
             group by i.product_id, i.product_sku
-            order by sum(i.shipped_qty) desc
+            order by coalesce(sum(coalesce(i.shipped_qty, 0)), 0) desc
             limit :limit
             """, nativeQuery = true)
     List<TopSkuView> findTopSkusBetween(
@@ -83,8 +83,8 @@ public interface SalesOrderItemRepository
     @Query(value = """
             select i.product_id as "productId",
                    i.product_sku as "productSku",
-                   sum(i.shipped_qty) as "totalQty",
-                   sum(i.unit_price * i.shipped_qty) as "totalRevenue"
+                   coalesce(sum(coalesce(i.shipped_qty, 0)), 0) as "totalQty",
+                   coalesce(sum(coalesce(i.unit_price, 0) * coalesce(i.shipped_qty, 0)), 0) as "totalRevenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
             where o.status in ('SHIPPED', 'COMPLETED')
@@ -92,7 +92,7 @@ public interface SalesOrderItemRepository
               and o.created_at < :toDate
               and o.warehouse_id in (:warehouseIds)
             group by i.product_id, i.product_sku
-            order by sum(i.shipped_qty) desc
+            order by coalesce(sum(coalesce(i.shipped_qty, 0)), 0) desc
             limit :limit
             """, nativeQuery = true)
     List<TopSkuView> findTopSkusBetweenInWarehouses(
@@ -109,7 +109,7 @@ public interface SalesOrderItemRepository
 
     @Query(value = """
             select cast(o.created_at as date) as "orderDate",
-                   coalesce(sum(i.unit_price * i.shipped_qty), 0) as "revenue"
+                   coalesce(sum(coalesce(i.unit_price, 0) * coalesce(i.shipped_qty, 0)), 0) as "revenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
             where o.status in ('SHIPPED', 'COMPLETED')
@@ -124,7 +124,7 @@ public interface SalesOrderItemRepository
 
     @Query(value = """
             select cast(o.created_at as date) as "orderDate",
-                   coalesce(sum(i.unit_price * i.shipped_qty), 0) as "revenue"
+                   coalesce(sum(coalesce(i.unit_price, 0) * coalesce(i.shipped_qty, 0)), 0) as "revenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
             where o.status in ('SHIPPED', 'COMPLETED')
@@ -174,7 +174,7 @@ public interface SalesOrderItemRepository
                    i.ordered_qty as "orderedQty",
                    i.shipped_qty as "shippedQty",
                    i.unit_price as "unitPrice",
-                   coalesce(i.unit_price * i.shipped_qty, 0) as "revenue"
+                   coalesce(coalesce(i.unit_price, 0) * coalesce(i.shipped_qty, 0), 0) as "revenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
             where o.status in ('SHIPPED', 'COMPLETED')
@@ -197,7 +197,7 @@ public interface SalesOrderItemRepository
                    i.ordered_qty as "orderedQty",
                    i.shipped_qty as "shippedQty",
                    i.unit_price as "unitPrice",
-                   coalesce(i.unit_price * i.shipped_qty, 0) as "revenue"
+                   coalesce(coalesce(i.unit_price, 0) * coalesce(i.shipped_qty, 0), 0) as "revenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
             where o.status in ('SHIPPED', 'COMPLETED')
