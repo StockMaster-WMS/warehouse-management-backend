@@ -16,13 +16,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<UserAccount, UUID>, JpaSpecificationExecutor<UserAccount> {
-        @EntityGraph(attributePaths = "roles")
+        @EntityGraph(attributePaths = { "roles", "warehouses" })
         Optional<UserAccount> findByUsername(String username);
 
         @EntityGraph(attributePaths = { "roles", "warehouses" })
         Optional<UserAccount> findByEmail(String email);
 
-        @EntityGraph(attributePaths = "roles")
+        @EntityGraph(attributePaths = { "roles", "warehouses" })
         Optional<UserAccount> findByUsernameOrEmail(String username, String email);
 
         @EntityGraph(attributePaths = { "roles", "warehouses" })

@@ -1,6 +1,8 @@
 package com.warehouse_service.service;
 
 import com.common.api.PagedResponse;
+import com.product_service.entity.Product;
+import com.product_service.repository.ProductRepository;
 import com.warehouse_service.dto.response.StockMovementResponse;
 import com.warehouse_service.entity.Location;
 import com.warehouse_service.entity.StockLevel;
@@ -16,7 +18,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 @Service
@@ -25,21 +31,38 @@ import java.util.UUID;
 public class StockMovementService {
 
     private final StockMovementRepository stockMovementRepository;
+    private final ProductRepository productRepository;
 
     // Lấy lịch sử biến động tồn kho với phân trang và bộ lọc.
     public PagedResponse<StockMovementResponse> findAll(Pageable pageable,
             UUID warehouseId, UUID locationId, UUID productId,
             String movementType, OffsetDateTime from, OffsetDateTime to) {
+        return findAll(pageable, warehouseId, locationId, productId, movementType, from, to, null);
+    }
+
+    public PagedResponse<StockMovementResponse> findAll(Pageable pageable,
+            UUID warehouseId, UUID locationId, UUID productId,
+            String movementType, OffsetDateTime from, OffsetDateTime to,
+            Collection<UUID> visibleWarehouseIds) {
+        boolean hasMovementType = movementType != null && !movementType.isBlank();
         Specification<StockMovement> spec = StockMovementSpecification.hasWarehouseId(warehouseId)
+                .and(StockMovementSpecification.warehouseIdIn(visibleWarehouseIds))
                 .and(StockMovementSpecification.hasLocationId(locationId))
                 .and(StockMovementSpecification.hasProductId(productId))
                 .and(StockMovementSpecification.hasMovementType(movementType))
+                .and(hasMovementType ? null : StockMovementSpecification.excludeMovementType("RELEASE"))
                 .and(StockMovementSpecification.createdAfter(from))
                 .and(StockMovementSpecification.createdBefore(to));
 
         Page<StockMovement> page = stockMovementRepository.findAll(spec, pageable);
+        Map<UUID, Product> productsById = productRepository.findAllById(page.getContent().stream()
+                        .map(StockMovement::getProductId)
+                        .filter(id -> id != null)
+                        .collect(Collectors.toSet()))
+                .stream()
+                .collect(Collectors.toMap(Product::getId, Function.identity()));
         List<StockMovementResponse> content = page.getContent().stream()
-                .map(this::toResponse)
+                .map(movement -> toResponse(movement, productsById))
                 .toList();
 
         return new PagedResponse<>(
@@ -92,9 +115,10 @@ public class StockMovementService {
         stockMovementRepository.save(movement);
     }
 
-    private StockMovementResponse toResponse(StockMovement m) {
+    private StockMovementResponse toResponse(StockMovement m, Map<UUID, Product> productsById) {
         Warehouse w = m.getWarehouse();
         Location l = m.getLocation();
+        Product product = productsById.get(m.getProductId());
         return new StockMovementResponse(
                 m.getId(),
                 w != null ? w.getId() : null,
@@ -102,6 +126,8 @@ public class StockMovementService {
                 l != null ? l.getId() : null,
                 l != null ? l.getCode() : null,
                 m.getProductId(),
+                product != null ? product.getSku() : null,
+                product != null ? product.getName() : null,
                 m.getLotNumber(),
                 m.getMovementType(),
                 m.getQtyChange(),

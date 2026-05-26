@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.Collection;
 
 @Service
 @RequiredArgsConstructor
@@ -53,7 +54,13 @@ public class PoItemService {
     // Tạo mới dòng đơn nhập.
     @Transactional
     public PoItemResponse create(CreatePoItemRequest request) {
+        return create(request, null);
+    }
+
+    @Transactional
+    public PoItemResponse create(CreatePoItemRequest request, Collection<UUID> visibleWarehouseIds) {
         PurchaseOrder purchaseOrder = getPurchaseOrder(request.purchaseOrderId());
+        assertPoVisible(purchaseOrder, visibleWarehouseIds);
         requirePoEditable(purchaseOrder);
         validateOrderedQty(request.orderedQty());
         ensureLineNumberUnique(request.purchaseOrderId(), request.lineNumber(), null);
@@ -68,8 +75,15 @@ public class PoItemService {
     // Cập nhật dòng đơn nhập theo id.
     @Transactional
     public PoItemResponse update(UUID id, UpdatePoItemRequest request) {
+        return update(id, request, null);
+    }
+
+    @Transactional
+    public PoItemResponse update(UUID id, UpdatePoItemRequest request, Collection<UUID> visibleWarehouseIds) {
         PoItem item = getPoItem(id);
         PurchaseOrder purchaseOrder = getPurchaseOrder(request.purchaseOrderId());
+        assertPoVisible(item.getPurchaseOrder(), visibleWarehouseIds);
+        assertPoVisible(purchaseOrder, visibleWarehouseIds);
         requirePoEditable(item.getPurchaseOrder());
         requirePoEditable(purchaseOrder);
         if (!item.getPurchaseOrder().getId().equals(request.purchaseOrderId())) {
@@ -92,7 +106,13 @@ public class PoItemService {
     // Xóa dòng đơn nhập khi chưa phát sinh nhận hàng.
     @Transactional
     public void delete(UUID id) {
+        delete(id, null);
+    }
+
+    @Transactional
+    public void delete(UUID id, Collection<UUID> visibleWarehouseIds) {
         PoItem item = getPoItem(id);
+        assertPoVisible(item.getPurchaseOrder(), visibleWarehouseIds);
         requirePoEditable(item.getPurchaseOrder());
         if ((item.getReceivedQty() != null ? item.getReceivedQty() : 0) > 0) {
             throw new AppException(ErrorCode.BAD_REQUEST,
@@ -127,6 +147,13 @@ public class PoItemService {
         if (purchaseOrder.getStatus() != PurchaseOrderStatus.DRAFT) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Chỉ chỉnh sửa dòng đơn nhập khi PO ở trạng thái DRAFT");
+        }
+    }
+
+    private void assertPoVisible(PurchaseOrder purchaseOrder, Collection<UUID> visibleWarehouseIds) {
+        if (visibleWarehouseIds != null && (visibleWarehouseIds.isEmpty()
+                || !visibleWarehouseIds.contains(purchaseOrder.getWarehouseId()))) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Bạn không được phân quyền thao tác kho này");
         }
     }
 

@@ -6,6 +6,7 @@ import java.util.UUID;
 public record TopSkuResponse(
     UUID productId,
     String productSku,
+    String productName,
     Long totalQty,
     BigDecimal totalRevenue
 ) {}

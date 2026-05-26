@@ -75,8 +75,24 @@ public class CycleCountService {
         Specification<CycleCount> spec = buildSpec(keyword, status, warehouseId, actorId,
                 visibleWarehouseIds, staffOnly, reportOnly);
         Page<CycleCount> page = cycleCountRepository.findAll(spec, pageable);
+        List<UUID> countIds = page.getContent().stream().map(CycleCount::getId).toList();
+        Map<UUID, CycleCountItemRepository.CycleCountItemStatsView> statsByCountId = countIds.isEmpty()
+                ? Map.of()
+                : cycleCountItemRepository.summarizeByCycleCountIds(countIds).stream()
+                        .collect(Collectors.toMap(
+                                CycleCountItemRepository.CycleCountItemStatsView::getCycleCountId,
+                                Function.identity()));
+        Map<UUID, String> warehouseNamesById = page.getContent().stream()
+                .map(CycleCount::getWarehouseId)
+                .filter(id -> id != null)
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toCollection(LinkedHashSet::new),
+                        ids -> ids.isEmpty()
+                                ? Map.<UUID, String>of()
+                                : warehouseRepository.findAllById(ids).stream()
+                                        .collect(Collectors.toMap(Warehouse::getId, Warehouse::getName))));
         List<CycleCountResponse> content = page.getContent().stream()
-                .map(this::toResponse)
+                .map(count -> toSummaryResponse(count, statsByCountId.get(count.getId()), warehouseNamesById))
                 .toList();
         return new PagedResponse<>(content, page.getNumber(), page.getSize(),
                 page.getTotalElements(), page.getTotalPages());
@@ -428,7 +444,7 @@ public class CycleCountService {
 
     private List<StockLevel> resolveStockLevelsByScope(UUID warehouseId, String scope, String scopeValue) {
         return switch (scope.trim().toUpperCase()) {
-            case "WAREHOUSE" -> stockLevelRepository.findByWarehouseId(warehouseId);
+            case "WAREHOUSE" -> stockLevelRepository.findByWarehouseIdWithDetails(warehouseId);
             case "ZONE" -> {
                 if (!StringUtils.hasText(scopeValue)) {
                     throw new AppException(ErrorCode.BAD_REQUEST, "scopeValue là bắt buộc cho phạm vi ZONE");
@@ -440,9 +456,7 @@ public class CycleCountService {
                     throw new AppException(ErrorCode.BAD_REQUEST, "scopeValue là bắt buộc cho phạm vi LOCATION");
                 }
                 UUID locationId = parseUuid(scopeValue, "scopeValue LOCATION phải là UUID vị trí");
-                yield stockLevelRepository.findByLocationIdWithDetails(locationId).stream()
-                        .filter(sl -> sl.getWarehouse() != null && warehouseId.equals(sl.getWarehouse().getId()))
-                        .toList();
+                yield stockLevelRepository.findByWarehouseIdAndLocationIdWithDetails(warehouseId, locationId);
             }
             case "PRODUCT" -> {
                 if (!StringUtils.hasText(scopeValue)) {
@@ -531,6 +545,48 @@ public class CycleCountService {
                 totalAbsDiscrepancy,
                 lines
         );
+    }
+
+    private CycleCountResponse toSummaryResponse(CycleCount count,
+            CycleCountItemRepository.CycleCountItemStatsView stats,
+            Map<UUID, String> warehouseNamesById) {
+        int totalLines = stats == null ? 0 : safeLongToInt(stats.getTotalLines());
+        int countedLines = stats == null ? 0 : safeLongToInt(stats.getCountedLines());
+        int discrepancyLines = stats == null ? 0 : safeLongToInt(stats.getDiscrepancyLines());
+        int totalAbsDiscrepancy = stats == null ? 0 : safeLongToInt(stats.getTotalAbsDiscrepancy());
+
+        return new CycleCountResponse(
+                count.getId(),
+                count.getCountNumber(),
+                count.getWarehouseId(),
+                warehouseNamesById.get(count.getWarehouseId()),
+                count.getStatus().name(),
+                count.getDescription(),
+                count.getScope(),
+                count.getScopeValue(),
+                count.getScheduledAt(),
+                count.getStartedAt(),
+                count.getSubmittedAt(),
+                count.getCompletedAt(),
+                count.getAssignedTo(),
+                count.getCreatedBy(),
+                count.getApprovedBy(),
+                count.getRejectedBy(),
+                count.getRejectedAt(),
+                count.getRejectionReason(),
+                count.getCreatedAt(),
+                totalLines,
+                countedLines,
+                discrepancyLines,
+                totalAbsDiscrepancy,
+                List.of());
+    }
+
+    private int safeLongToInt(Long value) {
+        if (value == null) {
+            return 0;
+        }
+        return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : value.intValue();
     }
 
     private List<CycleCountResponse.LineResponse> toLineResponses(CycleCount count) {

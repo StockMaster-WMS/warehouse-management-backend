@@ -1,5 +1,6 @@
 package com.auth_service.dto.response;
 
+import java.util.List;
 import java.util.UUID;
 
 public record LoginResponse(
@@ -13,7 +14,9 @@ public record LoginResponse(
             String username,
             String email,
             String fullName,
-            String roles
+            String roles,
+            List<UUID> warehouseIds,
+            List<String> warehouseNames
     ) {
     }
 }

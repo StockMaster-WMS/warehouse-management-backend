@@ -65,27 +65,32 @@ public class PurchaseOrderController {
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy đơn nhập theo ID", description = "Trả về chi tiết purchase order theo UUID")
     public ApiResponse<PurchaseOrderResponse> getById(@PathVariable UUID id, Authentication authentication) {
-        return ApiResponse.success("Lấy đơn nhập thành công", purchaseOrderService.findById(id));
+        return ApiResponse.success("Lấy đơn nhập thành công",
+                purchaseOrderService.findById(id, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping("/{id}/detail")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy chi tiết PO cho màn hình nhập hàng", description = "Trả về PO + danh sách dòng hàng + putaway tasks + tiến độ nhận")
     public ApiResponse<PurchaseOrderDetailResponse> getDetail(@PathVariable UUID id, Authentication authentication) {
-        return ApiResponse.success("Lấy chi tiết đơn nhập thành công", purchaseOrderService.findDetail(id));
+        return ApiResponse.success("Lấy chi tiết đơn nhập thành công",
+                purchaseOrderService.findDetail(id, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @GetMapping("/number/{poNumber}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Lấy đơn nhập theo mã", description = "Tìm purchase order bằng poNumber")
     public ApiResponse<PurchaseOrderResponse> getByPoNumber(@PathVariable String poNumber, Authentication authentication) {
-        return ApiResponse.success("Lấy đơn nhập thành công", purchaseOrderService.findByPoNumber(poNumber));
+        return ApiResponse.success("Lấy đơn nhập thành công",
+                purchaseOrderService.findByPoNumberScoped(poNumber, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Tạo đơn nhập", description = "Tạo mới một purchase order")
-    public ApiResponse<PurchaseOrderResponse> create(@Valid @RequestBody CreatePurchaseOrderRequest request) {
+    public ApiResponse<PurchaseOrderResponse> create(@Valid @RequestBody CreatePurchaseOrderRequest request,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, request.warehouseId());
         return ApiResponse.success("Tạo đơn nhập thành công", purchaseOrderService.create(request));
     }
 

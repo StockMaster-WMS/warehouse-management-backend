@@ -14,6 +14,8 @@ public record PickingItemResponse(
         String status,
         Integer pickSequence,
         String salesOrderNumber,
+        Short salesOrderPriority,
+        OffsetDateTime salesOrderCreatedAt,
         String productSku,
         String productName,
         String barcodeEan13,

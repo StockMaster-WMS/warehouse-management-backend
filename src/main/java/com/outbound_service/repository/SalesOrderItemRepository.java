@@ -48,13 +48,15 @@ public interface SalesOrderItemRepository
     }
 
     @Query(value = """
-            select product_id as "productId",
-                   product_sku as "productSku",
-                   sum(shipped_qty) as "totalQty",
-                   sum(unit_price * shipped_qty) as "totalRevenue"
-            from sales_order_items
-            group by product_id, product_sku
-            order by sum(shipped_qty) desc
+            select i.product_id as "productId",
+                   i.product_sku as "productSku",
+                   sum(i.shipped_qty) as "totalQty",
+                   sum(i.unit_price * i.shipped_qty) as "totalRevenue"
+            from sales_order_items i
+            join sales_orders o on i.sales_order_id = o.id
+            where o.status in ('SHIPPED', 'COMPLETED')
+            group by i.product_id, i.product_sku
+            order by sum(i.shipped_qty) desc
             limit :limit
             """, nativeQuery = true)
     List<TopSkuView> findTopSkus(@Param("limit") int limit);
@@ -66,7 +68,7 @@ public interface SalesOrderItemRepository
                    sum(i.unit_price * i.shipped_qty) as "totalRevenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
-            where o.status = 'SHIPPED'
+            where o.status in ('SHIPPED', 'COMPLETED')
               and o.created_at >= :fromDate
               and o.created_at < :toDate
             group by i.product_id, i.product_sku
@@ -85,7 +87,7 @@ public interface SalesOrderItemRepository
                    sum(i.unit_price * i.shipped_qty) as "totalRevenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
-            where o.status = 'SHIPPED'
+            where o.status in ('SHIPPED', 'COMPLETED')
               and o.created_at >= :fromDate
               and o.created_at < :toDate
               and o.warehouse_id in (:warehouseIds)
@@ -110,7 +112,7 @@ public interface SalesOrderItemRepository
                    coalesce(sum(i.unit_price * i.shipped_qty), 0) as "revenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
-            where o.status = 'SHIPPED'
+            where o.status in ('SHIPPED', 'COMPLETED')
               and o.created_at >= :fromDate
               and o.created_at < :toDate
             group by cast(o.created_at as date)
@@ -125,7 +127,7 @@ public interface SalesOrderItemRepository
                    coalesce(sum(i.unit_price * i.shipped_qty), 0) as "revenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
-            where o.status = 'SHIPPED'
+            where o.status in ('SHIPPED', 'COMPLETED')
               and o.created_at >= :fromDate
               and o.created_at < :toDate
               and o.warehouse_id in (:warehouseIds)
@@ -175,7 +177,7 @@ public interface SalesOrderItemRepository
                    coalesce(i.unit_price * i.shipped_qty, 0) as "revenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
-            where o.status = 'SHIPPED'
+            where o.status in ('SHIPPED', 'COMPLETED')
               and o.created_at >= :fromDate
               and o.created_at < :toDate
             order by o.created_at desc, o.so_number asc, i.line_number asc
@@ -198,7 +200,7 @@ public interface SalesOrderItemRepository
                    coalesce(i.unit_price * i.shipped_qty, 0) as "revenue"
             from sales_order_items i
             join sales_orders o on i.sales_order_id = o.id
-            where o.status = 'SHIPPED'
+            where o.status in ('SHIPPED', 'COMPLETED')
               and o.created_at >= :fromDate
               and o.created_at < :toDate
               and o.warehouse_id in (:warehouseIds)

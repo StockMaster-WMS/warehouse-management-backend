@@ -49,6 +49,8 @@ public class DashboardService {
     private static final int DEFAULT_FLOW_DAYS = 7;
     private static final int MAX_FLOW_DAYS = 365;
     private static final int OVERDUE_PICKING_HOURS = 24;
+    private static final List<SalesOrderStatus> FULFILLED_SALES_STATUSES =
+            List.of(SalesOrderStatus.SHIPPED, SalesOrderStatus.COMPLETED);
     private static final int LARGE_VARIANCE_THRESHOLD = 10;
     private static final DateTimeFormatter SHORT_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM");
 
@@ -77,9 +79,9 @@ public class DashboardService {
                         EnumSet.of(PurchaseOrderStatus.COMPLETED, PurchaseOrderStatus.CANCELLED));
         long openSalesOrders = emptyScope ? 0 : scoped
                 ? salesOrderRepository.countByStatusNotInAndWarehouseIdIn(
-                        EnumSet.of(SalesOrderStatus.SHIPPED, SalesOrderStatus.CANCELLED), visibleWarehouseIds)
+                        EnumSet.of(SalesOrderStatus.SHIPPED, SalesOrderStatus.COMPLETED, SalesOrderStatus.CANCELLED), visibleWarehouseIds)
                 : salesOrderRepository.countByStatusNotIn(
-                        EnumSet.of(SalesOrderStatus.SHIPPED, SalesOrderStatus.CANCELLED));
+                        EnumSet.of(SalesOrderStatus.SHIPPED, SalesOrderStatus.COMPLETED, SalesOrderStatus.CANCELLED));
         DashboardOperationsResponse operations = buildOperations(stock, visibleWarehouseIds);
 
         return new DashboardSummaryResponse(
@@ -204,10 +206,10 @@ public class DashboardService {
                 : cycleCountRepository.countLargeVarianceItems(LARGE_VARIANCE_THRESHOLD);
 
         long completedToday = emptyScope ? 0 : scoped
-                ? salesOrderRepository.countByStatusBetweenInWarehouses(
-                        SalesOrderStatus.SHIPPED, todayStart, tomorrowStart, visibleWarehouseIds)
-                : salesOrderRepository.countByStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
-                        SalesOrderStatus.SHIPPED, todayStart, tomorrowStart);
+                ? salesOrderRepository.countByStatusInBetweenInWarehouses(
+                        FULFILLED_SALES_STATUSES, todayStart, tomorrowStart, visibleWarehouseIds)
+                : salesOrderRepository.countByStatusInAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                        FULFILLED_SALES_STATUSES, todayStart, tomorrowStart);
 
         return new DashboardOperationsResponse(
                 pendingPickingOrders,

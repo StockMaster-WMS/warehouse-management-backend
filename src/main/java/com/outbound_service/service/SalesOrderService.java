@@ -251,8 +251,8 @@ public class SalesOrderService {
         SalesOrder so = getSalesOrder(id);
         warehouseAccessService.assertCanAccessWarehouse(authentication, so.getWarehouseId());
         SalesOrderResponse before = salesOrderMapper.toResponse(so);
-        if (so.getStatus() == SalesOrderStatus.SHIPPED) {
-            throw new AppException(ErrorCode.BAD_REQUEST, "Không thể hủy đơn đã giao hàng");
+        if (so.getStatus() == SalesOrderStatus.SHIPPED || so.getStatus() == SalesOrderStatus.COMPLETED) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Không thể hủy đơn đã xuất kho hoặc đã hoàn tất");
         }
         if (so.getStatus() == SalesOrderStatus.CANCELLED) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Đơn xuất đã hủy trước đó");
@@ -294,15 +294,23 @@ public class SalesOrderService {
         return after;
     }
 
-    // Xác nhận đơn nháp trước khi xử lý (DRAFT -> PENDING).
+    // Hoàn tất đơn sau khi đã xuất kho.
     @Transactional
     public SalesOrderResponse completeOrder(UUID id, org.springframework.security.core.Authentication authentication) {
         SalesOrder so = getSalesOrder(id);
         warehouseAccessService.assertCanAccessWarehouse(authentication, so.getWarehouseId());
-        if (so.getStatus() == SalesOrderStatus.SHIPPED) {
+        if (so.getStatus() == SalesOrderStatus.COMPLETED) {
             return salesOrderMapper.toResponse(so);
         }
-        return markShipped(id, authentication);
+        requireStatus(so, SalesOrderStatus.SHIPPED, "Chỉ hoàn tất đơn sau khi đã xuất kho");
+        SalesOrderResponse before = salesOrderMapper.toResponse(so);
+        so.setStatus(SalesOrderStatus.COMPLETED);
+        SalesOrder saved = salesOrderRepository.save(so);
+        SalesOrderResponse after = salesOrderMapper.toResponse(saved);
+        auditLogService.record("SALES_ORDER", "COMPLETE", "Hoàn tất đơn xuất",
+                "SALES_ORDER", saved.getId(), saved.getSoNumber(), before, after,
+                null, orderMetadata(saved));
+        return after;
     }
 
     @Transactional

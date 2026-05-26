@@ -48,7 +48,7 @@ public class PickingItemController {
     public ApiResponse<PagedResponse<PickingItemResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "pickSequence") String sort,
+            @RequestParam(defaultValue = "salesOrderPriority") String sort,
             @RequestParam(defaultValue = "asc") String sortDir,
             @Parameter(description = "ID so item") @RequestParam(required = false) UUID soItemId,
             @Parameter(description = "ID sản phẩm") @RequestParam(required = false) UUID productId,
@@ -66,7 +66,8 @@ public class PickingItemController {
             resolvedSort = "completedAt";
             direction = Sort.Direction.DESC;
         }
-        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, resolvedSort));
+        Sort sortSpec = buildPickingSort(sort, direction, resolvedSort);
+        Pageable pageable = PageRequest.of(page, size, sortSpec);
         return ApiResponse.success("Lấy danh sách picking item thành công",
                 pickingItemService.findAll(pageable, soItemId, productId, locationId, status, salesOrderStatus, createdFrom, createdTo,
                         staffScopeUserId(authentication), warehouseAccessService.visibleWarehouseIdSet(authentication)));
@@ -99,10 +100,22 @@ public class PickingItemController {
     }
 
     private String resolveSortField(String sort) {
+        if ("priority".equalsIgnoreCase(sort) || "salesOrderPriority".equalsIgnoreCase(sort)) {
+            return "soItem.salesOrder.priority";
+        }
         if ("salesOrderNumber".equalsIgnoreCase(sort)) {
             return "soItem.salesOrder.soNumber";
         }
         return sort;
+    }
+
+    private Sort buildPickingSort(String requestedSort, Sort.Direction direction, String resolvedSort) {
+        if ("priority".equalsIgnoreCase(requestedSort) || "salesOrderPriority".equalsIgnoreCase(requestedSort)) {
+            return Sort.by(direction, resolvedSort)
+                    .and(Sort.by(Sort.Direction.ASC, "pickSequence"))
+                    .and(Sort.by(Sort.Direction.ASC, "soItem.salesOrder.createdAt"));
+        }
+        return Sort.by(direction, resolvedSort);
     }
 
     private boolean isCompletedStatus(String status) {

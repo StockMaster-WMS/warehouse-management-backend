@@ -218,6 +218,8 @@ class OutboundStockFlowTest {
                 item.getStatus().name(),
                 item.getPickSequence(),
                 item.getSoItem().getSalesOrder().getSoNumber(),
+                item.getSoItem().getSalesOrder().getPriority(),
+                item.getSoItem().getSalesOrder().getCreatedAt(),
                 item.getSoItem().getProductSku(),
                 null,
                 null,

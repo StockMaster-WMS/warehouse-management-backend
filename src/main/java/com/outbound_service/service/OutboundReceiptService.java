@@ -51,7 +51,7 @@ public class OutboundReceiptService {
         SalesOrder order = salesOrderRepository.findWithItemsById(salesOrderId)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất"));
         assertVisible(order, visibleWarehouseIds);
-        if (order.getStatus() != SalesOrderStatus.SHIPPED) {
+        if (order.getStatus() != SalesOrderStatus.SHIPPED && order.getStatus() != SalesOrderStatus.COMPLETED) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ tạo trả hàng từ đơn xuất đã giao");
         }
         return toDetail(order, returnedQtyByProduct(order.getId()));

@@ -10,6 +10,8 @@ public record StockMovementResponse(
         UUID locationId,
         String locationCode,
         UUID productId,
+        String productSku,
+        String productName,
         String lotNumber,
         String movementType,
         Integer qtyChange,

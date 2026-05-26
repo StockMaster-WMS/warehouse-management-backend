@@ -121,7 +121,9 @@ public class AuthController {
                         tokens.username(),
                         tokens.email(),
                         tokens.fullName(),
-                        tokens.roles()));
+                        tokens.roles(),
+                        tokens.warehouseIds(),
+                        tokens.warehouseNames()));
     }
 
     private void addRefreshCookie(HttpServletRequest request, HttpServletResponse response, String refreshToken) {

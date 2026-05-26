@@ -169,7 +169,7 @@ public class ReportSummaryExcelExportService {
 
     private void writeTopSkusSheet(Workbook workbook, ReportSummaryResponse summary, CellStyle headerStyle) {
         Sheet sheet = workbook.createSheet("Top SKU");
-        createHeader(sheet, headerStyle, "Hạng", "Mã hàng", "Số lượng đã xuất", "Doanh thu", "Tỷ trọng doanh thu");
+        createHeader(sheet, headerStyle, "Hạng", "Mã hàng", "Tên sản phẩm", "Số lượng đã xuất", "Doanh thu", "Tỷ trọng doanh thu");
 
         int rowIndex = 1;
         BigDecimal totalRevenue = summary.totalRevenue() == null ? BigDecimal.ZERO : summary.totalRevenue();
@@ -178,14 +178,15 @@ public class ReportSummaryExcelExportService {
             BigDecimal revenue = item.totalRevenue() == null ? BigDecimal.ZERO : item.totalRevenue();
             row.createCell(0).setCellValue(rowIndex - 1);
             row.createCell(1).setCellValue(item.productSku() == null ? "" : item.productSku());
-            row.createCell(2).setCellValue(item.totalQty() == null ? 0 : item.totalQty());
-            row.createCell(3).setCellValue(revenue.doubleValue());
-            row.createCell(4).setCellValue(totalRevenue.compareTo(BigDecimal.ZERO) == 0
+            row.createCell(2).setCellValue(item.productName() == null ? "" : item.productName());
+            row.createCell(3).setCellValue(item.totalQty() == null ? 0 : item.totalQty());
+            row.createCell(4).setCellValue(revenue.doubleValue());
+            row.createCell(5).setCellValue(totalRevenue.compareTo(BigDecimal.ZERO) == 0
                     ? "0%"
                     : revenue.multiply(BigDecimal.valueOf(100)).divide(totalRevenue, 2, RoundingMode.HALF_UP) + "%");
         }
 
-        setWidths(sheet, 10, 24, 20, 18, 20);
+        setWidths(sheet, 10, 24, 36, 20, 18, 20);
     }
 
     private void writeDetailSheet(Workbook workbook,

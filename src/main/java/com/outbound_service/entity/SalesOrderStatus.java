@@ -7,5 +7,6 @@ public enum SalesOrderStatus {
     PICKING,
     PACKED,
     SHIPPED,
+    COMPLETED,
     CANCELLED
 }

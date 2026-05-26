@@ -16,6 +16,8 @@ import com.auth_service.repository.UserRepository;
 import com.auth_service.security.JwtTokenProvider;
 import com.common.exception.AppException;
 import com.common.exception.ErrorCode;
+import com.warehouse_service.entity.Warehouse;
+import com.warehouse_service.repository.WarehouseRepository;
 import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -25,7 +27,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -39,6 +44,7 @@ public class AuthService {
     private final UserRepository userAccountRepository;
     private final TokenBlacklistRepository tokenBlacklistRepository;
     private final RoleRepository roleRepository;
+    private final WarehouseRepository warehouseRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
@@ -139,12 +145,7 @@ public class AuthService {
                 throw new AppException(ErrorCode.FORBIDDEN, "Tài khoản đã bị khóa");
             }
 
-            return new LoginResponse.UserInfo(
-                    user.getId(),
-                    user.getUsername(),
-                    user.getEmail(),
-                    user.getFullName(),
-                    user.getRoleCodesCsv());
+            return toUserInfo(user);
         } catch (JwtException | IllegalArgumentException ex) {
             throw new AppException(ErrorCode.UNAUTHORIZED, "Access token không hợp lệ");
         }
@@ -243,12 +244,7 @@ public class AuthService {
         user.setFullName(request.name().trim());
         
         UserAccount saved = userAccountRepository.save(user);
-        return new LoginResponse.UserInfo(
-                saved.getId(),
-                saved.getUsername(),
-                saved.getEmail(),
-                saved.getFullName(),
-                saved.getRoleCodesCsv());
+        return toUserInfo(saved);
     }
 
     @Transactional
@@ -265,6 +261,7 @@ public class AuthService {
     }
 
     private AuthTokens toAuthTokens(UserAccount user, String accessToken, String refreshToken) {
+        List<Warehouse> warehouses = assignedWarehouses(user);
         return new AuthTokens(
                 accessToken,
                 refreshToken,
@@ -272,7 +269,48 @@ public class AuthService {
                 user.getUsername(),
                 user.getEmail(),
                 user.getFullName(),
-                user.getRoleCodesCsv());
+                user.getRoleCodesCsv(),
+                warehouses.stream().map(Warehouse::getId).toList(),
+                warehouses.stream().map(this::warehouseDisplayName).toList());
+    }
+
+    private LoginResponse.UserInfo toUserInfo(UserAccount user) {
+        List<Warehouse> warehouses = assignedWarehouses(user);
+        return new LoginResponse.UserInfo(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getFullName(),
+                user.getRoleCodesCsv(),
+                warehouses.stream().map(Warehouse::getId).toList(),
+                warehouses.stream().map(this::warehouseDisplayName).toList());
+    }
+
+    private List<Warehouse> assignedWarehouses(UserAccount user) {
+        Map<UUID, Warehouse> warehouses = new LinkedHashMap<>();
+        if (user.getWarehouses() != null) {
+            user.getWarehouses().forEach(warehouse -> warehouses.put(warehouse.getId(), warehouse));
+        }
+        if (hasRole(user, "WAREHOUSE_MANAGER")) {
+            warehouseRepository.findByManagerId(user.getId())
+                    .forEach(warehouse -> warehouses.put(warehouse.getId(), warehouse));
+        }
+        return warehouses.values().stream()
+                .sorted((left, right) -> String.CASE_INSENSITIVE_ORDER.compare(
+                        left.getCode() == null ? left.getName() : left.getCode(),
+                        right.getCode() == null ? right.getName() : right.getCode()))
+                .toList();
+    }
+
+    private boolean hasRole(UserAccount user, String roleCode) {
+        return user.getRoles() != null
+                && user.getRoles().stream().anyMatch(role -> roleCode.equalsIgnoreCase(role.getCode()));
+    }
+
+    private String warehouseDisplayName(Warehouse warehouse) {
+        return warehouse.getCode() == null || warehouse.getCode().isBlank()
+                ? warehouse.getName()
+                : warehouse.getName() + " (" + warehouse.getCode() + ")";
     }
 
     public long getRefreshTokenExpirationSeconds() {
@@ -290,7 +328,9 @@ public class AuthService {
             String username,
             String email,
             String fullName,
-            String roles
+            String roles,
+            List<UUID> warehouseIds,
+            List<String> warehouseNames
     ) {
     }
 }
