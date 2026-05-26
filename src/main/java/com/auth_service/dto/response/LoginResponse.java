@@ -4,6 +4,8 @@ import java.util.UUID;
 
 public record LoginResponse(
         String accessToken,
+        long accessTokenExpiresIn,
+        long refreshTokenExpiresIn,
         UserInfo user
 ) {
     public record UserInfo(

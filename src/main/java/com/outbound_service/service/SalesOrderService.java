@@ -296,6 +296,16 @@ public class SalesOrderService {
 
     // Xác nhận đơn nháp trước khi xử lý (DRAFT -> PENDING).
     @Transactional
+    public SalesOrderResponse completeOrder(UUID id, org.springframework.security.core.Authentication authentication) {
+        SalesOrder so = getSalesOrder(id);
+        warehouseAccessService.assertCanAccessWarehouse(authentication, so.getWarehouseId());
+        if (so.getStatus() == SalesOrderStatus.SHIPPED) {
+            return salesOrderMapper.toResponse(so);
+        }
+        return markShipped(id, authentication);
+    }
+
+    @Transactional
     public SalesOrderResponse confirmOrder(UUID id, org.springframework.security.core.Authentication authentication) {
         SalesOrder so = getSalesOrder(id);
         warehouseAccessService.assertCanAccessWarehouse(authentication, so.getWarehouseId());
@@ -318,7 +328,8 @@ public class SalesOrderService {
             case "confirm" -> confirmOrder(id, authentication);
             case "start-picking" -> startPicking(id, authentication);
             case "mark-packed" -> markPacked(id, authentication);
-            case "mark-shipped" -> markShipped(id, authentication);
+            case "mark-shipped", "ship" -> markShipped(id, authentication);
+            case "complete", "mark-completed", "mark-delivered", "delivered" -> completeOrder(id, authentication);
             case "hold" -> hold(id, authentication);
             case "resume" -> resume(id, authentication);
             case "cancel" -> cancel(id, authentication);

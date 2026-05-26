@@ -15,7 +15,8 @@ class JwtTokenProviderSecurityTest {
                 new AuthProperties.Jwt(
                         "stockmaster",
                         "change-me-to-a-very-long-secret-key-at-least-32-bytes",
-                        900));
+                        900,
+                        604800));
 
         assertThatThrownBy(() -> new JwtTokenProvider(properties))
                 .isInstanceOf(IllegalStateException.class)
@@ -29,7 +30,8 @@ class JwtTokenProviderSecurityTest {
                 new AuthProperties.Jwt(
                         "stockmaster",
                         "0123456789abcdef0123456789abcdef",
-                        900));
+                        900,
+                        604800));
 
         assertThatCode(() -> new JwtTokenProvider(properties)).doesNotThrowAnyException();
     }

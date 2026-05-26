@@ -74,6 +74,12 @@ public class InboundReceiptService {
     // Tạo phiếu nhập kho và cập nhật tồn kho, trạng thái PO, putaway task.
     @Transactional
     public InboundReceiptResponse createReceipt(CreateInboundReceiptRequest request, String rawIdempotencyKey) {
+        return createReceipt(request, rawIdempotencyKey, null);
+    }
+
+    @Transactional
+    public InboundReceiptResponse createReceipt(CreateInboundReceiptRequest request, String rawIdempotencyKey,
+            Collection<UUID> visibleWarehouseIds) {
         if (request.items() == null || request.items().isEmpty()) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Phiếu nhập phải có ít nhất một dòng nhận hàng");
         }
@@ -87,6 +93,8 @@ public class InboundReceiptService {
         // 1. Lấy PO và kiểm tra trạng thái
         PurchaseOrder po = purchaseOrderRepository.findByIdForUpdate(request.purchaseOrderId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn nhập"));
+
+        assertWarehouseVisible(po.getWarehouseId(), visibleWarehouseIds);
 
         existingResponse = findExistingIdempotentReceipt(idempotencyKey, requestHash);
         if (existingResponse.isPresent()) {
@@ -242,9 +250,16 @@ public class InboundReceiptService {
     public PagedResponse<InboundReceiptResponse> findAll(Pageable pageable, String keyword,
             UUID purchaseOrderId, UUID warehouseId, InboundReceiptStatus status,
             OffsetDateTime createdFrom, OffsetDateTime createdTo) {
+        return findAll(pageable, keyword, purchaseOrderId, warehouseId, status, createdFrom, createdTo, null);
+    }
+
+    public PagedResponse<InboundReceiptResponse> findAll(Pageable pageable, String keyword,
+            UUID purchaseOrderId, UUID warehouseId, InboundReceiptStatus status,
+            OffsetDateTime createdFrom, OffsetDateTime createdTo, Collection<UUID> visibleWarehouseIds) {
         Specification<InboundReceipt> spec = InboundReceiptSpecification.hasKeyword(keyword)
                 .and(InboundReceiptSpecification.hasPurchaseOrderId(purchaseOrderId))
                 .and(InboundReceiptSpecification.hasWarehouseId(warehouseId))
+                .and(InboundReceiptSpecification.warehouseIdIn(visibleWarehouseIds))
                 .and(InboundReceiptSpecification.hasStatus(status))
                 .and(InboundReceiptSpecification.createdFrom(createdFrom))
                 .and(InboundReceiptSpecification.createdTo(createdTo));
@@ -261,8 +276,14 @@ public class InboundReceiptService {
     // Lấy chi tiết phiếu nhập theo id.
     @Transactional(readOnly = true)
     public InboundReceiptResponse findById(UUID id) {
+        return findById(id, null);
+    }
+
+    @Transactional(readOnly = true)
+    public InboundReceiptResponse findById(UUID id, Collection<UUID> visibleWarehouseIds) {
         InboundReceipt receipt = receiptRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy phiếu nhập"));
+        assertWarehouseVisible(receipt.getWarehouseId(), visibleWarehouseIds);
         return receiptMapper.toResponse(receipt);
     }
 
@@ -337,7 +358,14 @@ public class InboundReceiptService {
     // Lấy danh sách phiếu nhập theo đơn nhập.
     @Transactional(readOnly = true)
     public List<InboundReceiptResponse> findByPurchaseOrderId(UUID purchaseOrderId) {
+        return findByPurchaseOrderId(purchaseOrderId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<InboundReceiptResponse> findByPurchaseOrderId(UUID purchaseOrderId,
+            Collection<UUID> visibleWarehouseIds) {
         return receiptRepository.findByPurchaseOrderId(purchaseOrderId).stream()
+                .filter(receipt -> visibleWarehouseIds == null || visibleWarehouseIds.contains(receipt.getWarehouseId()))
                 .map(receiptMapper::toResponse)
                 .toList();
     }
@@ -349,6 +377,12 @@ public class InboundReceiptService {
 
     @Transactional(readOnly = true)
     public List<InboundLocationSuggestionResponse> suggestLocations(UUID warehouseId, UUID productId, UUID poItemId, int limit) {
+        return suggestLocations(warehouseId, productId, poItemId, limit, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<InboundLocationSuggestionResponse> suggestLocations(UUID warehouseId, UUID productId, UUID poItemId,
+            int limit, Collection<UUID> visibleWarehouseIds) {
         if (poItemId != null) {
             PoItem poItem = poItemRepository.findById(poItemId)
                     .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Khong tim thay dong don nhap"));
@@ -360,6 +394,7 @@ public class InboundReceiptService {
         if (warehouseId == null || productId == null) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Can truyen poItemId hoac cap warehouseId/productId");
         }
+        assertWarehouseVisible(warehouseId, visibleWarehouseIds);
         int max = limit <= 0 ? 20 : Math.min(limit, 50);
 
         List<Location> allLocations = locationRepository.findByWarehouseId(warehouseId).stream()
@@ -461,6 +496,13 @@ public class InboundReceiptService {
         if (!isInboundStorageLocation(location)) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Vi tri nhan hang phai dang hoat dong, AVAILABLE va khong phai vi tri RMA");
+        }
+    }
+
+    private void assertWarehouseVisible(UUID warehouseId, Collection<UUID> visibleWarehouseIds) {
+        if (visibleWarehouseIds != null
+                && (visibleWarehouseIds.isEmpty() || !visibleWarehouseIds.contains(warehouseId))) {
+            throw new AppException(ErrorCode.FORBIDDEN, "Ban khong duoc thao tac nhap hang cua kho nay");
         }
     }
 

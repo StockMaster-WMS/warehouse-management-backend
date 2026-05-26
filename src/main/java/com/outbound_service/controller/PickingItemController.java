@@ -61,7 +61,12 @@ public class PickingItemController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime createdTo,
             Authentication authentication) {
         String resolvedSort = resolveSortField(sort);
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), resolvedSort));
+        Sort.Direction direction = Sort.Direction.fromString(sortDir);
+        if (isCompletedStatus(status) && "pickSequence".equalsIgnoreCase(sort)) {
+            resolvedSort = "completedAt";
+            direction = Sort.Direction.DESC;
+        }
+        Pageable pageable = PageRequest.of(page, size, Sort.by(direction, resolvedSort));
         return ApiResponse.success("Lấy danh sách picking item thành công",
                 pickingItemService.findAll(pageable, soItemId, productId, locationId, status, salesOrderStatus, createdFrom, createdTo,
                         staffScopeUserId(authentication), warehouseAccessService.visibleWarehouseIdSet(authentication)));
@@ -98,6 +103,15 @@ public class PickingItemController {
             return "soItem.salesOrder.soNumber";
         }
         return sort;
+    }
+
+    private boolean isCompletedStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return false;
+        }
+        String normalized = status.trim().toUpperCase();
+        return "PICKED".equals(normalized) || "COMPLETED".equals(normalized)
+                || "COMPLETE".equals(normalized) || "DONE".equals(normalized);
     }
 
     private UUID staffScopeUserId(Authentication authentication) {

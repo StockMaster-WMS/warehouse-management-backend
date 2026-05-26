@@ -226,7 +226,8 @@ class OutboundStockFlowTest {
                 item.getSoItem().getSalesOrder().getWarehouseId(),
                 null,
                 null,
-                item.getAssigneeId());
+                item.getAssigneeId(),
+                item.getCompletedAt());
     }
 
     private static SalesOrderResponse salesOrderResponse(SalesOrder order) {
