@@ -826,7 +826,7 @@ public class StockLevelService {
                 .toList();
     }
 
-    // Đếm số stock record có qtyAvailable < minQty.
+    // Đếm số SKU có tổng qtyAvailable < minQty.
     private long countLowStock(Collection<UUID> visibleWarehouseIds) {
         List<StockLevelRepository.StockQuantityView> stockViews = stockLevelRepository.findQuantityViews();
         if (visibleWarehouseIds != null) {
@@ -834,13 +834,28 @@ public class StockLevelService {
                     .filter(stock -> visibleWarehouseIds.contains(stock.getWarehouseId()))
                     .toList();
         }
+        stockViews = stockViews.stream()
+                .filter(stock -> (stock.getQtyOnHand() == null ? 0 : stock.getQtyOnHand()) > 0)
+                .toList();
         if (stockViews.isEmpty()) return 0;
 
         Map<UUID, ProductSummaryResponse> productMap = loadProductsSummary(extractProductIdsFromQuantityViews(stockViews));
+        Map<UUID, Integer> availableByProduct = new HashMap<>();
+        for (StockLevelRepository.StockQuantityView stock : stockViews) {
+            UUID productId = stock.getProductId();
+            if (productId == null) continue;
+
+            int onHand = stock.getQtyOnHand() == null ? 0 : stock.getQtyOnHand();
+            int reserved = stock.getQtyReserved() == null ? 0 : stock.getQtyReserved();
+            availableByProduct.merge(productId, onHand - reserved, Integer::sum);
+        }
 
         long count = 0;
-        for (StockLevelRepository.StockQuantityView stock : stockViews) {
-            if (isLowStock(stock, productMap)) count++;
+        for (Map.Entry<UUID, Integer> entry : availableByProduct.entrySet()) {
+            ProductSummaryResponse product = productMap.get(entry.getKey());
+            if (product != null && product.minQty() != null && entry.getValue() < product.minQty()) {
+                count++;
+            }
         }
         return count;
     }
