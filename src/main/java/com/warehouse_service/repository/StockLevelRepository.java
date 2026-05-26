@@ -30,6 +30,16 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 		Integer getQtyReserved();
 	}
 
+	interface CycleCountStockSnapshotView {
+		UUID getProductId();
+
+		UUID getLocationId();
+
+		String getLotNumber();
+
+		Integer getQtyOnHand();
+	}
+
 	@Override
 	@EntityGraph(attributePaths = {"warehouse", "location"})
 	Page<StockLevel> findAll(Specification<StockLevel> spec, Pageable pageable);
@@ -43,6 +53,17 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 			order by s.location.code asc, s.productId asc, s.lotNumber asc
 			""")
 	List<StockLevel> findByWarehouseIdWithDetails(@Param("warehouseId") UUID warehouseId);
+
+	@Query("""
+			select s.productId as productId,
+			       s.location.id as locationId,
+			       s.lotNumber as lotNumber,
+			       s.qtyOnHand as qtyOnHand
+			from StockLevel s
+			where s.warehouse.id = :warehouseId
+			order by s.location.code asc, s.productId asc, s.lotNumber asc
+			""")
+	List<CycleCountStockSnapshotView> findCycleCountSnapshotsByWarehouseId(@Param("warehouseId") UUID warehouseId);
 
 	List<StockLevel> findByLocationId(UUID locationId);
 
@@ -131,6 +152,20 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 			""")
 	List<StockLevel> findByWarehouseIdAndZone(@Param("warehouseId") UUID warehouseId, @Param("zone") String zone);
 
+	@Query("""
+			select s.productId as productId,
+			       s.location.id as locationId,
+			       s.lotNumber as lotNumber,
+			       s.qtyOnHand as qtyOnHand
+			from StockLevel s
+			where s.warehouse.id = :warehouseId
+			  and lower(s.location.zone) = lower(:zone)
+			order by s.location.code asc, s.productId asc, s.lotNumber asc
+			""")
+	List<CycleCountStockSnapshotView> findCycleCountSnapshotsByWarehouseIdAndZone(
+			@Param("warehouseId") UUID warehouseId,
+			@Param("zone") String zone);
+
 	/**
 	 * Find all stock levels in a specific location
 	 */
@@ -149,6 +184,20 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 			@Param("warehouseId") UUID warehouseId,
 			@Param("locationId") UUID locationId);
 
+	@Query("""
+			select s.productId as productId,
+			       s.location.id as locationId,
+			       s.lotNumber as lotNumber,
+			       s.qtyOnHand as qtyOnHand
+			from StockLevel s
+			where s.warehouse.id = :warehouseId
+			  and s.location.id = :locationId
+			order by s.productId asc, s.lotNumber asc
+			""")
+	List<CycleCountStockSnapshotView> findCycleCountSnapshotsByWarehouseIdAndLocationId(
+			@Param("warehouseId") UUID warehouseId,
+			@Param("locationId") UUID locationId);
+
 	/**
 	 * Find all stock levels for a specific product in a warehouse
 	 */
@@ -160,4 +209,35 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 			order by s.location.code asc, s.lotNumber asc
 			""")
 	List<StockLevel> findByWarehouseIdAndProductIdWithDetails(@Param("warehouseId") UUID warehouseId, @Param("productId") UUID productId);
+
+	@Query("""
+			select s.productId as productId,
+			       s.location.id as locationId,
+			       s.lotNumber as lotNumber,
+			       s.qtyOnHand as qtyOnHand
+			from StockLevel s
+			where s.warehouse.id = :warehouseId
+			  and s.productId = :productId
+			order by s.location.code asc, s.lotNumber asc
+			""")
+	List<CycleCountStockSnapshotView> findCycleCountSnapshotsByWarehouseIdAndProductId(
+			@Param("warehouseId") UUID warehouseId,
+			@Param("productId") UUID productId);
+
+	@Query("""
+			select s.productId as productId,
+			       s.location.id as locationId,
+			       s.lotNumber as lotNumber,
+			       s.qtyOnHand as qtyOnHand
+			from StockLevel s
+			where s.warehouse.id = :warehouseId
+			  and s.location.id = :locationId
+			  and s.productId = :productId
+			  and s.lotNumber = :lotNumber
+			""")
+	Optional<CycleCountStockSnapshotView> findCycleCountSnapshot(
+			@Param("warehouseId") UUID warehouseId,
+			@Param("locationId") UUID locationId,
+			@Param("productId") UUID productId,
+			@Param("lotNumber") String lotNumber);
 }

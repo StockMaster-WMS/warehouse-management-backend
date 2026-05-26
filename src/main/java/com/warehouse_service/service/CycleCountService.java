@@ -137,19 +137,18 @@ public class CycleCountService {
                 .build();
 
         CycleCount saved = cycleCountRepository.save(count);
-        List<StockLevel> stockLevels = hasScope
-                ? resolveStockLevelsByScope(request.warehouseId(), request.scope(), request.scopeValue())
-                : resolveManualStockLevels(request);
+        List<StockLevelRepository.CycleCountStockSnapshotView> stockLevels = hasScope
+                ? resolveStockSnapshotsByScope(request.warehouseId(), request.scope(), request.scopeValue())
+                : resolveManualStockSnapshots(request);
         if (stockLevels.isEmpty()) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Không tìm thấy tồn kho nào theo phạm vi kiểm kê.");
         }
 
         List<CycleCountItem> items = stockLevels.stream()
-                .filter(sl -> sl.getWarehouse() != null && request.warehouseId().equals(sl.getWarehouse().getId()))
                 .map(sl -> CycleCountItem.builder()
                         .cycleCount(saved)
                         .productId(sl.getProductId())
-                        .locationId(sl.getLocation().getId())
+                        .locationId(sl.getLocationId())
                         .lotNumber(normalizeLot(sl.getLotNumber()))
                         .systemQty(sl.getQtyOnHand())
                         .status(CycleCountItem.ItemStatus.PENDING)
@@ -161,7 +160,7 @@ public class CycleCountService {
         cycleCountItemRepository.saveAll(items);
         saved.setItems(items);
 
-        CycleCountResponse response = toResponse(saved);
+        CycleCountResponse response = toCreateResponse(saved, items);
         auditLogService.record("CYCLE_COUNT", "CREATE", "Tạo phiếu kiểm kê",
                 "CYCLE_COUNT", saved.getId(), displayCycleCount(saved), null, response,
                 null, cycleCountMetadata(saved));
@@ -432,37 +431,37 @@ public class CycleCountService {
         };
     }
 
-    private List<StockLevel> resolveManualStockLevels(CreateCycleCountRequest request) {
+    private List<StockLevelRepository.CycleCountStockSnapshotView> resolveManualStockSnapshots(CreateCycleCountRequest request) {
         return request.items().stream()
-                .map(req -> stockLevelRepository.findByLocationIdAndProductIdAndLotNumber(
-                        req.locationId(), req.productId(), normalizeLot(req.lotNumber()))
+                .map(req -> stockLevelRepository.findCycleCountSnapshot(
+                        request.warehouseId(), req.locationId(), req.productId(), normalizeLot(req.lotNumber()))
                         .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND,
                                 "Không tìm thấy tồn kho: product=" + req.productId()
                                         + ", location=" + req.locationId())))
                 .toList();
     }
 
-    private List<StockLevel> resolveStockLevelsByScope(UUID warehouseId, String scope, String scopeValue) {
+    private List<StockLevelRepository.CycleCountStockSnapshotView> resolveStockSnapshotsByScope(UUID warehouseId, String scope, String scopeValue) {
         return switch (scope.trim().toUpperCase()) {
-            case "WAREHOUSE" -> stockLevelRepository.findByWarehouseIdWithDetails(warehouseId);
+            case "WAREHOUSE" -> stockLevelRepository.findCycleCountSnapshotsByWarehouseId(warehouseId);
             case "ZONE" -> {
                 if (!StringUtils.hasText(scopeValue)) {
                     throw new AppException(ErrorCode.BAD_REQUEST, "scopeValue là bắt buộc cho phạm vi ZONE");
                 }
-                yield stockLevelRepository.findByWarehouseIdAndZone(warehouseId, scopeValue.trim());
+                yield stockLevelRepository.findCycleCountSnapshotsByWarehouseIdAndZone(warehouseId, scopeValue.trim());
             }
             case "LOCATION" -> {
                 if (!StringUtils.hasText(scopeValue)) {
                     throw new AppException(ErrorCode.BAD_REQUEST, "scopeValue là bắt buộc cho phạm vi LOCATION");
                 }
                 UUID locationId = parseUuid(scopeValue, "scopeValue LOCATION phải là UUID vị trí");
-                yield stockLevelRepository.findByWarehouseIdAndLocationIdWithDetails(warehouseId, locationId);
+                yield stockLevelRepository.findCycleCountSnapshotsByWarehouseIdAndLocationId(warehouseId, locationId);
             }
             case "PRODUCT" -> {
                 if (!StringUtils.hasText(scopeValue)) {
                     throw new AppException(ErrorCode.BAD_REQUEST, "scopeValue là bắt buộc cho phạm vi PRODUCT");
                 }
-                yield stockLevelRepository.findByWarehouseIdAndProductIdWithDetails(
+                yield stockLevelRepository.findCycleCountSnapshotsByWarehouseIdAndProductId(
                         warehouseId, parseUuid(scopeValue, "scopeValue PRODUCT phải là UUID sản phẩm"));
             }
             default -> throw new AppException(ErrorCode.BAD_REQUEST,
@@ -579,6 +578,38 @@ public class CycleCountService {
                 countedLines,
                 discrepancyLines,
                 totalAbsDiscrepancy,
+                List.of());
+    }
+
+    private CycleCountResponse toCreateResponse(CycleCount count, List<CycleCountItem> items) {
+        String warehouseName = count.getWarehouseId() == null ? null : warehouseRepository.findById(count.getWarehouseId())
+                .map(Warehouse::getName).orElse(null);
+        int totalLines = items == null ? 0 : items.size();
+
+        return new CycleCountResponse(
+                count.getId(),
+                count.getCountNumber(),
+                count.getWarehouseId(),
+                warehouseName,
+                count.getStatus().name(),
+                count.getDescription(),
+                count.getScope(),
+                count.getScopeValue(),
+                count.getScheduledAt(),
+                count.getStartedAt(),
+                count.getSubmittedAt(),
+                count.getCompletedAt(),
+                count.getAssignedTo(),
+                count.getCreatedBy(),
+                count.getApprovedBy(),
+                count.getRejectedBy(),
+                count.getRejectedAt(),
+                count.getRejectionReason(),
+                count.getCreatedAt(),
+                totalLines,
+                0,
+                0,
+                0,
                 List.of());
     }
 
