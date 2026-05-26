@@ -31,6 +31,8 @@ public interface PickingItemMapper {
 
     @Mapping(target = "soItemId", source = "soItem.id")
     @Mapping(target = "salesOrderNumber", source = "soItem.salesOrder.soNumber")
+    @Mapping(target = "salesOrderPriority", source = "soItem.salesOrder.priority")
+    @Mapping(target = "salesOrderCreatedAt", source = "soItem.salesOrder.createdAt")
     @Mapping(target = "warehouseId", source = "soItem.salesOrder.warehouseId")
     @Mapping(target = "productSku", source = "soItem.productSku")
     @Mapping(target = "productName", ignore = true)

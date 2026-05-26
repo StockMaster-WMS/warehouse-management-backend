@@ -36,6 +36,14 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 
 	List<StockLevel> findByWarehouseId(UUID warehouseId);
 
+	@EntityGraph(attributePaths = {"warehouse", "location"})
+	@Query("""
+			select s from StockLevel s
+			where s.warehouse.id = :warehouseId
+			order by s.location.code asc, s.productId asc, s.lotNumber asc
+			""")
+	List<StockLevel> findByWarehouseIdWithDetails(@Param("warehouseId") UUID warehouseId);
+
 	List<StockLevel> findByLocationId(UUID locationId);
 
 	List<StockLevel> findByProductId(UUID productId);
@@ -118,7 +126,7 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 	@Query("""
 			select s from StockLevel s
 			where s.warehouse.id = :warehouseId
-			  and s.location.zone = :zone
+			  and lower(s.location.zone) = lower(:zone)
 			order by s.location.code asc
 			""")
 	List<StockLevel> findByWarehouseIdAndZone(@Param("warehouseId") UUID warehouseId, @Param("zone") String zone);
@@ -129,6 +137,17 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 	@EntityGraph(attributePaths = {"warehouse", "location"})
 	@Query("select s from StockLevel s where s.location.id = :locationId order by s.productId asc, s.lotNumber asc")
 	List<StockLevel> findByLocationIdWithDetails(@Param("locationId") UUID locationId);
+
+	@EntityGraph(attributePaths = {"warehouse", "location"})
+	@Query("""
+			select s from StockLevel s
+			where s.warehouse.id = :warehouseId
+			  and s.location.id = :locationId
+			order by s.productId asc, s.lotNumber asc
+			""")
+	List<StockLevel> findByWarehouseIdAndLocationIdWithDetails(
+			@Param("warehouseId") UUID warehouseId,
+			@Param("locationId") UUID locationId);
 
 	/**
 	 * Find all stock levels for a specific product in a warehouse

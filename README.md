@@ -42,6 +42,7 @@ Các biến quan trọng:
 | `AUTH_JWT_ISSUER` | Issuer của JWT |
 | `AUTH_JWT_ACCESS_EXPIRATION_SECONDS` | Thời gian sống access token |
 | `AUTH_COOKIE_SECURE` | Bật secure cookie khi dùng HTTPS |
+| `AUTH_COOKIE_SAME_SITE` | SameSite cho refresh cookie; dùng `None` khi frontend/backend khác site |
 | `AUTH_BOOTSTRAP_DEFAULT_USERS_ENABLED` | Bật tạo user mặc định nếu cần seed dữ liệu |
 | `AI_OLLAMA_API_URL` | URL Ollama local |
 | `AI_OLLAMA_MODEL` | Tên model AI local |
@@ -179,3 +180,5 @@ src/main/java/com
 - Hầu hết API nghiệp vụ yêu cầu JWT access token.
 - Swagger, health check và các API auth cần thiết được mở public theo cấu hình bảo mật.
 - Khi deploy HTTPS, đặt `AUTH_COOKIE_SECURE=true` và cấu hình domain CORS chính xác.
+- Nếu frontend và backend khác site, ví dụ frontend ở một domain và API ở domain khác, đặt thêm `AUTH_COOKIE_SAME_SITE=None`; cookie `SameSite=None` bắt buộc phải đi cùng `Secure`.
+- Nếu để `AUTH_COOKIE_SECURE=auto`, proxy/CDN phải forward đúng `X-Forwarded-Proto: https` để backend tự set refresh cookie thành `Secure; SameSite=None`.

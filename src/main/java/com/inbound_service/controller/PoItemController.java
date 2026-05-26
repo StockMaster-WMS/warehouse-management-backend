@@ -8,6 +8,7 @@ import com.inbound_service.dto.response.PoItemImportResponse;
 import com.inbound_service.dto.response.PoItemResponse;
 import com.inbound_service.service.PoItemExcelImportService;
 import com.inbound_service.service.PoItemService;
+import com.warehouse_service.service.WarehouseAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 
 import java.util.UUID;
 
@@ -40,6 +42,7 @@ public class PoItemController {
 
     private final PoItemService poItemService;
     private final PoItemExcelImportService poItemExcelImportService;
+    private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
@@ -64,18 +67,22 @@ public class PoItemController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Tạo dòng đơn nhập")
-    public ApiResponse<PoItemResponse> create(@Valid @RequestBody CreatePoItemRequest request) {
-        return ApiResponse.success("Tạo dòng đơn nhập thành công", poItemService.create(request));
+    public ApiResponse<PoItemResponse> create(@Valid @RequestBody CreatePoItemRequest request,
+            Authentication authentication) {
+        return ApiResponse.success("Tạo dòng đơn nhập thành công",
+                poItemService.create(request, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Cập nhật dòng đơn nhập")
     public ApiResponse<PoItemResponse> update(@PathVariable UUID id,
-            @Valid @RequestBody UpdatePoItemRequest request) {
-        return ApiResponse.success("Cập nhật dòng đơn nhập thành công", poItemService.update(id, request));
+            @Valid @RequestBody UpdatePoItemRequest request,
+            Authentication authentication) {
+        return ApiResponse.success("Cập nhật dòng đơn nhập thành công",
+                poItemService.update(id, request, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PostMapping(value = "/import/{purchaseOrderId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")    @Operation(summary = "Import sản phẩm mới từ Excel và thêm vào PO", description = "Upload file .xlsx chứa thông tin sản phẩm mới + số lượng đặt. "
@@ -92,10 +99,10 @@ public class PoItemController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
     @Operation(summary = "Xóa dòng đơn nhập")
-    public ApiResponse<String> delete(@PathVariable UUID id) {
-        poItemService.delete(id);
+    public ApiResponse<String> delete(@PathVariable UUID id, Authentication authentication) {
+        poItemService.delete(id, warehouseAccessService.visibleWarehouseIdSet(authentication));
         return ApiResponse.success("Xóa dòng đơn nhập thành công", id.toString());
     }
 }

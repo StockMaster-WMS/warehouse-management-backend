@@ -24,7 +24,7 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID>, J
 	@Query("""
 			SELECT DISTINCT o FROM SalesOrder o
 			LEFT JOIN o.items i
-			WHERE o.status = 'SHIPPED'
+			WHERE o.status IN ('SHIPPED', 'COMPLETED')
 			  AND (
 			      o.customerId = :customerId
 			      OR (:customerName IS NOT NULL AND LOWER(o.customerName) = LOWER(:customerName))
@@ -39,7 +39,7 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID>, J
 	@Query("""
 			SELECT DISTINCT o FROM SalesOrder o
 			LEFT JOIN o.items i
-			WHERE o.status = 'SHIPPED'
+			WHERE o.status IN ('SHIPPED', 'COMPLETED')
 			  AND o.warehouseId IN :warehouseIds
 			  AND (
 			      o.customerId = :customerId
@@ -108,6 +108,11 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID>, J
 			java.time.OffsetDateTime fromDate,
 			java.time.OffsetDateTime toDate);
 
+	long countByStatusInAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+			Collection<SalesOrderStatus> statuses,
+			java.time.OffsetDateTime fromDate,
+			java.time.OffsetDateTime toDate);
+
 	@Query("""
 			SELECT COUNT(o) FROM SalesOrder o
 			WHERE o.status NOT IN :statuses
@@ -145,6 +150,19 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID>, J
 
 	@Query("""
 			SELECT COUNT(o) FROM SalesOrder o
+			WHERE o.status IN :statuses
+			  AND o.createdAt >= :fromDate
+			  AND o.createdAt < :toDate
+			  AND o.warehouseId IN :warehouseIds
+			""")
+	long countByStatusInBetweenInWarehouses(
+			@Param("statuses") Collection<SalesOrderStatus> statuses,
+			@Param("fromDate") java.time.OffsetDateTime fromDate,
+			@Param("toDate") java.time.OffsetDateTime toDate,
+			@Param("warehouseIds") Collection<UUID> warehouseIds);
+
+	@Query("""
+			SELECT COUNT(o) FROM SalesOrder o
 			WHERE o.status NOT IN :statuses
 			  AND o.createdAt >= :fromDate
 			  AND o.createdAt < :toDate
@@ -158,19 +176,19 @@ public interface SalesOrderRepository extends JpaRepository<SalesOrder, UUID>, J
 
 	@Query("SELECT COALESCE(SUM(i.unitPrice * i.shippedQty), 0) " +
 			"FROM SalesOrderItem i JOIN i.salesOrder o " +
-			"WHERE o.status = 'SHIPPED' AND o.createdAt >= :fromDate")
+			"WHERE o.status IN ('SHIPPED', 'COMPLETED') AND o.createdAt >= :fromDate")
 	java.math.BigDecimal sumTotalRevenue(@Param("fromDate") java.time.OffsetDateTime fromDate);
 
 	@Query("SELECT COALESCE(SUM(i.unitPrice * i.shippedQty), 0) " +
 			"FROM SalesOrderItem i JOIN i.salesOrder o " +
-			"WHERE o.status = 'SHIPPED' AND o.createdAt >= :fromDate AND o.createdAt < :toDate")
+			"WHERE o.status IN ('SHIPPED', 'COMPLETED') AND o.createdAt >= :fromDate AND o.createdAt < :toDate")
 	java.math.BigDecimal sumTotalRevenueBetween(
 			@Param("fromDate") java.time.OffsetDateTime fromDate,
 			@Param("toDate") java.time.OffsetDateTime toDate);
 
 	@Query("SELECT COALESCE(SUM(i.unitPrice * i.shippedQty), 0) " +
 			"FROM SalesOrderItem i JOIN i.salesOrder o " +
-			"WHERE o.status = 'SHIPPED' AND o.createdAt >= :fromDate AND o.createdAt < :toDate " +
+			"WHERE o.status IN ('SHIPPED', 'COMPLETED') AND o.createdAt >= :fromDate AND o.createdAt < :toDate " +
 			"AND o.warehouseId IN :warehouseIds")
 	java.math.BigDecimal sumTotalRevenueBetweenInWarehouses(
 			@Param("fromDate") java.time.OffsetDateTime fromDate,

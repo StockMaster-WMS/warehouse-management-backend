@@ -4,6 +4,7 @@ import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
 import com.warehouse_service.dto.response.StockMovementResponse;
 import com.warehouse_service.service.StockMovementService;
+import com.warehouse_service.service.WarehouseAccessService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -27,6 +29,7 @@ import java.util.UUID;
 public class StockMovementController {
 
         private final StockMovementService stockMovementService;
+        private final WarehouseAccessService warehouseAccessService;
 
         @GetMapping
         @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
@@ -41,11 +44,14 @@ public class StockMovementController {
                         @Parameter(description = "ID sản phẩm") @RequestParam(required = false) UUID productId,
                         @Parameter(description = "Loại biến động: INBOUND, OUTBOUND, ADJUSTMENT, RESERVE, RELEASE") @RequestParam(required = false) String movementType,
                         @Parameter(description = "Từ ngày (ISO 8601)") @RequestParam(required = false) OffsetDateTime from,
-                        @Parameter(description = "Đến ngày (ISO 8601)") @RequestParam(required = false) OffsetDateTime to) {
+                        @Parameter(description = "Đến ngày (ISO 8601)") @RequestParam(required = false) OffsetDateTime to,
+                        Authentication authentication) {
 
                 Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
+                warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
                 PagedResponse<StockMovementResponse> data = stockMovementService.findAll(
-                                pageable, warehouseId, locationId, productId, movementType, from, to);
+                                pageable, warehouseId, locationId, productId, movementType, from, to,
+                                warehouseAccessService.visibleWarehouseIdSet(authentication));
                 return ApiResponse.success("Lấy lịch sử biến động tồn kho thành công", data);
         }
 }

@@ -154,6 +154,8 @@ public class PickingItemService {
                 row.status(),
                 row.pickSequence(),
                 row.salesOrderNumber(),
+                row.salesOrderPriority(),
+                row.salesOrderCreatedAt(),
                 productSku,
                 product == null ? null : product.getName(),
                 product == null ? null : product.getBarcodeEan13(),

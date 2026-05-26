@@ -677,7 +677,7 @@ public class RmaService {
         }
         SalesOrder salesOrder = salesOrderRepository.findWithItemsById(request.salesOrderId())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy đơn xuất liên quan"));
-        if (salesOrder.getStatus() != SalesOrderStatus.SHIPPED) {
+        if (salesOrder.getStatus() != SalesOrderStatus.SHIPPED && salesOrder.getStatus() != SalesOrderStatus.COMPLETED) {
             throw new AppException(ErrorCode.BAD_REQUEST, "Chỉ tạo phiếu khách trả từ đơn xuất đã giao");
         }
         if (!salesOrder.getWarehouseId().equals(request.warehouseId())) {

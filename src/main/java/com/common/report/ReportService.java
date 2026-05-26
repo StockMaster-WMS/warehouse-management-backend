@@ -6,6 +6,8 @@ import com.common.report.dto.TopSkuResponse;
 import com.outbound_service.entity.SalesOrderStatus;
 import com.outbound_service.repository.SalesOrderItemRepository;
 import com.outbound_service.repository.SalesOrderRepository;
+import com.product_service.entity.Product;
+import com.product_service.repository.ProductRepository;
 import com.warehouse_service.entity.Warehouse;
 import com.warehouse_service.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
@@ -31,9 +33,13 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class ReportService {
 
+    private static final List<SalesOrderStatus> FULFILLED_SALES_STATUSES =
+            List.of(SalesOrderStatus.SHIPPED, SalesOrderStatus.COMPLETED);
+
     private final SalesOrderRepository salesOrderRepository;
     private final SalesOrderItemRepository salesOrderItemRepository;
     private final WarehouseRepository warehouseRepository;
+    private final ProductRepository productRepository;
 
     public ReportSummaryResponse getSummary() {
         return getSummary("30d", null, null, null, null);
@@ -73,13 +79,13 @@ public class ReportService {
                         range.to());
         long shippedOrders = scoped
                 ? scopedWarehouseIds.isEmpty() ? 0
-                        : salesOrderRepository.countByStatusBetweenInWarehouses(
-                                SalesOrderStatus.SHIPPED,
+                        : salesOrderRepository.countByStatusInBetweenInWarehouses(
+                                FULFILLED_SALES_STATUSES,
                                 range.from(),
                                 range.to(),
                                 scopedWarehouseIds)
-                : salesOrderRepository.countByStatusAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
-                        SalesOrderStatus.SHIPPED,
+                : salesOrderRepository.countByStatusInAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                        FULFILLED_SALES_STATUSES,
                         range.from(),
                         range.to());
         
@@ -178,15 +184,11 @@ public class ReportService {
     }
 
     public List<TopSkuResponse> getTopSkus(int limit) {
-        return salesOrderItemRepository.findTopSkus(limit).stream()
-                .map(this::toTopSkuResponse)
-                .toList();
+        return toTopSkuResponses(salesOrderItemRepository.findTopSkus(limit));
     }
 
     private List<TopSkuResponse> getTopSkus(int limit, OffsetDateTime from, OffsetDateTime to) {
-        return salesOrderItemRepository.findTopSkusBetween(from, to, limit).stream()
-                .map(this::toTopSkuResponse)
-                .toList();
+        return toTopSkuResponses(salesOrderItemRepository.findTopSkusBetween(from, to, limit));
     }
 
     public List<SalesOrderItemRepository.ShippedItemReportView> getShippedItemDetails(
@@ -215,18 +217,24 @@ public class ReportService {
         if (warehouseIds.isEmpty()) {
             return List.of();
         }
-        return salesOrderItemRepository.findTopSkusBetweenInWarehouses(from, to, warehouseIds, limit).stream()
-                .map(this::toTopSkuResponse)
-                .toList();
+        return toTopSkuResponses(salesOrderItemRepository.findTopSkusBetweenInWarehouses(from, to, warehouseIds, limit));
     }
 
-    private TopSkuResponse toTopSkuResponse(SalesOrderItemRepository.TopSkuView v) {
-        return new TopSkuResponse(
-                v.getProductId(),
-                v.getProductSku(),
-                v.getTotalQty(),
-                v.getTotalRevenue()
-        );
+    private List<TopSkuResponse> toTopSkuResponses(List<SalesOrderItemRepository.TopSkuView> rows) {
+        Map<UUID, String> productNamesById = productRepository.findAllById(rows.stream()
+                        .map(SalesOrderItemRepository.TopSkuView::getProductId)
+                        .filter(id -> id != null)
+                        .collect(Collectors.toSet()))
+                .stream()
+                .collect(Collectors.toMap(Product::getId, Product::getName));
+        return rows.stream()
+                .map(v -> new TopSkuResponse(
+                        v.getProductId(),
+                        v.getProductSku(),
+                        productNamesById.get(v.getProductId()),
+                        v.getTotalQty(),
+                        v.getTotalRevenue()))
+                .toList();
     }
 
     ReportPeriodRange resolvePeriod(String rawPeriod, Integer selectedYear, LocalDate customFromDate,
