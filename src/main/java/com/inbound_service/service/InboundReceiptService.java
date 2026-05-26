@@ -253,6 +253,7 @@ public class InboundReceiptService {
         return findAll(pageable, keyword, purchaseOrderId, warehouseId, status, createdFrom, createdTo, null);
     }
 
+    @Transactional(readOnly = true)
     public PagedResponse<InboundReceiptResponse> findAll(Pageable pageable, String keyword,
             UUID purchaseOrderId, UUID warehouseId, InboundReceiptStatus status,
             OffsetDateTime createdFrom, OffsetDateTime createdTo, Collection<UUID> visibleWarehouseIds) {

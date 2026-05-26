@@ -2,10 +2,13 @@ package com.inbound_service.controller;
 
 import com.common.api.ApiResponse;
 import com.common.api.PagedResponse;
+import com.inbound_service.dto.request.AddPurchaseOrderItemRequest;
 import com.inbound_service.dto.request.CreatePurchaseOrderRequest;
 import com.inbound_service.dto.request.UpdatePurchaseOrderRequest;
+import com.inbound_service.dto.response.PoItemResponse;
 import com.inbound_service.dto.response.PurchaseOrderDetailResponse;
 import com.inbound_service.dto.response.PurchaseOrderResponse;
+import com.inbound_service.service.PoItemService;
 import com.inbound_service.service.PurchaseOrderService;
 import com.warehouse_service.service.WarehouseAccessService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -38,6 +41,7 @@ import java.util.UUID;
 public class PurchaseOrderController {
 
     private final PurchaseOrderService purchaseOrderService;
+    private final PoItemService poItemService;
     private final WarehouseAccessService warehouseAccessService;
 
     @GetMapping
@@ -92,6 +96,17 @@ public class PurchaseOrderController {
             Authentication authentication) {
         warehouseAccessService.assertCanAccessWarehouse(authentication, request.warehouseId());
         return ApiResponse.success("Tạo đơn nhập thành công", purchaseOrderService.create(request));
+    }
+
+    @PostMapping("/{id}/items")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @Operation(summary = "Them dong hang vao don nhap", description = "Cho phep bo sung dong hang khi PO con o trang thai DRAFT; lineNumber co the bo trong de backend tu tang")
+    public ApiResponse<PoItemResponse> addItem(@PathVariable UUID id,
+            @Valid @RequestBody AddPurchaseOrderItemRequest request,
+            Authentication authentication) {
+        return ApiResponse.success("Them dong hang vao don nhap thanh cong",
+                poItemService.addToPurchaseOrder(id, request,
+                        warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PostMapping("/{id}/approve")

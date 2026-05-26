@@ -18,6 +18,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,15 +31,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 
 import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/po-items")
-@Tag(name = "PO Item ", description = "Quản lý dòng đơn nhập nội bộ")
+@Tag(name = "PO Item", description = "Quan ly dong don nhap noi bo")
 public class PoItemController {
 
     private final PoItemService poItemService;
@@ -46,63 +46,65 @@ public class PoItemController {
 
     @GetMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
-    @Operation(summary = "Lấy danh sách dòng đơn nhập", description = "Phân trang; lọc purchaseOrderId, keyword (SKU)")
+    @Operation(summary = "Lay danh sach dong don nhap", description = "Phan trang; loc purchaseOrderId, keyword (SKU)")
     public ApiResponse<PagedResponse<PoItemResponse>> getAll(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "lineNumber") String sort,
             @RequestParam(defaultValue = "asc") String sortDir,
-            @Parameter(description = "ID đơn nhập") @RequestParam(required = false) UUID purchaseOrderId,
+            @Parameter(description = "ID don nhap") @RequestParam(required = false) UUID purchaseOrderId,
             @RequestParam(required = false) String keyword) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
-        return ApiResponse.success("Lấy danh sách dòng đơn nhập thành công",
+        return ApiResponse.success("Lay danh sach dong don nhap thanh cong",
                 poItemService.findAll(pageable, purchaseOrderId, keyword));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
-    @Operation(summary = "Lấy dòng đơn nhập theo ID")
+    @Operation(summary = "Lay dong don nhap theo ID")
     public ApiResponse<PoItemResponse> getById(@PathVariable UUID id) {
-        return ApiResponse.success("Lấy dòng đơn nhập thành công", poItemService.findById(id));
+        return ApiResponse.success("Lay dong don nhap thanh cong", poItemService.findById(id));
     }
 
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
-    @Operation(summary = "Tạo dòng đơn nhập")
+    @Operation(summary = "Tao dong don nhap")
     public ApiResponse<PoItemResponse> create(@Valid @RequestBody CreatePoItemRequest request,
             Authentication authentication) {
-        return ApiResponse.success("Tạo dòng đơn nhập thành công",
+        return ApiResponse.success("Tao dong don nhap thanh cong",
                 poItemService.create(request, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
-    @Operation(summary = "Cập nhật dòng đơn nhập")
+    @Operation(summary = "Cap nhat dong don nhap")
     public ApiResponse<PoItemResponse> update(@PathVariable UUID id,
             @Valid @RequestBody UpdatePoItemRequest request,
             Authentication authentication) {
-        return ApiResponse.success("Cập nhật dòng đơn nhập thành công",
+        return ApiResponse.success("Cap nhat dong don nhap thanh cong",
                 poItemService.update(id, request, warehouseAccessService.visibleWarehouseIdSet(authentication)));
     }
 
-    @PostMapping(value = "/import/{purchaseOrderId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")    @Operation(summary = "Import sản phẩm mới từ Excel và thêm vào PO", description = "Upload file .xlsx chứa thông tin sản phẩm mới + số lượng đặt. "
-            + "Hệ thống sẽ tạo sản phẩm mới qua product module rồi tự động thêm dòng PO. "
-            + "Cột bắt buộc: name, baseUnit, categoryId, orderedQty. "
-            + "Cột tùy chọn: unitPrice, barcodeEan13, weightKg, lengthCm, widthCm, heightCm, "
-            + "minStockQty, isLotTracked, isExpiryTracked, status.")
+    @PostMapping(value = "/import/{purchaseOrderId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @Operation(
+            summary = "Import dong don nhap tu Excel",
+            description = "Upload file .xlsx de them dong vao PO. Ho tro san pham co san bang productId/sku/name; neu chua co thi tao san pham moi bang name + baseUnit + categoryId/categoryCode.")
     public ApiResponse<PoItemImportResponse> importExcel(
             @PathVariable UUID purchaseOrderId,
             @RequestPart("file") MultipartFile file,
-            @Parameter(description = "UUID người tạo; bỏ trống = import hệ thống") @RequestParam(required = false) UUID createdBy) {
-        PoItemImportResponse result = poItemExcelImportService.importFromXlsx(purchaseOrderId, file, createdBy);
-        return ApiResponse.success("Import hoàn tất", result);
+            @Parameter(description = "UUID nguoi tao; bo trong = import he thong") @RequestParam(required = false) UUID createdBy,
+            Authentication authentication) {
+        PoItemImportResponse result = poItemExcelImportService.importFromXlsx(purchaseOrderId, file, createdBy,
+                warehouseAccessService.visibleWarehouseIdSet(authentication));
+        return ApiResponse.success("Import hoan tat", result);
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
-    @Operation(summary = "Xóa dòng đơn nhập")
+    @Operation(summary = "Xoa dong don nhap")
     public ApiResponse<String> delete(@PathVariable UUID id, Authentication authentication) {
         poItemService.delete(id, warehouseAccessService.visibleWarehouseIdSet(authentication));
-        return ApiResponse.success("Xóa dòng đơn nhập thành công", id.toString());
+        return ApiResponse.success("Xoa dong don nhap thanh cong", id.toString());
     }
 }
