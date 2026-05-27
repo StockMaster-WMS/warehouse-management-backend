@@ -19,6 +19,9 @@ public record OutboundReceiptDetailResponse(
             UUID productId,
             String productSku,
             String productName,
+            UUID locationId,
+            String locationCode,
+            String lotNumber,
             Integer shippedQty,
             Integer alreadyReturnedQty,
             Integer returnableQty
