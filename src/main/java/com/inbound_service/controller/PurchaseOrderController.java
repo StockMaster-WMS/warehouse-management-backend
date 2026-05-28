@@ -90,7 +90,7 @@ public class PurchaseOrderController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo đơn nhập", description = "Tạo mới một purchase order")
     public ApiResponse<PurchaseOrderResponse> create(@Valid @RequestBody CreatePurchaseOrderRequest request,
             Authentication authentication) {
@@ -99,7 +99,7 @@ public class PurchaseOrderController {
     }
 
     @PostMapping("/{id}/items")
-    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF')")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Them dong hang vao don nhap", description = "Cho phep bo sung dong hang khi PO con o trang thai DRAFT; lineNumber co the bo trong de backend tu tang")
     public ApiResponse<PoItemResponse> addItem(@PathVariable UUID id,
             @Valid @RequestBody AddPurchaseOrderItemRequest request,

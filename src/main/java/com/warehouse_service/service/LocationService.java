@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -103,44 +104,60 @@ public class LocationService {
                     "Số vị trí tạo hàng loạt vượt giới hạn " + MAX_BULK_LOCATIONS);
         }
         List<Location> locations = new ArrayList<>();
+        String warehouseCodePrefix = normalizeCodeSegment(request.getWarehouseCodePrefix());
+        String areaCode = normalizeCodeSegment(request.getAreaCode());
+        if (warehouseCodePrefix.isBlank() || areaCode.isBlank()) {
+            String[] inferredPrefix = inferLocationPrefix(warehouse.getCode());
+            if (warehouseCodePrefix.isBlank()) {
+                warehouseCodePrefix = inferredPrefix[0];
+            }
+            if (areaCode.isBlank()) {
+                areaCode = inferredPrefix[1];
+            }
+        }
+        String zone = normalizeCodeSegment(request.getZone());
+        String aislePrefix = normalizeCodeSegment(request.getAislePrefix());
+        String rackPrefix = normalizeCodeSegment(request.getRackPrefix());
+        String binPrefix = normalizeCodeSegment(request.getBinPrefix());
+        int aisleStart = request.getAisleStart() != null ? request.getAisleStart() : 1;
+        int rackStart = request.getRackStart() != null ? request.getRackStart() : 1;
+        int levelStart = request.getLevelStart() != null ? request.getLevelStart() : 1;
+        int binStart = request.getBinStart() != null ? request.getBinStart() : 1;
 
-        for (int a = 1; a <= request.getAisleCount(); a++) {
-            String aisle = String.format("%s%02d",
-                    request.getAislePrefix() != null ? request.getAislePrefix() : "", a);
+        for (int a = aisleStart; a < aisleStart + request.getAisleCount(); a++) {
+            String aisle = String.format("%s%02d", aislePrefix, a);
 
-            for (int r = 1; r <= request.getRackCount(); r++) {
-                String rack = String.format("%s%02d",
-                        request.getRackPrefix() != null ? request.getRackPrefix() : "", r);
+            for (int r = rackStart; r < rackStart + request.getRackCount(); r++) {
+                String rack = String.format("%s%02d", rackPrefix, r);
 
-                for (int l = 1; l <= request.getLevelCount(); l++) {
+                for (int l = levelStart; l < levelStart + request.getLevelCount(); l++) {
                     short level = (short) l;
 
-                    for (int b = 1; b <= request.getBinCount(); b++) {
-                        String bin = String.format("%s%02d",
-                                request.getBinPrefix() != null ? request.getBinPrefix() : "", b);
+                    for (int b = binStart; b < binStart + request.getBinCount(); b++) {
+                        String bin = String.format("%s%02d", binPrefix, b);
 
-                        // Quy luật mã: ZONE-AISLE-RACK-L(Level)-B(Bin)
-                        String code = String.format("%s-%s-%s-L%02d-B%02d",
-                                request.getZone(), aisle, rack, level, b);
+                        // Quy luật mã: WAREHOUSE-AREA-ZONE-AISLE-RACK-L(Level)-B(Bin)
+                        String code = String.format("%s-%s-%s-%s-%s-L%02d-%s",
+                                warehouseCodePrefix, areaCode, zone, aisle, rack, level, bin);
 
                         // Tự động gán các thuộc tính vùng dựa trên tên vùng chọn từ FE
-                        boolean isCold = "COLD".equalsIgnoreCase(request.getZone());
-                        boolean isHeavy = "HEAVY".equalsIgnoreCase(request.getZone());
-                        boolean isHazmat = "HAZMAT".equalsIgnoreCase(request.getZone());
+                        boolean isCold = "COLD".equalsIgnoreCase(zone);
+                        boolean isHeavy = "HEAVY".equalsIgnoreCase(zone);
+                        boolean isHazmat = "HAZMAT".equalsIgnoreCase(zone) || "HAZ".equalsIgnoreCase(zone);
                         
                         // Gán độ ưu tiên lấy hàng dựa trên khoảng cách dock: FAST gần nhất (nhỏ nhất)
-                        int pickSeq = switch (request.getZone().toUpperCase()) {
-                            case "FAST" -> 10;
+                        int pickSeq = switch (zone.toUpperCase(Locale.ROOT)) {
+                            case "PICK", "FAST" -> 10;
                             case "HEAVY" -> 20;
                             case "BULK" -> 30;
                             case "COLD" -> 50;
-                            case "HAZMAT" -> 80;
+                            case "HAZ", "HAZMAT" -> 80;
                             default -> 100;
                         };
 
                         Location location = Location.builder()
                                 .warehouse(warehouse)
-                                .zone(request.getZone())
+                                .zone(zone)
                                 .aisle(aisle)
                                 .rack(rack)
                                 .level(level)
@@ -162,6 +179,28 @@ public class LocationService {
         }
         // Lưu toàn bộ danh sách (JPA sẽ tự tối ưu batch insert nếu cấu hình hibernate.jdbc.batch_size)
         locationRepository.saveAll(locations);
+    }
+
+    private String normalizeCodeSegment(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "");
+    }
+
+    private String[] inferLocationPrefix(String warehouseCode) {
+        String normalized = warehouseCode == null ? "" : warehouseCode.trim().toUpperCase(Locale.ROOT);
+        String[] parts = normalized.split("-");
+        List<String> segments = new ArrayList<>();
+        for (String part : parts) {
+            String segment = normalizeCodeSegment(part);
+            if (!segment.isBlank() && !"WH".equals(segment)) {
+                segments.add(segment);
+            }
+        }
+        String warehouse = segments.isEmpty() ? "WH" : segments.get(0);
+        String area = segments.size() > 1 ? segments.get(1) : "TT";
+        return new String[] { warehouse, area };
     }
 
     // Cập nhật thông tin vị trí theo id.

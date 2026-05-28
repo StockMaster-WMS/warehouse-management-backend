@@ -20,10 +20,12 @@ import com.inbound_service.entity.Rma;
 import com.inbound_service.entity.RmaItem;
 import com.inbound_service.repository.RmaRepository;
 import com.outbound_service.entity.Customer;
+import com.outbound_service.entity.PickingItem;
 import com.outbound_service.entity.SalesOrder;
 import com.outbound_service.entity.SalesOrderItem;
 import com.outbound_service.entity.SalesOrderStatus;
 import com.outbound_service.repository.CustomerRepository;
+import com.outbound_service.repository.PickingItemRepository;
 import com.outbound_service.repository.SalesOrderRepository;
 import com.product_service.dto.response.ProductSummaryResponse;
 import com.product_service.entity.Product;
@@ -75,6 +77,7 @@ public class RmaService {
     private final SupplierRepository supplierRepository;
     private final CustomerRepository customerRepository;
     private final SalesOrderRepository salesOrderRepository;
+    private final PickingItemRepository pickingItemRepository;
 
     private static final Set<String> RMA_LOCATION_TYPES = Set.of(
             "RMA_DAMAGED", "RMA_EXPIRED", "RMA_QUARANTINE", "RMA_RESTOCK");
@@ -245,6 +248,11 @@ public class RmaService {
         Customer customer = resolveCustomer(returnType, request, salesOrder);
         validateCustomerReturnItems(returnType, request, salesOrder);
         validateSupplierReturnItems(returnType, request, supplier);
+        Map<UUID, List<PickingItem>> customerPicksByLine = "CUSTOMER".equals(returnType) && salesOrder != null
+                ? pickingItemRepository.findBySalesOrderIdWithSoItem(salesOrder.getId()).stream()
+                        .filter(pick -> pick.getSoItem() != null)
+                        .collect(Collectors.groupingBy(pick -> pick.getSoItem().getId()))
+                : Map.of();
 
         Rma rma = Rma.builder()
                 .rmaNumber(CodeGenerator.generate("RMA"))
@@ -260,14 +268,23 @@ public class RmaService {
                 .createdBy(creatorId)
                 .build();
 
-        List<RmaItem> items = request.items().stream().map(req -> RmaItem.builder()
-                .rma(rma)
-                .productId(req.productId())
-                .salesOrderItemId(req.salesOrderItemId())
-                .expectedQty(req.expectedQty())
-                .lotNumber(normalizeLot(req.lotNumber()))
-                .returnLocationId(req.locationId())
-                .build()).toList();
+        List<RmaItem> items = request.items().stream().map(req -> {
+            PickingItem sourcePick = resolveCustomerSourcePick(returnType, req, customerPicksByLine);
+            UUID returnLocationId = req.locationId() != null
+                    ? req.locationId()
+                    : sourcePick == null ? null : sourcePick.getLocationId();
+            String lotNumber = StringUtils.hasText(req.lotNumber())
+                    ? normalizeLot(req.lotNumber())
+                    : sourcePick == null ? "" : normalizeLot(sourcePick.getLotNumber());
+            return RmaItem.builder()
+                    .rma(rma)
+                    .productId(req.productId())
+                    .salesOrderItemId(req.salesOrderItemId())
+                    .expectedQty(req.expectedQty())
+                    .lotNumber(lotNumber)
+                    .returnLocationId(returnLocationId)
+                    .build();
+        }).toList();
 
         if ("SUPPLIER".equals(returnType)) {
             for (RmaItem item : items) {
@@ -733,6 +750,7 @@ public class RmaService {
                         SalesOrderItem::getProductId,
                         Collectors.summingInt(item -> safeQty(item.getShippedQty()))));
         Map<UUID, Integer> requestedByProduct = new LinkedHashMap<>();
+        List<PickingItem> pickedItems = pickingItemRepository.findBySalesOrderIdWithSoItem(salesOrder.getId());
 
         for (CreateRmaRequest.ItemRequest item : request.items()) {
             if (item.salesOrderItemId() != null) {
@@ -742,6 +760,16 @@ public class RmaService {
                 }
                 if (!sourceLine.getProductId().equals(item.productId())) {
                     throw new AppException(ErrorCode.BAD_REQUEST, "Sản phẩm trả không khớp với dòng đơn xuất đã chọn");
+                }
+                if (item.locationId() != null && pickedItems.stream().noneMatch(pick ->
+                        pick.getSoItem() != null
+                                && item.salesOrderItemId().equals(pick.getSoItem().getId())
+                                && item.productId().equals(pick.getProductId())
+                                && item.locationId().equals(pick.getLocationId())
+                                && (!StringUtils.hasText(item.lotNumber())
+                                        || normalizeLot(item.lotNumber()).equals(normalizeLot(pick.getLotNumber()))))) {
+                    throw new AppException(ErrorCode.BAD_REQUEST,
+                            "Vị trí trả không khớp với vị trí đã xuất của sản phẩm trong đơn");
                 }
             }
             if (shippedByProduct.containsKey(item.productId())) {
@@ -763,6 +791,20 @@ public class RmaService {
                                 + ", đang trả " + requested + ")");
             }
         }
+    }
+
+    private PickingItem resolveCustomerSourcePick(String returnType, CreateRmaRequest.ItemRequest item,
+            Map<UUID, List<PickingItem>> picksByLine) {
+        if (!"CUSTOMER".equals(returnType) || item.salesOrderItemId() == null) {
+            return null;
+        }
+        List<PickingItem> picks = picksByLine.getOrDefault(item.salesOrderItemId(), List.of()).stream()
+                .filter(pick -> item.productId().equals(pick.getProductId()))
+                .filter(pick -> item.locationId() == null || item.locationId().equals(pick.getLocationId()))
+                .filter(pick -> !StringUtils.hasText(item.lotNumber())
+                        || normalizeLot(item.lotNumber()).equals(normalizeLot(pick.getLotNumber())))
+                .toList();
+        return picks.size() == 1 ? picks.get(0) : null;
     }
 
     private Map<UUID, Integer> customerReturnedQtyByProduct(UUID salesOrderId) {
