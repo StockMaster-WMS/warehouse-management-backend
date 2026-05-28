@@ -7,6 +7,7 @@ import com.inbound_service.entity.Rma;
 import com.inbound_service.entity.RmaItem;
 import com.inbound_service.repository.RmaRepository;
 import com.outbound_service.repository.CustomerRepository;
+import com.outbound_service.repository.PickingItemRepository;
 import com.outbound_service.repository.SalesOrderRepository;
 import com.product_service.entity.Product;
 import com.product_service.entity.Supplier;
@@ -67,6 +68,7 @@ class RmaServiceSupplierReturnStockTest {
         supplierRepository = mock(SupplierRepository.class);
         CustomerRepository customerRepository = mock(CustomerRepository.class);
         SalesOrderRepository salesOrderRepository = mock(SalesOrderRepository.class);
+        PickingItemRepository pickingItemRepository = mock(PickingItemRepository.class);
 
         rmaService = new RmaService(
                 rmaRepository,
@@ -80,7 +82,8 @@ class RmaServiceSupplierReturnStockTest {
                 productRepository,
                 supplierRepository,
                 customerRepository,
-                salesOrderRepository);
+                salesOrderRepository,
+                pickingItemRepository);
 
         warehouseId = UUID.randomUUID();
         locationId = UUID.randomUUID();
