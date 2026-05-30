@@ -222,7 +222,7 @@ public class AiIntentRouterService {
                 """.formatted(toJson(compactHistory(history)), userMessage);
     }
 
-    // Parse JSON intent từ output thô của model.
+    // Parse JSON intent tu output tho cua model.
     private AiIntentResult parseIntent(String raw) throws Exception {
         String json = extractJson(raw);
         JsonNode node = objectMapper.readTree(json);
@@ -238,7 +238,7 @@ public class AiIntentRouterService {
         return AiIntentResult.of(intent, parameters, confidence, reason);
     }
 
-    // Lấy phần JSON object từ text model trả về.
+    // Lay phan JSON object tu text model tra ve.
     private String extractJson(String raw) {
         if (raw == null || raw.isBlank()) {
             return "{\"intent\":\"UNSUPPORTED\",\"parameters\":{},\"confidence\":0,\"reason\":\"empty model output\"}";
@@ -251,7 +251,7 @@ public class AiIntentRouterService {
         return matcher.find() ? matcher.group(0) : cleaned;
     }
 
-    // Chuyển tên intent dạng text sang enum an toàn.
+    // Chuyen ten intent dang text sang enum an toan.
     private AiIntent parseIntentName(String value) {
         try {
             return AiIntent.valueOf(value.trim().toUpperCase(Locale.ROOT));
@@ -375,6 +375,69 @@ public class AiIntentRouterService {
 
         if (looksGreeting(normalized)) {
             return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.95, "deterministic greeting");
+        }
+
+        // Câu hỏi về vai trò Admin → GENERAL_GUIDE
+        if (containsAny(normalized, "admin co the", "admin lam duoc", "admin co quyen",
+                "quyen cua admin", "admin duoc phep", "quyen admin")) {
+            params.put("query", userMessage);
+            return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.94,
+                    "deterministic admin role guide");
+        }
+
+        // Câu hỏi về vai trò Manager → GENERAL_GUIDE
+        if (containsAny(normalized, "manager co the", "manager lam duoc", "manager co quyen",
+                "quan ly co quyen", "warehouse manager co", "warehouse_manager co",
+                "quyen cua manager", "manager duoc phep")) {
+            params.put("query", userMessage);
+            return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.94,
+                    "deterministic manager role guide");
+        }
+
+        // Câu hỏi về vai trò Staff → GENERAL_GUIDE
+        if (containsAny(normalized, "staff co the", "staff lam duoc", "staff co quyen",
+                "nhan vien kho co quyen", "warehouse staff co", "warehouse_staff co",
+                "toi la staff", "toi la nhan vien", "staff duoc phep")
+                || (containsAny(normalized, "toi la staff", "la nhan vien kho", "la warehouse staff"))) {
+            params.put("query", userMessage);
+            return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.94,
+                    "deterministic staff role guide");
+        }
+
+        // Câu hỏi về phân quyền tổng quát → GENERAL_GUIDE
+        if ((containsAny(normalized, "phan quyen", "quyen han", "lam duoc gi", "duoc phep gi",
+                "co quyen gi", "co the lam gi", "ai co quyen", "ai duoc phep"))
+                && !containsAny(normalized, "chinh ton", "dieu chinh ton", "stock adjustment")) {
+            params.put("query", userMessage);
+            return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.93,
+                    "deterministic permission guide");
+        }
+
+        // Câu hỏi giải thích thuật ngữ kho → GENERAL_GUIDE
+        if (containsAny(normalized, "zone la gi", "aisle la gi", "rack la gi", "bin la gi",
+                "lot tracking la gi", "expiry tracking la gi", "putaway la gi",
+                "partial receipt la gi", "po la gi", "so la gi", "rma la gi",
+                "picking la gi", "packing la gi", "stockmaster la gi",
+                "inventory adjustment la gi", "cycle count la gi")) {
+            params.put("query", userMessage);
+            return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.94,
+                    "deterministic terminology guide");
+        }
+
+        // Câu hỏi hướng dẫn chuyển hàng giữa kho → GENERAL_GUIDE
+        if (containsAny(normalized, "chuyen hang giua", "chuyen kho", "transfer hang",
+                "di chuyen hang", "stock transfer") && !containsAny(normalized, "lich su", "history")) {
+            params.put("query", userMessage);
+            return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.93,
+                    "deterministic stock transfer guide");
+        }
+
+        // Câu hỏi về tồn kho âm → GENERAL_GUIDE
+        if (containsAny(normalized, "ton kho am", "ton am", "am ton", "negative stock",
+                "so luong am", "tai sao ton am", "ton bi am")) {
+            params.put("query", userMessage);
+            return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.93,
+                    "deterministic negative stock guide");
         }
 
         if (containsAny(normalized, "ai da duyet", "nguoi da duyet", "approved by", "who approved")
@@ -1124,6 +1187,81 @@ public class AiIntentRouterService {
         return null;
     }
 
+    // Kiểm tra câu hỏi có liên quan đến kho không (bộ lọc nhanh trước LLM).
+    private boolean looksWarehouseRelated(String normalized) {
+        return containsAny(normalized,
+                "kho", "hang hoa", "hang", "san pham", "product", "warehouse", "inventory", "ton kho",
+                "nhap", "xuat", "don hang", "order", "po", "so", "gr", "pt", "pk", "sc", "rt", "rma",
+                "nha cung cap", "supplier", "khach hang", "customer",
+                "putaway", "picking", "packing", "fulfillment",
+                "vi tri", "location", "zone", "aisle", "rack", "bin", "slot",
+                "kiem ke", "cycle count", "chenh lech", "lech",
+                "bao cao", "dashboard", "report", "thong ke",
+                "thong bao", "notification", "canh bao",
+                "nguoi dung", "user", "role", "vai tro", "quyen",
+                "danh muc", "category", "sku", "barcode",
+                "nhap kho", "xuat kho", "chuyen kho", "transfer",
+                "lo hang", "lot", "han su dung", "expiry", "het han",
+                "hang chet", "dead stock", "hang ton lau", "slow moving",
+                "tai san", "asset", "gia tri", "value",
+                "hom nay", "tuan nay", "thang nay", "ngay",
+                "admin", "manager", "staff", "nhan vien",
+                "quy trinh", "nghiep vu", "huong dan", "cach",
+                "co bao nhieu", "bao nhieu", "danh sach", "list",
+                "lich su", "history", "audit", "log"
+        );
+    }
+
+    // Kiểm tra xem câu hỏi có phải là chào hỏi không.
+    private boolean looksGreeting(String normalized) {
+        return containsAny(normalized,
+                "xin chao", "chao ban", "hello", "hi", "hey",
+                "ban co the giup", "tro ly co the", "lam duoc gi", "ho tro gi",
+                "gioi thieu", "ban la ai", "stockmaster la gi",
+                "hdsd", "huong dan su dung", "instructions"
+        );
+    }
+
+    // Kiểm tra câu hỏi có phải dạng hướng dẫn/mô tả nghiệp vụ không.
+    private boolean looksDomainGuide(String normalized) {
+        return containsAny(normalized,
+                "quy trinh", "huong dan", "cach tao", "cach them", "cach xem",
+                "co the lam gi", "lam the nao", "nhu the nao",
+                "giai thich", "nghia la gi", "la gi",
+                "so sanh", "khac nhau",
+                "chuc nang", "tinh nang", "he thong co",
+                "tai sao", "vi sao"
+        );
+    }
+
+    // Kiểm tra params đã có đủ ngữ cảnh từ history để resolve reference.
+    private boolean hasResolvedReference(Map<String, Object> params) {
+        return params.containsKey("warehouse") || params.containsKey("warehouseCode")
+                || params.containsKey("sku") || params.containsKey("product")
+                || params.containsKey("code");
+    }
+
+    // Bổ sung tham số từ history vào params nếu câu hỏi hiện tại thiếu ngữ cảnh.
+    private void mergeHistoryContext(Map<String, Object> params, List<Map<String, String>> history, String userMessage) {
+        if (history == null || history.isEmpty() || hasResolvedReference(params)) {
+            return;
+        }
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Map<String, String> msg = history.get(i);
+            if ("user".equals(msg.get("role"))) {
+                String prevMsg = msg.get("content");
+                if (prevMsg == null) continue;
+                Map<String, Object> prevParams = extractCommonParams(prevMsg);
+                prevParams.forEach((k, v) -> {
+                    if (!params.containsKey(k)) {
+                        params.put(k, v);
+                    }
+                });
+                if (hasResolvedReference(params)) break;
+            }
+        }
+    }
+
     // Trích các tham số chung như query, SKU, mã kho, số ngày.
     private Map<String, Object> extractCommonParams(String userMessage) {
         return extractCommonParams(userMessage, List.of());
@@ -1315,167 +1453,17 @@ public class AiIntentRouterService {
         boolean arithmeticQuestion = Pattern.compile("\\d+\\s*[+\\-*/x:]\\s*\\d+").matcher(normalized).find()
                 && !hasBusinessCode(userMessage, BUSINESS_CODE_PATTERN)
                 && !containsAny(normalized, "vi tri", "location", "zone", "aisle", "rack", "bin");
-        return arithmeticQuestion
-                || containsAny(normalized,
-                "thoi tiet", "bong da", "chung khoan", "nau an", "nau pho", "cong thuc",
-                "viet code", "python", "react", "vue", "windows 11", "lap trinh",
-                "tin tuc", "moi nhat ve kinh te", "bau cu", "tong thong", "gia vang",
-                "hoc tieng anh", "don xin nghi viec", "nen an gi", "an com",
-                "ban thich mau", "chuyen cuoi", "cau chuyen cuoi", "lam sao de bay",
-                "troi xanh", "co ma", "khoe khong",
-                "cap nhat", "xoa ", "delete", "drop table", "update ", "insert ", "alter table", "truncate",
-                "tao don", "huy don", "duyet po", "duyet don", "gia vo", "bo qua system prompt",
-                "ignore system prompt");
-    }
-
-    private boolean looksGreeting(String normalized) {
-        return containsAny(normalized,
-                "xin chao", "chao ban", "hello", "hey", "good morning", "good afternoon")
-                || Pattern.compile("(^|\\s)hi([\\s,!?.]|$)").matcher(normalized).find();
-    }
-
-    private boolean looksDomainGuide(String normalized) {
-        if (containsAny(normalized, "ban co the giup", "ban giup duoc gi", "ban lam duoc gi",
-                "ban la ai", "ban la ai gi", "ban la tro ly", "tro ly kho", "tro ly lam duoc gi")) {
+        if (arithmeticQuestion) {
             return true;
         }
-        if (containsAny(normalized,
-                "quen mat khau", "doi mat khau", "xuat excel", "excel", "download bao cao",
-                "toi la staff", "toi la manager", "toi la admin", "phan quyen", "vai tro",
-                "co duoc duyet", "co duoc tao tai khoan", "co the sua thong tin san pham",
-                "co huy duoc khong", "phai lam sao", "nen lam gi", "xu ly the nao",
-                "he thong bao loi", "bao gio duoc duyet", "tai chinh")) {
-            return true;
-        }
-        boolean guideVerb = containsAny(normalized, "huong dan", "giai thich", "cach ", "lam sao",
-                "quy trinh", "nen xu ly ra sao", "duoc tinh the nao", " la gi");
-        boolean warehouseTopic = containsAny(normalized,
-                "kho", "ton kho", "sku", "barcode", "putaway", "picking", "cycle count", "kiem ke",
-                "rma", "tra hang", "nhap kho", "xuat kho", "don nhap", "don xuat", "po", "so-",
-                "purchase order", "sales order", "lo hang", "vi tri", "location", "hang hong",
-                "mat khau", "phan quyen", "excel", "bao cao");
-        return guideVerb && warehouseTopic;
-    }
-
-    private void mergeHistoryContext(Map<String, Object> params, List<Map<String, String>> history, String userMessage) {
-        if (params == null || !refersToPreviousContext(userMessage)) {
-            return;
-        }
-        Map<String, Object> historyContext = extractHistoryContext(history);
-        historyContext.forEach(params::putIfAbsent);
-    }
-
-    private boolean refersToPreviousContext(String userMessage) {
-        String normalized = normalize(userMessage);
         return containsAny(normalized,
-                "vua roi", "truoc do", "o tren", "ke tren",
-                "phieu do", "don do", "kho do", "san pham do", "mat hang do", "lo do",
-                "phieu nay", "don nay", "kho nay", "san pham nay", "mat hang nay", "lo nay");
-    }
-
-    private boolean hasResolvedReference(Map<String, Object> params) {
-        return params.containsKey("warehouseCode")
-                || params.containsKey("warehouse")
-                || params.containsKey("sku")
-                || params.containsKey("product")
-                || params.containsKey("code")
-                || params.containsKey("poId")
-                || params.containsKey("soId")
-                || params.containsKey("rmaId")
-                || params.containsKey("receiptCode")
-                || params.containsKey("taskCode")
-                || params.containsKey("cycleCountCode")
-                || params.containsKey("returnCode")
-                || params.containsKey("location");
-    }
-
-    private Map<String, Object> extractHistoryContext(List<Map<String, String>> history) {
-        Map<String, Object> context = new LinkedHashMap<>();
-        if (history == null || history.isEmpty()) {
-            return context;
-        }
-        for (int i = history.size() - 1; i >= 0; i--) {
-            Map<String, String> message = history.get(i);
-            if (message == null) {
-                continue;
-            }
-            String content = message.getOrDefault("content", "");
-            String warehouseCode = extractWarehouseCode(content);
-            if (!context.containsKey("warehouseCode") && warehouseCode != null) {
-                context.put("warehouseCode", warehouseCode);
-            }
-            String businessCode = extractBusinessCode(content);
-            if (!context.containsKey("code") && businessCode != null) {
-                context.put("code", businessCode);
-            }
-            applyHistoryMatch(context, "sku", SKU_PATTERN.matcher(content.toUpperCase(Locale.ROOT)),
-                    value -> value.toUpperCase(Locale.ROOT));
-            Object sku = context.get("sku");
-            if (sku != null && isBusinessOrWarehouseCode(String.valueOf(sku))) {
-                context.remove("sku");
-            }
-            if (context.containsKey("code") && !context.containsKey("poId")) {
-                String code = String.valueOf(context.get("code"));
-                if (PURCHASE_ORDER_CODE_PATTERN.matcher(code).matches()) {
-                    context.put("poId", code);
-                } else if (SALES_ORDER_CODE_PATTERN.matcher(code).matches()) {
-                    context.put("soId", code);
-                } else if (RECEIPT_CODE_PATTERN.matcher(code).matches()) {
-                    context.put("receiptCode", code);
-                } else if (PUTAWAY_TASK_CODE_PATTERN.matcher(code).matches()) {
-                    context.put("taskCode", code);
-                    context.put("putawayTaskCode", code);
-                } else if (PICKING_TASK_CODE_PATTERN.matcher(code).matches()) {
-                    context.put("taskCode", code);
-                    context.put("pickingTaskCode", code);
-                } else if (CYCLE_COUNT_CODE_PATTERN.matcher(code).matches()) {
-                    context.put("cycleCountCode", code);
-                } else if (RETURN_CODE_PATTERN.matcher(code).matches()) {
-                    context.put("returnCode", code);
-                } else if (RMA_CODE_PATTERN.matcher(code).matches()) {
-                    context.put("rmaId", code);
-                }
-            }
-            if (hasResolvedReference(context)) {
-                return context;
-            }
-        }
-        return context;
-    }
-
-    private void applyHistoryMatch(Map<String, Object> context, String key, Matcher matcher,
-            java.util.function.Function<String, String> mapper) {
-        if (context.containsKey(key) || !matcher.find()) {
-            return;
-        }
-        String value = matcher.group();
-        if (value != null && !value.isBlank()) {
-            context.put(key, mapper.apply(value));
-        }
-    }
-
-    private boolean looksWarehouseRelated(String normalized) {
-        if (normalized == null || normalized.isBlank()) {
-            return false;
-        }
-        return containsAny(normalized,
-                "kho", "warehouse", "ton", "ton kho", "stock", "sku", "san pham", "hang",
-                "barcode", "lot", "expiry", "het han", "sap het han",
-                "putaway", "cat hang", "nhap", "nhap kho", "inbound", "receipt",
-                "don nhap", "purchase order", "po-", " po ", "gr-", "phieu gr",
-                "xuat", "xuat kho", "outbound", "sales order", "so-", " don so",
-                "picking", "pick", "packing", "lay hang", "pk-", "pt-", "task",
-                "kiem ke", "cycle count", "lech", "chenh lech", "sc-",
-                "rma", "return", "rt-", "tra hang", "vi tri", "location", "slot", "cho trong",
-                "zone", "aisle", "rack", "bin",
-                "nha cung cap", "supplier", "ncc", "khach hang", "customer",
-                "audit", "log", "lich su thao tac", "global search", "tim kiem",
-                "bao cao", "dashboard", "van hanh", "quyen", "vai tro", "hom nay co gi can lam",
-                "my tasks", "tasks today", "daily tasks",
-                "thong bao", "notification", "canh bao", "nguoi dung", "user", "role",
-                "danh muc", "category", "hang chet", "dead stock", "reorder",
-                "fulfillment", "cong suat", "capacity", "lap day", "nang suat",
-                "performance", "rui ro het han");
+                "thoi tiet", "du bao thoi tiet", "nhiet do", "bong da", "lich bong",
+                "tu van tinh cam", "tinh yeu", "phim", "nha hang", "du lich",
+                "ma nguon", "code python", "code java", "viet code", "debug code",
+                "tro ly ao", "chat gpt", "chatgpt", "openai",
+                "gia tien vang", "ti gia", "chung khoan", "crypto", "bitcoin")
+                && !containsAny(normalized, "kho", "hang", "san pham", "nhap", "xuat",
+                        "ton", "order", "don", "putaway", "picking", "rma", "cycle count");
     }
 
     // Trích số ngày trong câu hỏi như "7 ngày" hoặc "30 days".
