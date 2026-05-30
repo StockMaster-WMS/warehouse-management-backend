@@ -333,7 +333,7 @@ public class AiAnswerComposerService {
         }
         return "Có " + value(map, "total") + " sản phẩm trong hệ thống. Một số sản phẩm gần nhất: "
                 + joinRows(limit(items, 5), row -> value(row, "sku") + " - " + value(row, "product_name")
-                + " (" + value(row, "category_name") + ", " + value(row, "status") + ")");
+                + " (" + value(row, "category_name") + ", " + statusValue(row, "status") + ")");
     }
 
     private String productCountReply(Map<?, ?> map) {
@@ -353,7 +353,7 @@ public class AiAnswerComposerService {
         }
         return "Tìm thấy " + value(map, "total") + " nhà cung cấp. Một số dòng: "
                 + joinRows(limit(items, 6), row -> value(row, "code") + " - " + value(row, "name")
-                + " (" + value(row, "status") + ", liên hệ " + value(row, "contact_name") + ")");
+                + " (" + statusValue(row, "status") + ", liên hệ " + value(row, "contact_name") + ")");
     }
 
     private String customerListReply(Map<?, ?> map) {
@@ -370,14 +370,14 @@ public class AiAnswerComposerService {
         return "Chi tiết sản phẩm: " + joinRows(limit(list, 5), row -> value(row, "sku") + " - "
                 + value(row, "product_name") + ", danh mục " + value(row, "category_name")
                 + ", NCC " + value(row, "supplier_name") + ", tồn " + value(row, "qty_on_hand")
-                + ", khả dụng " + value(row, "qty_available") + ", trạng thái " + value(row, "status"));
+                + ", khả dụng " + value(row, "qty_available") + ", trạng thái " + statusValue(row, "status"));
     }
 
     private String supplierDetailReply(List<?> list) {
         return "Chi tiết nhà cung cấp: " + joinRows(limit(list, 5), row -> value(row, "code") + " - "
                 + value(row, "name") + ", liên hệ " + value(row, "contact_name")
                 + ", điện thoại " + value(row, "contact_phone") + ", email " + value(row, "contact_email")
-                + ", trạng thái " + value(row, "status"));
+                + ", trạng thái " + statusValue(row, "status"));
     }
 
     private String supplierTopReply(List<?> list) {
@@ -409,20 +409,21 @@ public class AiAnswerComposerService {
                 && !(query.contains("nhieu") && query.contains("nhat"))) {
             String warehouses = byWarehouse.keySet().stream()
                     .filter(code -> !"N/A".equals(code))
+                    .map(code -> "**" + code + "**")
                     .reduce((a, b) -> a + ", " + b)
                     .orElse("chưa xác định kho");
-            return productLabel + " hiện có tại " + warehouses + ".";
+            return productLabel + " hiện đang có tại các kho: " + warehouses + ".";
         }
 
         if (containsAny(query, "giu cho", "reserved", "bi hold", "dang giu")) {
             if (totalReserved > 0) {
-                return "Có, hiện đang giữ chỗ " + formatNumber(totalReserved) + " đơn vị.";
+                return "Có, sản phẩm " + productLabel + " hiện đang giữ chỗ **" + formatNumber(totalReserved) + "** đơn vị.";
             }
             return "Không, hiện chưa ghi nhận số lượng giữ chỗ cho " + productLabel + ".";
         }
 
         if (containsAny(query, "xuat duoc", "xuat toi da", "co the xuat", "ban duoc bao nhieu")) {
-            return "Bạn có thể xuất tối đa " + formatNumber(totalAvailable) + " đơn vị.";
+            return "Bạn có thể xuất tối đa **" + formatNumber(totalAvailable) + "** đơn vị cho " + productLabel + ".";
         }
 
         if (query.contains("kho nao") && query.contains("nhieu") && query.contains("nhat")) {
@@ -430,7 +431,7 @@ public class AiAnswerComposerService {
                     .max((a, b) -> Long.compare(a.getValue()[0], b.getValue()[0]))
                     .orElse(null);
             if (max != null) {
-                return max.getKey() + " hiện có tồn kho cao nhất cho SKU " + value(first, "sku") + ".";
+                return "Kho **" + max.getKey() + "** hiện có tồn kho cao nhất cho " + productLabel + " với **" + formatNumber(max.getValue()[0]) + "** đơn vị.";
             }
         }
 
@@ -438,28 +439,49 @@ public class AiAnswerComposerService {
         if (warehouseCode != null) {
             String availableText = totalAvailable == totalOnHand
                     ? "khả dụng toàn bộ"
-                    : "khả dụng " + formatNumber(totalAvailable);
-            return "Kho " + warehouseCode + " hiện còn " + formatNumber(totalOnHand)
-                    + " đơn vị, " + availableText + ".";
+                    : "khả dụng **" + formatNumber(totalAvailable) + "** đơn vị";
+            return "**Thông tin tồn kho " + productLabel + ":**\n" +
+                   "- **Tại kho:** **" + warehouseCode + "**\n" +
+                   "- **Tồn kho hiện có:** **" + formatNumber(totalOnHand) + "** đơn vị\n" +
+                   "- **Trạng thái khả dụng:** " + availableText + ".";
         }
 
-        return productLabel + " hiện còn tổng " + formatNumber(totalOnHand)
-                + " đơn vị, khả dụng " + formatNumber(totalAvailable) + ".";
+        StringBuilder sb = new StringBuilder();
+        sb.append("**Thông tin tồn kho ").append(productLabel).append(" trên toàn hệ thống:**\n")
+          .append("- **Tổng tồn hiện có:** **").append(formatNumber(totalOnHand)).append("** đơn vị\n")
+          .append("- **Khả dụng:** **").append(formatNumber(totalAvailable)).append("** đơn vị\n")
+          .append("- **Đang giữ chỗ:** **").append(formatNumber(totalReserved)).append("** đơn vị\n\n")
+          .append("**Chi tiết theo từng kho:**\n");
+          
+        for (Map.Entry<String, long[]> entry : byWarehouse.entrySet()) {
+            if ("N/A".equals(entry.getKey())) continue;
+            sb.append("- Kho **").append(entry.getKey()).append("**: tồn **")
+              .append(formatNumber(entry.getValue()[0])).append("** đơn vị (khả dụng **")
+              .append(formatNumber(entry.getValue()[2])).append("**)\n");
+        }
+        return sb.toString().trim();
     }
 
     private String stockLowestReply(List<?> list) {
-        return "Các sản phẩm có tồn khả dụng thấp nhất: " + joinRows(limit(list, 5), row ->
-                value(row, "product_name") + " còn khả dụng " + value(row, "qty_available")
-                        + " (tồn hiện có " + value(row, "qty_on_hand") + ", định mức "
-                        + value(row, "min_stock_qty") + ")");
+        String prefix = "**Danh sách sản phẩm có tồn khả dụng thấp nhất:**\n\n";
+        String items = joinRowsAsBulletList(limit(list, 5), row -> 
+            value(row, "product_name") + " (SKU: **" + value(row, "sku") + "**) - Khả dụng: **" + formatNumber(longValue(row, "qty_available")) + "** " +
+            "(Tồn hiện có: " + formatNumber(longValue(row, "qty_on_hand")) + ", Định mức tối thiểu: " + formatNumber(longValue(row, "min_stock_qty")) + ")"
+        );
+        return prefix + items;
     }
 
     private String stockHighestReply(List<?> list) {
         Object first = list.get(0);
-        return "Sản phẩm có tồn kho cao nhất là " + value(first, "product_name")
-                + " với tồn hiện có " + value(first, "qty_on_hand")
-                + ", khả dụng " + value(first, "qty_available") + ". Top: "
-                + joinRows(limit(list, 5), row -> value(row, "product_name") + " tồn " + value(row, "qty_on_hand"));
+        String prefix = "**Sản phẩm có tồn kho cao nhất:** **" + value(first, "product_name") + "**\n" +
+                       "- **Mã SKU:** **" + value(first, "sku") + "**\n" +
+                       "- **Số lượng tồn hiện có:** **" + formatNumber(longValue(first, "qty_on_hand")) + "** đơn vị\n" +
+                       "- **Khả dụng:** **" + formatNumber(longValue(first, "qty_available")) + "** đơn vị\n\n" +
+                       "**Danh sách Top 5 sản phẩm tồn kho cao nhất:**\n";
+        String items = joinRowsAsBulletList(limit(list, 5), row -> 
+            value(row, "product_name") + " (SKU: **" + value(row, "sku") + "**): **" + formatNumber(longValue(row, "qty_on_hand")) + "** đơn vị"
+        );
+        return prefix + items;
     }
 
     private String productByBarcodeReply(List<?> list, AiIntentResult route) {
@@ -516,9 +538,20 @@ public class AiAnswerComposerService {
     }
 
     private String nearExpiryReply(List<?> list) {
-        return "Có " + list.size() + " lô hàng sắp hết hạn: " + joinRows(limit(list, 5), row ->
-                value(row, "product_name") + " tại " + value(row, "warehouse_code")
-                        + ", hạn " + value(row, "expiry_date") + ", còn " + value(row, "days_left") + " ngày");
+        List<?> displayed = limit(list, 10);
+        String prefix = "**Phát hiện " + list.size() + " lô hàng sắp hết hạn hoặc đã quá hạn:**\n\n";
+        String items = joinRowsAsBulletList(displayed, row -> {
+            long daysLeft = longValue(value(row, "days_left"));
+            String statusText = daysLeft < 0 
+                ? "**Đã quá hạn " + Math.abs(daysLeft) + " ngày**" 
+                : "còn **" + daysLeft + " ngày**";
+            return value(row, "product_name") + " (Kho **" + value(row, "warehouse_code") + "**) " +
+                   "- Hạn dùng: `" + value(row, "expiry_date") + "` (" + statusText + ")";
+        });
+        String suffix = list.size() > displayed.size() 
+            ? "\n\n*(Chỉ hiển thị " + displayed.size() + " lô hàng khẩn cấp nhất)*" 
+            : "";
+        return prefix + items + suffix;
     }
 
     private String putawayReply(List<?> list, AiIntentResult route) {
@@ -537,7 +570,7 @@ public class AiAnswerComposerService {
         }
         return "Có " + list.size() + " putaway task đang chờ/xử lý: " + joinRows(limit(list, 6), row ->
                 value(row, "product_name") + " số lượng " + value(row, "qty_to_putaway")
-                        + ", trạng thái " + value(row, "status")
+                        + ", trạng thái " + statusValue(row, "status")
                         + ", vị trí gợi ý " + value(row, "suggested_location"));
     }
 
@@ -594,14 +627,14 @@ public class AiAnswerComposerService {
 
     private String purchaseOrderReply(List<?> list) {
         return "Tìm thấy " + list.size() + " đơn nhập: " + joinRows(limit(list, 5), row ->
-                value(row, "po_number") + " trạng thái " + value(row, "status")
+                value(row, "po_number") + " trạng thái " + statusValue(row, "status")
                         + ", NCC " + value(row, "supplier_name")
                         + ", dự kiến " + value(row, "expected_date"));
     }
 
     private String purchaseOrderDetailReply(List<?> list) {
         Object first = list.get(0);
-        return "PO " + value(first, "po_number") + " trạng thái " + value(first, "status")
+        return "PO " + value(first, "po_number") + " trạng thái " + statusValue(first, "status")
                 + ", NCC " + value(first, "supplier_name") + ", kho " + value(first, "warehouse_code")
                 + ". Dòng hàng: " + joinRows(limit(list, 8), row -> "#" + value(row, "line_number")
                 + " " + value(row, "sku") + " đặt " + value(row, "ordered_qty")
@@ -617,7 +650,7 @@ public class AiAnswerComposerService {
 
     private String pendingPoReceiptReply(List<?> list) {
         return "Có " + list.size() + " PO đang chờ nhận/chưa hoàn tất: " + joinRows(limit(list, 6), row ->
-                value(row, "po_number") + " trạng thái " + value(row, "status")
+                value(row, "po_number") + " trạng thái " + statusValue(row, "status")
                         + ", còn phải nhận " + value(row, "remaining_qty")
                         + ", NCC " + value(row, "supplier_name"));
     }
@@ -627,7 +660,7 @@ public class AiAnswerComposerService {
         return "Đơn xuất ưu tiên cao nhất hiện tại là " + value(first, "so_number")
                 + " của " + value(first, "customer_name")
                 + ", priority " + value(first, "priority")
-                + ", trạng thái " + value(first, "status") + ".";
+                + ", trạng thái " + statusValue(first, "status") + ".";
     }
 
     private String salesOrderStatusReply(List<?> list, AiIntentResult route) {
@@ -650,7 +683,7 @@ public class AiAnswerComposerService {
             }
         }
         return "Tìm thấy " + list.size() + " đơn xuất: " + joinRows(limit(list, 6), row ->
-                value(row, "so_number") + " trạng thái " + value(row, "status")
+                value(row, "so_number") + " trạng thái " + statusValue(row, "status")
                         + ", khách " + value(row, "customer_name")
                         + ", đặt " + value(row, "ordered_qty")
                         + ", đã giao " + value(row, "shipped_qty"));
@@ -659,7 +692,7 @@ public class AiAnswerComposerService {
     private String latestSalesOrderReply(List<?> list) {
         Object first = list.get(0);
         return "Phiếu xuất được duyệt gần nhất là " + value(first, "so_number")
-                + ", trạng thái " + value(first, "status")
+                + ", trạng thái " + statusValue(first, "status")
                 + ", khách " + value(first, "customer_name")
                 + ", tạo lúc " + value(first, "created_at") + ".";
     }
@@ -683,7 +716,7 @@ public class AiAnswerComposerService {
             }
             return "Đơn còn thiếu " + String.join("; ", missing) + ".";
         }
-        return "SO " + value(first, "so_number") + " trạng thái " + value(first, "status")
+        return "SO " + value(first, "so_number") + " trạng thái " + statusValue(first, "status")
                 + ", khách " + value(first, "customer_name") + ", kho " + value(first, "warehouse_code")
                 + ". Dòng hàng: " + joinRows(limit(list, 8), row -> "#" + value(row, "line_number")
                 + " " + value(row, "sku") + " đặt " + value(row, "ordered_qty")
@@ -692,7 +725,7 @@ public class AiAnswerComposerService {
 
     private String packingReply(List<?> list) {
         return "Có " + list.size() + " đơn xuất đang ở bước trước/trong packing: " + joinRows(limit(list, 6), row ->
-                value(row, "so_number") + " trạng thái " + value(row, "status")
+                value(row, "so_number") + " trạng thái " + statusValue(row, "status")
                         + ", khách " + value(row, "customer_name"));
     }
 
@@ -740,7 +773,7 @@ public class AiAnswerComposerService {
                 value(row, "so_number") + " - " + value(row, "product_name")
                         + ", cần pick " + value(row, "qty_to_pick")
                         + ", đã pick " + value(row, "qty_picked")
-                        + ", trạng thái " + value(row, "status"));
+                        + ", trạng thái " + statusValue(row, "status"));
     }
 
     private String stockMovementReply(List<?> list) {
@@ -755,7 +788,7 @@ public class AiAnswerComposerService {
     private String activeCycleCountReply(List<?> list) {
         return "Có " + list.size() + " cycle count đang mở: " + joinRows(list, row ->
                 value(row, "cycle_count_id") + " tại " + value(row, "warehouse_code")
-                        + ", trạng thái " + value(row, "status")
+                        + ", trạng thái " + statusValue(row, "status")
                         + ", số dòng " + value(row, "item_count"));
     }
 
@@ -801,7 +834,7 @@ public class AiAnswerComposerService {
         }
         return "Có " + list.size() + " yêu cầu RMA đang chờ xử lý: " + joinRows(limit(list, 5), row ->
                 value(row, "rma_number") + " - " + value(row, "customer_name")
-                        + ", trạng thái " + value(row, "status"));
+                        + ", trạng thái " + statusValue(row, "status"));
     }
 
     private String rmaDetailReply(List<?> list) {
@@ -815,29 +848,30 @@ public class AiAnswerComposerService {
 
     private String latestRmaReasonReply(List<?> list) {
         Object first = list.get(0);
-        return "Nguyên nhân trả hàng trong RMA mới nhất " + value(first, "rma_number")
-                + " là: " + value(first, "reason") + ".";
+        return "**Nguyên nhân trả hàng trong RMA mới nhất:**\n" +
+               "- **Mã RMA:** `" + value(first, "rma_number") + "`\n" +
+               "- **Lý do trả hàng:** *\"" + value(first, "reason") + "\"*.";
     }
 
     private String rmaBySkuReply(List<?> list) {
         return "Có " + list.size() + " dòng RMA liên quan SKU/sản phẩm bạn hỏi: "
                 + joinRows(limit(list, 6), row -> value(row, "rma_number") + " - "
                 + value(row, "sku") + " " + value(row, "product_name")
-                + ", trạng thái " + value(row, "status")
+                + ", trạng thái " + statusValue(row, "status")
                 + ", SL " + value(row, "expected_qty"));
     }
 
     private String rmaSupplierReturnReply(List<?> list) {
         return "Các RMA cần gửi về nhà cung cấp: " + joinRows(limit(list, 6), row ->
                 value(row, "rma_number") + " - " + value(row, "customer_name")
-                        + ", trạng thái " + value(row, "status")
+                        + ", trạng thái " + statusValue(row, "status")
                         + ", SL " + value(row, "expected_qty"));
     }
 
     private String rmaQcRequiredReply(List<?> list) {
         return "Các RMA cần kiểm tra chất lượng trước khi nhập lại: "
                 + joinRows(limit(list, 6), row -> value(row, "rma_number") + " - "
-                + value(row, "customer_name") + ", trạng thái " + value(row, "status")
+                + value(row, "customer_name") + ", trạng thái " + statusValue(row, "status")
                 + ", SL " + value(row, "received_qty") + "/" + value(row, "expected_qty")
                 + ", lý do " + value(row, "reason"));
     }
@@ -846,7 +880,7 @@ public class AiAnswerComposerService {
         return "Tìm thấy " + list.size() + " vị trí: " + joinRows(limit(list, 8), row ->
                 value(row, "warehouse_code") + "/" + value(row, "code")
                         + " zone " + value(row, "zone")
-                        + ", trạng thái " + value(row, "status"));
+                        + ", trạng thái " + statusValue(row, "status"));
     }
 
     private String auditLogReply(List<?> list) {
@@ -865,28 +899,33 @@ public class AiAnswerComposerService {
     }
 
     private String dailyTasksReply(Map<?, ?> map) {
-        return "Hôm nay cần chú ý: putaway chờ " + nestedValue(map, "pending_putaway", "total")
-                + ", picking pending " + nestedValue(map, "pending_picking", "total")
-                + ", cycle count đang mở " + nestedValue(map, "active_cycle_counts", "total")
-                + ", lô sắp hết hạn trong 7 ngày " + nestedValue(map, "near_expiry_7_days", "total")
-                + ", RMA chờ xử lý " + nestedValue(map, "pending_rma", "total") + ".";
+        return "📅 **Nhiệm vụ vận hành cần lưu ý trong ngày:**\n" +
+               "- **Putaway chờ xếp kệ:** **" + formatNumber(longValue(nestedValue(map, "pending_putaway", "total"))) + "** task\n" +
+               "- **Picking đang chờ:** **" + formatNumber(longValue(nestedValue(map, "pending_picking", "total"))) + "** đơn hàng\n" +
+               "- **Cycle count đang mở:** **" + formatNumber(longValue(nestedValue(map, "active_cycle_counts", "total"))) + "** đợt kiểm kê\n" +
+               "- **Lô hàng sắp hết hạn (trong 7 ngày):** **" + formatNumber(longValue(nestedValue(map, "near_expiry_7_days", "total"))) + "** lô\n" +
+               "- **Yêu cầu trả hàng (RMA) chờ xử lý:** **" + formatNumber(longValue(nestedValue(map, "pending_rma", "total"))) + "** yêu cầu.";
     }
 
     private String reportSummaryReply(Map<?, ?> map) {
-        return "Tổng quan vận hành: " + nestedValue(map, "warehouses", "active") + " kho đang hoạt động, tồn hiện có "
-                + nestedValue(map, "stock", "qty_on_hand") + ", giữ chỗ " + nestedValue(map, "stock", "qty_reserved")
-                + ", putaway chờ " + nestedValue(map, "pending_putaway", "total")
-                + ", đơn xuất cần xử lý " + nestedValue(map, "priority_outbound", "total") + ".";
+        return "📊 **Tổng quan tình hình vận hành hệ thống:**\n" +
+               "- **Kho hoạt động:** **" + formatNumber(longValue(nestedValue(map, "warehouses", "active"))) + "** kho đang hoạt động\n" +
+               "- **Tổng tồn kho hiện có:** **" + formatNumber(longValue(nestedValue(map, "stock", "qty_on_hand"))) + "** đơn vị\n" +
+               "- **Tồn kho đang giữ chỗ (reserved):** **" + formatNumber(longValue(nestedValue(map, "stock", "qty_reserved"))) + "** đơn vị\n" +
+               "- **Putaway đang chờ xử lý:** **" + formatNumber(longValue(nestedValue(map, "pending_putaway", "total"))) + "** task\n" +
+               "- **Đơn xuất ưu tiên cần xử lý:** **" + formatNumber(longValue(nestedValue(map, "priority_outbound", "total"))) + "** đơn.";
     }
 
     private String flowReportReply(Map<?, ?> map) {
-        return "Báo cáo nhập - xuất 7 ngày qua: phiếu nhập "
-                + nestedValue(map, "inbound", "receipts") + ", số lượng nhập "
-                + nestedValue(map, "inbound", "received_qty") + "; đơn bán "
-                + nestedValue(map, "outbound", "sales_orders") + ", số lượng đặt "
-                + nestedValue(map, "outbound", "ordered_qty") + ", đã giao "
-                + nestedValue(map, "outbound", "shipped_qty") + "; stock movement "
-                + nestedValue(map, "stock_movements", "movements") + ".";
+        return "📈 **Báo cáo biến động nhập - xuất trong 7 ngày qua:**\n" +
+               "📥 **Hoạt động nhập kho (Inbound):**\n" +
+               "  - Số phiếu nhập: **" + formatNumber(longValue(nestedValue(map, "inbound", "receipts"))) + "** phiếu\n" +
+               "  - Tổng số lượng nhập: **" + formatNumber(longValue(nestedValue(map, "inbound", "received_qty"))) + "** đơn vị\n" +
+               "📤 **Hoạt động xuất kho (Outbound):**\n" +
+               "  - Số đơn bán: **" + formatNumber(longValue(nestedValue(map, "outbound", "sales_orders"))) + "** đơn\n" +
+               "  - Tổng số lượng đặt: **" + formatNumber(longValue(nestedValue(map, "outbound", "ordered_qty"))) + "** đơn vị\n" +
+               "  - Đã thực xuất giao: **" + formatNumber(longValue(nestedValue(map, "outbound", "shipped_qty"))) + "** đơn vị\n" +
+               "🔄 **Biến động dịch chuyển tồn kho:** **" + formatNumber(longValue(nestedValue(map, "stock_movements", "movements"))) + "** lượt giao dịch.";
     }
 
     private String inboundReportReply(Map<?, ?> map) {
@@ -923,42 +962,69 @@ public class AiAnswerComposerService {
     }
 
     private String inventoryValueReply(Map<?, ?> map) {
-        return "Tổng giá trị tồn kho ước tính hiện tại là " + nestedValue(map, "summary", "inventory_value")
-                + ", trên " + nestedValue(map, "summary", "qty_on_hand") + " đơn vị hàng. Nhóm giá trị cao nhất: "
-                + joinRowsFromMapList(map, "top_products", row -> value(row, "product_name") + " ~ "
-                + value(row, "inventory_value"));
+        String totalValue = formatCurrency(nestedValue(map, "summary", "inventory_value"));
+        String totalQty = formatNumber(longValue(nestedValue(map, "summary", "qty_on_hand")));
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("💰 **Tổng giá trị tồn kho ước tính hiện tại:** **").append(totalValue).append("**\n")
+          .append("📦 **Tổng số lượng sản phẩm:** **").append(totalQty).append("** đơn vị\n\n")
+          .append("📊 **Nhóm sản phẩm có giá trị tồn kho cao nhất:**\n");
+          
+        Object topProducts = map.get("top_products");
+        if (topProducts instanceof List<?> topList && !topList.isEmpty()) {
+            sb.append(joinRowsAsBulletList(limit(topList, 5), row -> 
+                value(row, "product_name") + " (SKU: **" + value(row, "sku") + "**) ~ **" + formatCurrency(value(row, "inventory_value")) + "**"
+            ));
+        } else {
+            sb.append("- *Không có dữ liệu chi tiết*");
+        }
+        return sb.toString();
     }
 
     private String inventoryValueByWarehouseReply(List<?> list) {
         if (list.size() >= 2) {
             Object first = list.get(0);
             Object second = list.get(1);
-            return "So sánh giá trị tồn kho: " + value(first, "warehouse_code") + " khoảng "
-                    + value(first, "inventory_value") + ", " + value(second, "warehouse_code")
-                    + " khoảng " + value(second, "inventory_value") + ". Cao hơn: "
-                    + value(first, "warehouse_code") + ".";
+            return "📊 **So sánh giá trị tồn kho giữa các kho:**\n" +
+                   "- **" + value(first, "warehouse_code") + "**: **" + formatCurrency(value(first, "inventory_value")) + "** (tồn **" + formatNumber(longValue(first, "qty_on_hand")) + "** đơn vị)\n" +
+                   "- **" + value(second, "warehouse_code") + "**: **" + formatCurrency(value(second, "inventory_value")) + "** (tồn **" + formatNumber(longValue(second, "qty_on_hand")) + "** đơn vị)\n\n" +
+                   "👉 Kho có giá trị tồn cao hơn: **" + value(first, "warehouse_code") + "**.";
         }
         Object row = list.get(0);
-        return "Giá trị tồn kho " + value(row, "warehouse_code") + " khoảng "
-                + value(row, "inventory_value") + ", tồn " + value(row, "qty_on_hand") + " đơn vị.";
+        return "📊 **Giá trị tồn kho tại kho " + value(row, "warehouse_code") + ":**\n" +
+               "- **Tổng giá trị:** **" + formatCurrency(value(row, "inventory_value")) + "**\n" +
+               "- **Tổng số lượng tồn:** **" + formatNumber(longValue(row, "qty_on_hand")) + "** đơn vị.";
     }
 
     private String inactiveProductWithStockReply(Map<?, ?> map) {
-        return "Có " + nestedValue(map, "summary", "product_count")
-                + " sản phẩm đang không ở trạng thái ACTIVE nhưng vẫn còn tồn, tổng "
-                + nestedValue(map, "summary", "qty_on_hand") + " đơn vị. Một số SKU: "
-                + joinRowsFromMapList(map, "items", row -> value(row, "sku") + " - "
-                + value(row, "product_name") + ", trạng thái " + value(row, "status")
-                + ", tồn " + value(row, "qty_on_hand"));
+        String count = formatNumber(longValue(nestedValue(map, "summary", "product_count")));
+        String totalQty = formatNumber(longValue(nestedValue(map, "summary", "qty_on_hand")));
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append("🚫 **Phát hiện ").append(count).append(" sản phẩm đã ngừng kinh doanh (không ACTIVE) nhưng vẫn còn tồn kho:**\n")
+          .append("- **Tổng số lượng tồn:** **").append(totalQty).append("** đơn vị\n\n")
+          .append("📋 **Một số sản phẩm tiêu biểu:**\n");
+          
+        Object items = map.get("items");
+        if (items instanceof List<?> itemList && !itemList.isEmpty()) {
+            sb.append(joinRowsAsBulletList(limit(itemList, 5), row -> 
+                "**" + value(row, "sku") + "** - " + value(row, "product_name") + " " +
+                "(Trạng thái: `" + value(row, "status") + "`, Tồn: **" + formatNumber(longValue(row, "qty_on_hand")) + "** đơn vị)"
+            ));
+        } else {
+            sb.append("- *Không có danh sách chi tiết*");
+        }
+        return sb.toString();
     }
 
     private String longestExpiryReply(List<?> list) {
         Object first = list.get(0);
-        return "Lô có hạn sử dụng dài nhất còn lại là " + value(first, "lot_number")
-                + " của " + value(first, "sku") + " - " + value(first, "product_name")
-                + ", hạn " + value(first, "expiry_date")
-                + ", còn khoảng " + value(first, "days_remaining") + " ngày tại kho "
-                + value(first, "warehouse_code") + ", tồn " + value(first, "qty_on_hand") + ".";
+        return "📅 **Lô hàng có hạn sử dụng dài nhất còn lại:**\n" +
+               "- **Mã lô (Lot Number):** `" + value(first, "lot_number") + "`\n" +
+               "- **Sản phẩm:** SKU **" + value(first, "sku") + "** - " + value(first, "product_name") + "\n" +
+               "- **Hạn sử dụng:** `" + value(first, "expiry_date") + "` (còn khoảng **" + formatNumber(value(first, "days_remaining")) + "** ngày)\n" +
+               "- **Vị trí lưu trữ:** Kho **" + value(first, "warehouse_code") + "**\n" +
+               "- **Số lượng tồn:** **" + formatNumber(longValue(first, "qty_on_hand")) + "** đơn vị.";
     }
 
     private String inboundProductQtyReply(Map<?, ?> map) {
@@ -970,12 +1036,18 @@ public class AiAnswerComposerService {
     }
 
     private String inboundPendingPutawayReply(List<?> list) {
-        return "Có " + list.size() + " dòng/phiếu nhập đang chờ putaway: "
-                + joinRows(limit(list, 6), row -> value(row, "po_number")
-                + " / " + value(row, "receipt_number")
-                + " - " + value(row, "product_name")
-                + ", trạng thái " + value(row, "putaway_status")
-                + ", SL " + value(row, "qty_to_putaway"));
+        List<?> displayed = limit(list, 10);
+        String prefix = "📥 **Có " + list.size() + " dòng/phiếu nhập đang chờ xếp hàng lên kệ (Putaway):**\n\n";
+        String items = joinRowsAsBulletList(displayed, row -> 
+            "Phiếu **" + value(row, "po_number") + "** / GRN `" + value(row, "receipt_number") + "`\n" +
+            "  - Sản phẩm: " + value(row, "product_name") + "\n" +
+            "  - Số lượng: **" + formatNumber(longValue(row, "qty_to_putaway")) + "** đơn vị\n" +
+            "  - Trạng thái: `" + statusLabel(value(row, "putaway_status")) + "`"
+        );
+        String suffix = list.size() > displayed.size() 
+            ? "\n\n*(Chỉ hiển thị " + displayed.size() + " dòng đầu tiên)*" 
+            : "";
+        return prefix + items + suffix;
     }
 
     private String inboundAvgDailyReply(Map<?, ?> map) {
@@ -992,11 +1064,17 @@ public class AiAnswerComposerService {
     }
 
     private String outboundDelayedReply(List<?> list) {
-        return "Có " + list.size() + " đơn xuất đang trễ hoặc có nguy cơ trễ: "
-                + joinRows(limit(list, 6), row -> value(row, "so_number")
-                + " - " + value(row, "customer_name")
-                + ", trạng thái " + value(row, "status")
-                + ", tạo lúc " + value(row, "created_at"));
+        List<?> displayed = limit(list, 10);
+        String prefix = "🚨 **Cảnh báo: Có " + list.size() + " đơn xuất kho đang trễ hoặc có nguy cơ trễ hạn giao hàng!**\n\n" +
+                       "📋 **Danh sách các đơn hàng cần xử lý gấp:**\n";
+        String items = joinRowsAsBulletList(displayed, row -> 
+            "Đơn **" + value(row, "so_number") + "** - " + value(row, "customer_name") + " " +
+            "(Trạng thái: `" + statusValue(row, "status") + "`, Tạo lúc: `" + formatDateTime(value(row, "created_at")) + "`)"
+        );
+        String suffix = list.size() > displayed.size() 
+            ? "\n\n*(Chỉ hiển thị " + displayed.size() + " đơn hàng ưu tiên nhất)*" 
+            : "";
+        return prefix + items + suffix;
     }
 
     private String stockFastestDecreaseReply(List<?> list) {
@@ -1039,10 +1117,14 @@ public class AiAnswerComposerService {
     }
 
     private String outboundCancelledOrReturnedReply(Map<?, ?> map) {
-        return "Đơn xuất bị hủy: " + nestedValue(map, "cancelled", "orders")
-                + " đơn, số lượng " + nestedValue(map, "cancelled", "ordered_qty")
-                + ". RMA/trả lại trong tháng: " + nestedValue(map, "returned", "rma_orders")
-                + " yêu cầu, số lượng nhận " + nestedValue(map, "returned", "received_qty") + ".";
+        String cancelledOrders = formatNumber(longValue(nestedValue(map, "cancelled", "orders")));
+        String cancelledQty = formatNumber(longValue(nestedValue(map, "cancelled", "ordered_qty")));
+        String returnedOrders = formatNumber(longValue(nestedValue(map, "returned", "rma_orders")));
+        String returnedQty = formatNumber(longValue(nestedValue(map, "returned", "received_qty")));
+        
+        return "📉 **Thống kê đơn xuất bị hủy & trả lại (RMA):**\n" +
+               "- **Đơn xuất bị hủy:** **" + cancelledOrders + "** đơn (Tổng số lượng: **" + cancelledQty + "** đơn vị)\n" +
+               "- **Yêu cầu trả hàng (RMA) trong tháng:** **" + returnedOrders + "** yêu cầu (Tổng số lượng đã nhận lại: **" + returnedQty + "** đơn vị).";
     }
 
     private String pickingCompletedCountReply(Map<?, ?> map) {
@@ -1168,15 +1250,30 @@ public class AiAnswerComposerService {
     }
 
     private String categoryReply(List<?> list) {
-        return "Có " + list.size() + " danh mục: " + joinRows(limit(list, 8), row ->
+        List<?> displayed = limit(list, 8);
+        String prefix = displayed.size() < list.size()
+                ? "Có " + list.size() + " danh mục. Hiển thị " + displayed.size() + " danh mục đầu tiên:"
+                : "Có " + list.size() + " danh mục:";
+        String suffix = displayed.size() < list.size()
+                ? "\nCòn " + (list.size() - displayed.size()) + " danh mục khác chưa hiển thị."
+                : "";
+        return prefix + "\n" + joinRowsAsBulletList(displayed, row ->
                 value(row, "code") + " - " + value(row, "name")
-                        + ", sản phẩm " + value(row, "product_count"));
+                        + ", sản phẩm " + value(row, "product_count")) + suffix;
     }
 
     private String productByCategoryReply(List<?> list) {
-        return "Tìm thấy " + list.size() + " sản phẩm trong danh mục: " + joinRows(limit(list, 8), row ->
+        List<?> displayed = limit(list, 8);
+        String prefix = displayed.size() < list.size()
+                ? "Tìm thấy " + list.size() + " sản phẩm trong danh mục. Hiển thị "
+                        + displayed.size() + " sản phẩm đầu tiên:"
+                : "Tìm thấy " + list.size() + " sản phẩm trong danh mục:";
+        String suffix = displayed.size() < list.size()
+                ? "\nCòn " + (list.size() - displayed.size()) + " sản phẩm khác chưa hiển thị."
+                : "";
+        return prefix + "\n" + joinRowsAsBulletList(displayed, row ->
                 value(row, "sku") + " - " + value(row, "product_name")
-                        + ", tồn " + value(row, "qty_on_hand"));
+                        + ", tồn " + value(row, "qty_on_hand")) + suffix;
     }
 
     private String stockByLocationReply(List<?> list) {
@@ -1372,6 +1469,10 @@ public class AiAnswerComposerService {
         };
     }
 
+    private String statusValue(Object row, String key) {
+        return statusLabel(value(row, key));
+    }
+
     private String returnStatusLabel(String status) {
         if (status == null) {
             return "ở trạng thái N/A";
@@ -1393,6 +1494,36 @@ public class AiAnswerComposerService {
         return String.format(Locale.GERMANY, "%,d", value);
     }
 
+    private String formatCurrency(Object value) {
+        if (value == null) {
+            return "0 VNĐ";
+        }
+        long amount = longValue(value);
+        return formatNumber(amount) + " VNĐ";
+    }
+
+    private String formatDateTime(String val) {
+        if (val == null || "N/A".equals(val) || val.isBlank()) {
+            return "N/A";
+        }
+        if (val.length() >= 19) {
+            String clean = val.substring(0, 19).replace('T', ' ');
+            try {
+                String[] parts = clean.split(" ");
+                if (parts.length == 2) {
+                    String datePart = parts[0];
+                    String timePart = parts[1];
+                    String[] dateSplits = datePart.split("-");
+                    if (dateSplits.length == 3) {
+                        return timePart + " " + dateSplits[2] + "/" + dateSplits[1] + "/" + dateSplits[0];
+                    }
+                }
+            } catch (Exception ignored) {}
+            return clean;
+        }
+        return val;
+    }
+
     private String normalize(String value) {
         if (value == null) {
             return "";
@@ -1411,6 +1542,13 @@ public class AiAnswerComposerService {
         return rows.stream()
                 .map(formatter)
                 .reduce((a, b) -> a + "; " + b)
+                .orElse("");
+    }
+
+    private String joinRowsAsBulletList(List<?> rows, java.util.function.Function<Object, String> formatter) {
+        return rows.stream()
+                .map(row -> "- " + formatter.apply(row))
+                .reduce((a, b) -> a + "\n" + b)
                 .orElse("");
     }
 
