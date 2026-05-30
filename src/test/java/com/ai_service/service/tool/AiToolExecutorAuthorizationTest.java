@@ -1,4 +1,4 @@
-package com.ai_service.service;
+package com.ai_service.service.tool;
 
 import com.ai_service.intent.AiIntent;
 import com.ai_service.intent.AiIntentResult;

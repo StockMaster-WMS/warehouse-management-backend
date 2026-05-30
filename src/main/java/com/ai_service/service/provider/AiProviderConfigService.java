@@ -1,4 +1,4 @@
-package com.ai_service.service;
+package com.ai_service.service.provider;
 
 import com.ai_service.dto.AiProviderKeyStatusResponse;
 import com.ai_service.dto.UpdateAiProviderKeyRequest;

@@ -1,7 +1,8 @@
-package com.ai_service.service;
+package com.ai_service.service.conversation;
 
 import com.ai_service.client.AiTextClient;
 import com.ai_service.intent.AiIntent;
+import com.ai_service.intent.AiIntentCatalog;
 import com.ai_service.intent.AiIntentResult;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -121,7 +122,10 @@ public class AiIntentRouterService {
                   "reason": "short reason"
                 }
 
-                Supported intents:
+                Supported intent catalog:
+                %s
+
+                Legacy intent notes:
                 - WAREHOUSE_COUNT: hỏi tổng số/số lượng kho.
                 - WAREHOUSE_LIST: hỏi danh sách/liệt kê các kho.
                 - WAREHOUSE_DETAIL: hỏi chi tiết một kho cụ thể theo mã/tên.
@@ -219,7 +223,7 @@ public class AiIntentRouterService {
                 Current question: %s
                 <|im_end|>
                 <|im_start|>assistant
-                """.formatted(toJson(compactHistory(history)), userMessage);
+                """.formatted(AiIntentCatalog.routerCatalogText(), toJson(compactHistory(history)), userMessage);
     }
 
     // Parse JSON intent tu output tho cua model.
@@ -433,11 +437,18 @@ public class AiIntentRouterService {
         }
 
         // Câu hỏi về tồn kho âm → GENERAL_GUIDE
-        if (containsAny(normalized, "ton kho am", "ton am", "am ton", "negative stock",
+        if (containsAny(normalized, "ton kho am", "ton am", "negative stock",
                 "so luong am", "tai sao ton am", "ton bi am")) {
             params.put("query", userMessage);
             return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.93,
                     "deterministic negative stock guide");
+        }
+
+        if (containsAny(normalized, "quen mat khau", "reset mat khau", "doi mat khau",
+                "khong dang nhap duoc", "password")) {
+            params.put("query", userMessage);
+            return AiIntentResult.of(AiIntent.GENERAL_GUIDE, params, 0.93,
+                    "deterministic account guide");
         }
 
         if (containsAny(normalized, "ai da duyet", "nguoi da duyet", "approved by", "who approved")
@@ -616,11 +627,25 @@ public class AiIntentRouterService {
                     "deterministic fastest stock decrease");
         }
 
+        if (containsAny(normalized, "chua duoc gan vi tri", "chua gan vi tri", "chua co vi tri",
+                "khong co vi tri", "missing location", "without location", "chua co location",
+                "chua duoc gan location")) {
+            return AiIntentResult.of(AiIntent.PRODUCT_WITHOUT_LOCATION, params, 0.94,
+                    "deterministic products without location");
+        }
+
         if (containsAny(normalized, "phieu nhap", "don nhap", "po")
                 && containsAny(normalized, "cho putaway", "chua putaway", "cho xep", "chua xep", "chua duoc xep",
                 "tre han chua putaway", "duyet nhung chua putaway")) {
             return AiIntentResult.of(AiIntent.INBOUND_PENDING_PUTAWAY, params, 0.94,
                     "deterministic inbound pending putaway");
+        }
+
+        if (containsAny(normalized, "nhan vien nao", "ai xu ly", "nguoi xu ly", "received by", "nguoi nhan")
+                && containsAny(normalized, "don nhap", "phieu nhap", "receipt", "nhap kho")
+                && containsAny(normalized, "gan nhat", "moi nhat", "latest", "recent")) {
+            return AiIntentResult.of(AiIntent.LATEST_INBOUND, params, 0.94,
+                    "deterministic latest inbound handler");
         }
 
         if (containsAny(normalized, "so luong nhap kho", "da nhap bao nhieu", "nhap duoc bao nhieu")
@@ -640,6 +665,13 @@ public class AiIntentRouterService {
             params.putIfAbsent("dateRange", params.get("dateRange") == null ? "TODAY" : params.get("dateRange"));
             return AiIntentResult.of(AiIntent.OUTBOUND_TOTAL_QTY, params, 0.94,
                     "deterministic outbound total quantity");
+        }
+
+        if (containsAny(normalized, "don xuat", "phieu xuat", "sales order", "outbound")
+                && containsAny(normalized, "dang cho xu ly", "cho xu ly", "pending", "can xu ly")) {
+            params.putIfAbsent("status", "PENDING");
+            return AiIntentResult.of(AiIntent.OUTBOUND_PRIORITY, params, 0.94,
+                    "deterministic pending outbound orders");
         }
 
         if (containsAny(normalized, "nguy co tre han", "bi tre so voi han", "dang tre han", "tre han giao",
@@ -817,6 +849,13 @@ public class AiIntentRouterService {
 
         if (containsAny(normalized, "hang hot", "hot hom nay")) {
             return AiIntentResult.of(AiIntent.SALES_TOP, params, 0.85, "deterministic colloquial hot items");
+        }
+
+        if (containsAny(normalized, "so sanh", "compare", "doi chieu")
+                && containsAny(normalized, "thang nay", "this month")
+                && containsAny(normalized, "thang truoc", "last month", "month before")
+                && containsAny(normalized, "nhap", "xuat", "inbound", "outbound")) {
+            return AiIntentResult.of(AiIntent.MONTH_OVER_MONTH_FLOW, params, 0.92, "deterministic month over month flow");
         }
 
         if (looksDomainGuide(normalized)) {
@@ -1106,12 +1145,16 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.RMA_PENDING, params, 0.9, "deterministic rma");
         }
 
-        if (containsAny(normalized, "vua duoc nhap kho hom nay", "nhap kho hom nay", "lo hang hom nay")) {
+        if (containsAny(normalized, "vua duoc nhap kho hom nay", "nhap kho hom nay", "lo hang hom nay")
+                || (containsAny(normalized, "hom nay") && containsAny(normalized, "bao nhieu don nhap",
+                "bao nhieu phieu nhap", "co bao nhieu don nhap", "co bao nhieu phieu nhap"))) {
+            params.putIfAbsent("dateRange", "TODAY");
             return AiIntentResult.of(AiIntent.INBOUND_TODAY, params, 0.9, "deterministic inbound today");
         }
 
         if (containsAny(normalized, "vua nhap", "nhap gan day", "gan day nhat", "don nhap kho gan nhat",
-                "phieu nhap gan nhat", "lo hang moi nhat")) {
+                "phieu nhap gan nhat", "lo hang moi nhat", "nhan vien nao xu ly don nhap gan nhat",
+                "ai xu ly don nhap gan nhat")) {
             return AiIntentResult.of(AiIntent.LATEST_INBOUND, params, 0.9, "deterministic latest inbound");
         }
 
@@ -1215,11 +1258,11 @@ public class AiIntentRouterService {
     // Kiểm tra xem câu hỏi có phải là chào hỏi không.
     private boolean looksGreeting(String normalized) {
         return containsAny(normalized,
-                "xin chao", "chao ban", "hello", "hi", "hey",
+                "xin chao", "chao ban", "hello", "hey",
                 "ban co the giup", "tro ly co the", "lam duoc gi", "ho tro gi",
                 "gioi thieu", "ban la ai", "stockmaster la gi",
                 "hdsd", "huong dan su dung", "instructions"
-        );
+        ) || normalized.matches("(^|\\s)hi($|\\s|[!.?,])");
     }
 
     // Kiểm tra câu hỏi có phải dạng hướng dẫn/mô tả nghiệp vụ không.

@@ -1,4 +1,4 @@
-package com.ai_service.service;
+package com.ai_service.service.conversation;
 
 import com.ai_service.intent.AiIntent;
 import com.ai_service.intent.AiIntentResult;
@@ -306,5 +306,27 @@ class AiIntentRouterServiceTest {
                 .isEqualTo(AiIntent.MY_TASKS);
         assertThat(router.route("Hôm nay tôi còn việc gì chưa xong?", List.of()).getIntent())
                 .isEqualTo(AiIntent.MY_TASKS);
+    }
+
+    @Test
+    void routesRepresentativeBusinessQuestionGroups() {
+        assertThat(router.route("Sản phẩm nào sắp hết hàng?", List.of()).getIntent())
+                .isEqualTo(AiIntent.LOW_STOCK);
+        assertThat(router.route("Kho nào còn nhiều hàng nhất?", List.of()).getIntent())
+                .isEqualTo(AiIntent.WAREHOUSE_STOCK_SUMMARY);
+        assertThat(router.route("Hôm nay có bao nhiêu đơn nhập?", List.of()).getIntent())
+                .isEqualTo(AiIntent.INBOUND_TODAY);
+        assertThat(router.route("Tồn kho hiện tại của SKU 00018 là bao nhiêu?", List.of()).getIntent())
+                .isEqualTo(AiIntent.STOCK_BY_PRODUCT);
+        assertThat(router.route("Đơn xuất nào đang chờ xử lý?", List.of()).getIntent())
+                .isEqualTo(AiIntent.OUTBOUND_PRIORITY);
+        assertThat(router.route("Nhân viên nào xử lý đơn nhập gần nhất?", List.of()).getIntent())
+                .isEqualTo(AiIntent.LATEST_INBOUND);
+        assertThat(router.route("Có sản phẩm nào chưa được gán vị trí không?", List.of()).getIntent())
+                .isEqualTo(AiIntent.PRODUCT_WITHOUT_LOCATION);
+        assertThat(router.route("Thống kê nhập xuất theo tháng.", List.of()).getIntent())
+                .isEqualTo(AiIntent.MONTHLY_REPORT);
+        assertThat(router.route("Gợi ý nhập thêm hàng dựa trên tồn kho thấp.", List.of()).getIntent())
+                .isEqualTo(AiIntent.REORDER_SUGGESTION);
     }
 }
