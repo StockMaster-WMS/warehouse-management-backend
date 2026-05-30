@@ -1,4 +1,4 @@
-package com.ai_service.service;
+package com.ai_service.service.session;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;

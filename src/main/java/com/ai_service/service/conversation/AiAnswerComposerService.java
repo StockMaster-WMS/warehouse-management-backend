@@ -1,6 +1,7 @@
-package com.ai_service.service;
+package com.ai_service.service.conversation;
 
 import com.ai_service.client.AiTextClient;
+import com.ai_service.context.AiQueryContext;
 import com.ai_service.intent.AiIntent;
 import com.ai_service.intent.AiIntentResult;
 import com.ai_service.tool.AiToolResult;
@@ -32,6 +33,12 @@ public class AiAnswerComposerService {
     // Tạo câu trả lời AI dạng đồng bộ từ route và tool result.
     public String compose(String userMessage, AiIntentResult route, AiToolResult toolResult,
             List<Map<String, String>> history) {
+        return compose(userMessage, route, toolResult, history,
+                AiQueryContext.from(userMessage, route, toolResult, estimateRows(toolResult)));
+    }
+
+    public String compose(String userMessage, AiIntentResult route, AiToolResult toolResult,
+            List<Map<String, String>> history, AiQueryContext context) {
         long start = System.currentTimeMillis();
         String deterministic = deterministicReply(route, toolResult);
         if (deterministic != null) {
@@ -44,7 +51,7 @@ public class AiAnswerComposerService {
         log.info("AI compose mode=selected-model start intent={} tool={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName());
-        String answer = aiTextClient.generateAnswer(buildAnswerPrompt(userMessage, route, toolResult, history));
+        String answer = aiTextClient.generateAnswer(buildAnswerPrompt(userMessage, route, toolResult, history, context));
         log.info("AI compose mode=selected-model done intent={} tool={} outputChars={} durationMs={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName(),
@@ -53,8 +60,15 @@ public class AiAnswerComposerService {
     }
 
     // Tạo câu trả lời AI dạng stream từ route và tool result.
-        public void composeStream(String userMessage, AiIntentResult route, AiToolResult toolResult,
+    public void composeStream(String userMessage, AiIntentResult route, AiToolResult toolResult,
             List<Map<String, String>> history, Consumer<String> fragmentConsumer, java.util.function.Supplier<Boolean> isCancelled) {
+        AiQueryContext context = AiQueryContext.from(userMessage, route, toolResult, estimateRows(toolResult));
+        composeStream(userMessage, route, toolResult, history, context, fragmentConsumer, isCancelled);
+    }
+
+    public void composeStream(String userMessage, AiIntentResult route, AiToolResult toolResult,
+            List<Map<String, String>> history, AiQueryContext context, Consumer<String> fragmentConsumer,
+            java.util.function.Supplier<Boolean> isCancelled) {
         long start = System.currentTimeMillis();
         if (isCancelled != null && isCancelled.get()) {
             log.info("AI composeStream cancelled before compose intent={} tool={}",
@@ -82,7 +96,7 @@ public class AiAnswerComposerService {
         log.info("AI composeStream mode=selected-model start intent={} tool={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName());
-        aiTextClient.generateAnswerStream(buildAnswerPrompt(userMessage, route, toolResult, history), fragmentConsumer, isCancelled);
+        aiTextClient.generateAnswerStream(buildAnswerPrompt(userMessage, route, toolResult, history, context), fragmentConsumer, isCancelled);
         log.info("AI composeStream mode=selected-model done intent={} tool={} cancelled={} durationMs={}",
                 route == null ? "null" : route.getIntent(),
                 toolResult == null ? "null" : toolResult.toolName(),
@@ -142,6 +156,7 @@ public class AiAnswerComposerService {
                 case INBOUND_PENDING_PUTAWAY -> "Hiện chưa có phiếu nhập hoặc task nào đang chờ putaway.";
                 case OUTBOUND_DELAYED -> "Hiện chưa có đơn xuất nào đang trễ hoặc có nguy cơ trễ theo dữ liệu hiện tại.";
                 case STOCK_FASTEST_DECREASE -> "Hiện chưa có biến động giảm tồn kho trong 7 ngày qua.";
+                case PRODUCT_WITHOUT_LOCATION -> "Hiện chưa ghi nhận sản phẩm nào chưa được gán vị trí.";
                 case PICK_LOCATION_USAGE -> "Hiện chưa có dữ liệu vị trí lấy hàng phù hợp.";
                 case OUTBOUND_DELAY_REASON -> "Hiện chưa ghi nhận lý do xuất chậm trong audit log.";
                 case CYCLE_COUNT_RECOUNT_SKUS -> "Hiện chưa có SKU cần kiểm kê lại theo dữ liệu sai lệch.";
@@ -273,6 +288,7 @@ public class AiAnswerComposerService {
                 case INBOUND_PENDING_PUTAWAY -> inboundPendingPutawayReply(list);
                 case OUTBOUND_DELAYED -> outboundDelayedReply(list);
                 case STOCK_FASTEST_DECREASE -> stockFastestDecreaseReply(list);
+                case PRODUCT_WITHOUT_LOCATION -> productsWithoutLocationReply(list);
                 case PICK_LOCATION_USAGE -> pickLocationUsageReply(list);
                 case OUTBOUND_DELAY_REASON -> outboundDelayReasonReply(list);
                 case CYCLE_COUNT_RECOUNT_SKUS -> cycleCountRecountSkusReply(list);
@@ -595,6 +611,7 @@ public class AiAnswerComposerService {
         return "Phiếu nhập gần nhất là " + value(first, "receipt_number") + " ngày "
                 + value(first, "received_date") + ", thuộc PO " + value(first, "po_number")
                 + ", nhà cung cấp " + value(first, "supplier_name")
+                + ", người xử lý/nhận hàng " + value(first, "received_by")
                 + ". Dòng hàng gần nhất: " + joinRows(limit(list, 5), row -> value(row, "product_name")
                 + " số lượng " + value(row, "received_qty"));
     }
@@ -1084,6 +1101,14 @@ public class AiAnswerComposerService {
                 + ", giảm " + value(first, "decreased_qty") + " đơn vị. Top: "
                 + joinRows(limit(list, 5), row -> value(row, "sku") + " giảm "
                 + value(row, "decreased_qty"));
+    }
+
+    private String productsWithoutLocationReply(List<?> list) {
+        return "Có " + list.size() + " sản phẩm cần kiểm tra vị trí: " + joinRows(limit(list, 8), row ->
+                value(row, "sku") + " - " + value(row, "product_name")
+                        + " (" + value(row, "reason") + ", tồn "
+                        + formatNumber(longValue(row, "qty_on_hand")) + ", chờ putaway "
+                        + formatNumber(longValue(row, "pending_putaway_qty")) + ")");
     }
 
     private String pickLocationUsageReply(List<?> list) {
@@ -1603,7 +1628,7 @@ public class AiAnswerComposerService {
 
     // Tạo prompt để model viết câu trả lời từ JSON của tool.
     private String buildAnswerPrompt(String userMessage, AiIntentResult route, AiToolResult toolResult,
-            List<Map<String, String>> history) {
+            List<Map<String, String>> history, AiQueryContext context) {
         return """
                 <|im_start|>system
                 Bạn là trợ lý AI vận hành kho StockMaster-WMS.
@@ -1623,6 +1648,9 @@ public class AiAnswerComposerService {
                 Intent: %s
                 Parameters JSON: %s
                 Tool: %s
+                Data sources JSON: %s
+                Missing params JSON: %s
+                Row count: %s
                 Tool result JSON: %s
                 <|im_end|>
                 <|im_start|>assistant
@@ -1632,8 +1660,24 @@ public class AiAnswerComposerService {
                 route == null ? "UNSUPPORTED" : route.getIntent(),
                 toJson(route == null ? Map.of() : route.safeParameters()),
                 toolResult == null ? "none" : toolResult.toolName(),
+                toJson(context == null ? List.of() : context.dataSources()),
+                toJson(context == null ? List.of() : context.missingParams()),
+                context == null ? 0 : context.rowCount(),
                 toJson(compactToolResultData(toolResult == null ? null : toolResult.data()))
         );
+    }
+
+    private int estimateRows(AiToolResult result) {
+        if (result == null || result.data() == null) {
+            return 0;
+        }
+        if (result.data() instanceof List<?> list) {
+            return list.size();
+        }
+        if (result.data() instanceof Map<?, ?> map) {
+            return map.size();
+        }
+        return 1;
     }
 
     // Chuyển object sang JSON để đưa vào prompt.

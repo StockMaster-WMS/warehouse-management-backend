@@ -1,6 +1,6 @@
 package com.ai_service.client;
 
-import com.ai_service.service.AiProviderConfigService;
+import com.ai_service.service.provider.AiProviderConfigService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

@@ -2,7 +2,7 @@ package com.ai_service.controller;
 
 import com.ai_service.dto.AiProviderKeyStatusResponse;
 import com.ai_service.dto.UpdateAiProviderKeyRequest;
-import com.ai_service.service.AiProviderConfigService;
+import com.ai_service.service.provider.AiProviderConfigService;
 import com.common.api.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

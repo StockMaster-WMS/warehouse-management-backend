@@ -1,6 +1,7 @@
-package com.ai_service.service;
+package com.ai_service.service.tool;
 
 import com.ai_service.intent.AiIntent;
+import com.ai_service.intent.AiIntentCatalog;
 import com.ai_service.intent.AiIntentResult;
 import com.ai_service.tool.AiToolResult;
 import lombok.RequiredArgsConstructor;
@@ -45,7 +46,7 @@ public class AiToolExecutorService {
                     "Bạn không có quyền truy xuất dữ liệu này qua AI.");
         }
 
-        return switch (intent) {
+        AiToolResult result = switch (intent) {
             case WAREHOUSE_COUNT -> AiToolResult.data("WarehouseTool.countWarehouses", countWarehouses());
             case WAREHOUSE_LIST -> AiToolResult.data("WarehouseTool.listWarehouses", listWarehouses());
             case WAREHOUSE_DETAIL -> AiToolResult.data("WarehouseTool.getWarehouseDetail", getWarehouseDetail(params));
@@ -96,6 +97,8 @@ public class AiToolExecutorService {
                 AiToolResult.data("StockTool.getInactiveProductWithStock", getInactiveProductWithStock());
             case STOCK_FASTEST_DECREASE ->
                 AiToolResult.data("StockTool.getFastestDecrease", getStockFastestDecrease(params));
+            case PRODUCT_WITHOUT_LOCATION ->
+                AiToolResult.data("StockTool.getProductsWithoutLocation", getProductsWithoutLocation(params));
             case STOCK_MOVEMENT_HISTORY ->
                 AiToolResult.data("StockTool.getMovementHistory", getStockMovementHistory(params));
             case STOCK_TRANSFER -> AiToolResult.message("StockTool.transferGuide", getStockTransferGuide(params));
@@ -211,6 +214,8 @@ public class AiToolExecutorService {
             default -> AiToolResult.message("UnsupportedIntent",
                     "Intent này đã được khai báo nhưng backend chưa có tool xử lý dữ liệu tương ứng.");
         };
+        var definition = AiIntentCatalog.get(intent);
+        return result.withMetadata(definition.dataSources(), definition.missingParams(params));
     }
 
     // Ước lượng số dòng dữ liệu trả về để ghi audit.
@@ -1315,6 +1320,50 @@ public class AiToolExecutorService {
         return result;
     }
 
+    private List<Map<String, Object>> getProductsWithoutLocation(Map<String, Object> params) {
+        String warehouseCode = firstText(params, "warehouseCode", "warehouse");
+        List<Object> args = new ArrayList<>();
+        String warehouseFilter = "";
+        if (StringUtils.hasText(warehouseCode)) {
+            warehouseFilter = " AND LOWER(w.code) LIKE ? ";
+            args.add(like(warehouseCode));
+        }
+        return jdbcTemplate.queryForList((""" 
+                WITH stocked AS (
+                    SELECT p.id, p.sku, p.name AS product_name,
+                           COALESCE(SUM(sl.qty_on_hand), 0) AS qty_on_hand,
+                           COUNT(sl.id) FILTER (WHERE sl.location_id IS NOT NULL) AS assigned_locations
+                    FROM products p
+                    LEFT JOIN stock_levels sl ON sl.product_id = p.id
+                    LEFT JOIN warehouses w ON w.id = sl.warehouse_id
+                    WHERE COALESCE(p.status, 'ACTIVE') = 'ACTIVE'
+                    %s
+                    GROUP BY p.id, p.sku, p.name
+                ),
+                pending_putaway AS (
+                    SELECT pt.product_id,
+                           COALESCE(SUM(pt.qty_to_putaway), 0) AS pending_qty
+                    FROM putaway_tasks pt
+                    WHERE pt.status IN ('PENDING', 'IN_PROGRESS', 'ASSIGNED')
+                      AND pt.actual_location_id IS NULL
+                    GROUP BY pt.product_id
+                )
+                SELECT s.sku, s.product_name, s.qty_on_hand, s.assigned_locations,
+                       COALESCE(pp.pending_qty, 0) AS pending_putaway_qty,
+                       CASE
+                         WHEN s.qty_on_hand = 0 THEN 'NO_STOCK_LOCATION'
+                         WHEN s.assigned_locations = 0 THEN 'STOCK_WITHOUT_LOCATION'
+                         WHEN COALESCE(pp.pending_qty, 0) > 0 THEN 'PENDING_PUTAWAY_WITHOUT_LOCATION'
+                         ELSE 'OK'
+                       END AS reason
+                FROM stocked s
+                LEFT JOIN pending_putaway pp ON pp.product_id = s.id
+                WHERE s.assigned_locations = 0 OR COALESCE(pp.pending_qty, 0) > 0
+                ORDER BY pending_putaway_qty DESC, qty_on_hand DESC, product_name ASC
+                LIMIT 50
+                """.formatted(warehouseFilter)), args.toArray());
+    }
+
     // Lấy các task putaway đang chờ xử lý hoặc một task cụ thể theo mã.
     private List<Map<String, Object>> getPendingPutaway(Map<String, Object> params) {
         String taskCode = firstText(params, "putawayTaskCode", "taskCode", "code");
@@ -1376,6 +1425,7 @@ public class AiToolExecutorService {
                     s.code AS supplier_code,
                     s.name AS supplier_name,
                     w.code AS warehouse_code,
+                    COALESCE(receiver.full_name, receiver.username) AS received_by,
                     COALESCE(p.sku, iri.product_sku) AS sku,
                     COALESCE(p.name, iri.product_sku) AS product_name,
                     iri.received_qty
@@ -1383,6 +1433,7 @@ public class AiToolExecutorService {
                 JOIN purchase_orders po ON po.id = ir.po_id
                 LEFT JOIN suppliers s ON s.id = po.supplier_id
                 LEFT JOIN warehouses w ON w.id = ir.warehouse_id
+                LEFT JOIN users receiver ON receiver.id = ir.received_by
                 LEFT JOIN inbound_receipt_items iri ON iri.receipt_id = ir.id
                 LEFT JOIN products p ON p.id = iri.product_id
                 ORDER BY ir.received_date DESC, ir.created_at DESC, ir.receipt_number DESC

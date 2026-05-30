@@ -3,6 +3,7 @@ package com.ai_service.controller;
 import com.ai_service.dto.AiAskRequest;
 import com.ai_service.dto.AiAskResponse;
 import com.ai_service.service.AiService;
+import com.ai_service.service.session.AiCancelService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,7 +38,7 @@ public class AiController {
 
     private final AiService aiService;
     private final Executor aiTaskExecutor;
-    private final com.ai_service.service.AiCancelService aiCancelService;
+    private final AiCancelService aiCancelService;
     private final ObjectMapper objectMapper;
 
     // Xử lý câu hỏi AI dạng trả lời một lần.

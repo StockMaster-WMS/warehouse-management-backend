@@ -1,9 +1,16 @@
 package com.ai_service.service;
 
 import com.ai_service.client.AiModelSelectionContext;
+import com.ai_service.context.AiQueryContext;
 import com.ai_service.dto.AiAskRequest;
 import com.ai_service.dto.AiAskResponse;
 import com.ai_service.intent.AiIntentResult;
+import com.ai_service.service.conversation.AiAnswerComposerService;
+import com.ai_service.service.conversation.AiIntentRouterService;
+import com.ai_service.service.session.AiAuditService;
+import com.ai_service.service.session.AiCancelService;
+import com.ai_service.service.session.AiHistoryService;
+import com.ai_service.service.tool.AiToolExecutorService;
 import com.ai_service.tool.AiToolResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +32,7 @@ public class AiService {
     private final AiAnswerComposerService answerComposerService;
     private final AiHistoryService historyService;
     private final AiAuditService auditService;
+    private final AiCancelService cancelService;
     private final ObjectMapper objectMapper;
 
     // Xử lý câu hỏi AI dạng đồng bộ và trả về một response.
@@ -49,12 +57,14 @@ public class AiService {
             AiToolResult toolResult = toolExecutorService.execute(route);
             long composeStart = System.currentTimeMillis();
             rowsReturned = toolExecutorService.estimateRows(toolResult);
-            auditPayload = toAuditPayload(route, toolResult);
+            AiQueryContext queryContext = AiQueryContext.from(userMessage, route, toolResult, rowsReturned);
+            auditPayload = toAuditPayload(queryContext);
 
-            log.info("AI intent={}, tool={}, rows={}",
-                    route.getIntent(), toolResult.toolName(), rowsReturned);
+            log.info("AI intent={} tool={} sources={} missingParams={} rows={}",
+                    route.getIntent(), toolResult.toolName(), queryContext.dataSources(),
+                    queryContext.missingParams(), rowsReturned);
 
-            finalReply = answerComposerService.compose(userMessage, route, toolResult, history);
+            finalReply = answerComposerService.compose(userMessage, route, toolResult, history, queryContext);
             log.info("AI timings sync session={} intent={} routeMs={} toolMs={} composeMs={} totalMs={}",
                     sessionId, route.getIntent(), toolStart - routeStart, composeStart - toolStart,
                     System.currentTimeMillis() - composeStart, System.currentTimeMillis() - start);
@@ -78,9 +88,6 @@ public class AiService {
     public void askStream(AiAskRequest req, Consumer<String> fragmentConsumer) {
         String sessionId = req.getSessionId();
         String requestId = StringUtils.hasText(req.getRequestId()) ? req.getRequestId() : sessionId;
-        // register session for cancellation
-        // lazy-get AiCancelService via context to avoid constructor change in many places
-        var cancelService = com.ai_service.util.ApplicationContextHolder.getBean(com.ai_service.service.AiCancelService.class);
         cancelService.startSession(requestId);
         String userMessage = getUserMessage(req);
         long start = System.currentTimeMillis();
@@ -118,12 +125,14 @@ public class AiService {
             }
             long composeStart = System.currentTimeMillis();
             rowsReturned = toolExecutorService.estimateRows(toolResult);
-            auditPayload = toAuditPayload(route, toolResult);
+            AiQueryContext queryContext = AiQueryContext.from(userMessage, route, toolResult, rowsReturned);
+            auditPayload = toAuditPayload(queryContext);
 
-            log.info("AI stream intent={}, tool={}, rows={}",
-                    route.getIntent(), toolResult.toolName(), rowsReturned);
+            log.info("AI stream intent={} tool={} sources={} missingParams={} rows={}",
+                    route.getIntent(), toolResult.toolName(), queryContext.dataSources(),
+                    queryContext.missingParams(), rowsReturned);
 
-            answerComposerService.composeStream(userMessage, route, toolResult, history, fragment -> {
+            answerComposerService.composeStream(userMessage, route, toolResult, history, queryContext, fragment -> {
                 if (cancelService.isCancelled(requestId)) {
                     return;
                 }
@@ -149,9 +158,7 @@ public class AiService {
             if (!cancelled && !finalReply.isEmpty()) {
                 historyService.addHistory(sessionId, userMessage, finalReply.toString());
             }
-            // clear cancel token
-            var cancelService2 = com.ai_service.util.ApplicationContextHolder.getBean(com.ai_service.service.AiCancelService.class);
-            cancelService2.clear(requestId);
+            cancelService.clear(requestId);
             AiModelSelectionContext.clear();
         }
     }
@@ -178,15 +185,18 @@ public class AiService {
     }
 
     // Tạo payload JSON để ghi audit route và tool đã dùng.
-    private String toAuditPayload(AiIntentResult route, AiToolResult toolResult) {
+    private String toAuditPayload(AiQueryContext context) {
         try {
             return objectMapper.writeValueAsString(Map.of(
-                    "intent", route == null ? "UNSUPPORTED" : route.getIntent().name(),
-                    "parameters", route == null ? Map.of() : route.safeParameters(),
-                    "tool", toolResult == null ? "none" : toolResult.toolName()
+                    "intent", context == null ? "UNSUPPORTED" : context.intent().name(),
+                    "parameters", context == null ? Map.of() : context.parameters(),
+                    "tool", context == null ? "none" : context.toolName(),
+                    "dataSources", context == null ? List.of() : context.dataSources(),
+                    "missingParams", context == null ? List.of() : context.missingParams(),
+                    "rows", context == null ? 0 : context.rowCount()
             ));
         } catch (Exception e) {
-            return route == null ? null : route.getIntent().name();
+            return context == null ? null : context.intent().name();
         }
     }
 }
