@@ -1,0 +1,75 @@
+package com.ai_service.service.conversation;
+
+import com.ai_service.context.AiQueryContext;
+import com.ai_service.dto.AiAskResponse.AiResponseMetadata;
+import com.ai_service.intent.AiIntent;
+import com.ai_service.intent.AiIntentResult;
+import com.ai_service.tool.AiToolResult;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class AiResponseEnrichmentServiceTest {
+
+    private final AiResponseEnrichmentService service = new AiResponseEnrichmentService();
+
+    @Test
+    void includesOperationalMetadataAndSuggestedQuestions() {
+        AiIntentResult route = AiIntentResult.of(
+                AiIntent.STOCK_BY_PRODUCT,
+                Map.of("sku", "AIRCON-DAIKIN"),
+                0.94,
+                "test");
+        AiToolResult toolResult = AiToolResult
+                .data("StockTool.getStockByProduct", List.of(Map.of("sku", "AIRCON-DAIKIN")))
+                .withMetadata(List.of("products", "stock_levels", "warehouses"), List.of());
+        AiQueryContext context = AiQueryContext.from("AIRCON còn bao nhiêu?", route, toolResult, 1);
+
+        AiResponseMetadata metadata = service.build(route, toolResult, context);
+
+        assertThat(metadata.intent()).isEqualTo("STOCK_BY_PRODUCT");
+        assertThat(metadata.confidence()).isEqualTo(0.94);
+        assertThat(metadata.toolName()).isEqualTo("StockTool.getStockByProduct");
+        assertThat(metadata.dataSources()).containsExactly("products", "stock_levels", "warehouses");
+        assertThat(metadata.rowsReturned()).isEqualTo(1);
+        assertThat(metadata.parameters()).containsEntry("sku", "AIRCON-DAIKIN");
+        assertThat(metadata.suggestedQuestions()).contains("Lịch sử biến động 7 ngày qua?");
+    }
+
+    @Test
+    void addsSafeDraftActionForStockTransferRequests() {
+        AiIntentResult route = AiIntentResult.of(
+                AiIntent.STOCK_TRANSFER,
+                Map.of("sku", "AIRCON-DAIKIN", "quantity", 20),
+                0.9,
+                "test");
+        AiToolResult toolResult = AiToolResult.message("StockTool.transferGuide", "guide");
+        AiQueryContext context = AiQueryContext.from("Chuyển 20 cái AIRCON", route, toolResult, 0);
+
+        AiResponseMetadata metadata = service.build(route, toolResult, context);
+
+        assertThat(metadata.actions()).hasSize(1);
+        assertThat(metadata.actions().get(0).type()).isEqualTo("CREATE_STOCK_TRANSFER_DRAFT");
+        assertThat(metadata.actions().get(0).requiresConfirmation()).isTrue();
+        assertThat(metadata.actions().get(0).requiresAuthority()).isEqualTo("WAREHOUSE_MANAGER");
+    }
+
+    @Test
+    void removesSensitiveParametersFromMetadata() {
+        AiIntentResult route = AiIntentResult.of(
+                AiIntent.GENERAL_GUIDE,
+                Map.of("query", "hello", "password", "secret-value", "apiKey", "key"),
+                0.8,
+                "test");
+        AiToolResult toolResult = AiToolResult.message("GeneralGuide", "hello");
+        AiQueryContext context = AiQueryContext.from("hello", route, toolResult, 0);
+
+        AiResponseMetadata metadata = service.build(route, toolResult, context);
+
+        assertThat(metadata.parameters()).containsEntry("query", "hello");
+        assertThat(metadata.parameters()).doesNotContainKeys("password", "apiKey");
+    }
+}

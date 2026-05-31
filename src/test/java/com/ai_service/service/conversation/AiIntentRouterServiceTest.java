@@ -5,6 +5,8 @@ import com.ai_service.intent.AiIntent;
 import com.ai_service.intent.AiIntentResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.Map;
@@ -194,6 +196,19 @@ class AiIntentRouterServiceTest {
 
         assertThat(result.getIntent()).isEqualTo(AiIntent.STOCK_BY_PRODUCT);
         assertThat(result.safeParameters()).containsEntry("sku", "00018");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "có sản phẩm Xoài cát trong kho không",
+            "có sản phẩm Bàn phím cơ trong kho không",
+            "có mặt hàng Sữa tươi ở kho không"
+    })
+    void routesNaturalProductAvailabilityQuestionToStockLookup(String question) {
+        AiIntentResult result = router.route(question, List.of());
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.STOCK_BY_PRODUCT);
+        assertThat(result.safeParameters()).containsEntry("query", question);
     }
 
     @Test

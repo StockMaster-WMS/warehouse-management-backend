@@ -21,6 +21,7 @@ public class AiAuditService {
                     id BIGSERIAL PRIMARY KEY,
                     session_id VARCHAR(100),
                     question TEXT,
+                    route_payload TEXT,
                     generated_sql TEXT,
                     rows_returned INTEGER,
                     execution_error TEXT,
@@ -31,17 +32,18 @@ public class AiAuditService {
         jdbcTemplate.execute("ALTER TABLE ai_audit_logs ADD COLUMN IF NOT EXISTS execution_error TEXT");
         jdbcTemplate.execute("ALTER TABLE ai_audit_logs ADD COLUMN IF NOT EXISTS rows_returned INTEGER");
         jdbcTemplate.execute("ALTER TABLE ai_audit_logs ADD COLUMN IF NOT EXISTS latency_ms BIGINT");
+        jdbcTemplate.execute("ALTER TABLE ai_audit_logs ADD COLUMN IF NOT EXISTS route_payload TEXT");
     }
 
     // Ghi log cho mỗi lượt hỏi AI.
-    public void log(String sessionId, String question, String sql, int rowsReturned, String error, long latencyMs) {
+    public void log(String sessionId, String question, String routePayload, int rowsReturned, String error, long latencyMs) {
         try {
             jdbcTemplate.update("""
                     INSERT INTO ai_audit_logs
-                        (session_id, question, generated_sql, rows_returned, execution_error, latency_ms)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                        (session_id, question, route_payload, generated_sql, rows_returned, execution_error, latency_ms)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
-                    sessionId, question, sql, rowsReturned, error, latencyMs);
+                    sessionId, question, routePayload, routePayload, rowsReturned, error, latencyMs);
         } catch (Exception e) {
             log.warn("Failed to write AI audit log: {}", e.getMessage());
         }

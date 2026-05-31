@@ -2864,7 +2864,7 @@ public class AiToolExecutorService {
         String dateRange = firstText(params, "dateRange");
         List<Object> args = new ArrayList<>();
         StringBuilder sql = new StringBuilder("""
-                SELECT session_id, question, generated_sql, rows_returned,
+                SELECT session_id, question, COALESCE(route_payload, generated_sql) AS route_payload, rows_returned,
                        execution_error, latency_ms, created_at
                 FROM ai_audit_logs
                 WHERE 1 = 1
@@ -3748,7 +3748,7 @@ public class AiToolExecutorService {
         if (value == null) {
             return "";
         }
-        return value.replaceAll("(?i)tồn kho|ton kho|còn bao nhiêu|con bao nhieu|ở kho|o kho|sku|sản phẩm|san pham", "")
+        return value.replaceAll("(?i)tồn kho|ton kho|còn bao nhiêu|con bao nhieu|còn hàng|con hang|còn không|con khong|có sản phẩm|co san pham|có mặt hàng|co mat hang|có hàng|co hang|trong kho|ở kho|o kho|tại kho|tai kho|kho không|kho khong|hàng không|hang khong|không|khong|sku|sản phẩm|san pham", "")
                 .trim();
     }
 
@@ -3928,8 +3928,7 @@ public class AiToolExecutorService {
             return true;
         }
         String normalized = normalize(firstText(params, "query"));
-        return normalized.contains(" o kho ") || normalized.contains(" tai kho ") || normalized.contains(" trong kho ")
-                || normalized.contains(" kho wh-") || normalized.contains("kho hcm") || normalized.contains("kho hn")
+        return normalized.contains(" kho wh-") || normalized.contains("kho hcm") || normalized.contains("kho hn")
                 || normalized.contains("kho ha noi") || normalized.contains("kho da nang")
                 || normalized.contains("tp hcm") || normalized.contains("wh-hcm") || normalized.contains("wh-hn");
     }

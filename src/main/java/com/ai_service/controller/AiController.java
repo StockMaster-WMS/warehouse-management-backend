@@ -2,6 +2,7 @@ package com.ai_service.controller;
 
 import com.ai_service.dto.AiAskRequest;
 import com.ai_service.dto.AiAskResponse;
+import com.ai_service.dto.AiAskResponse.AiResponseMetadata;
 import com.ai_service.service.AiService;
 import com.ai_service.service.session.AiCancelService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,7 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RequiredArgsConstructor
 @Slf4j
 @Tag(name = "AI Service", description = "Các API chat với trợ lý AI StockMaster")
-@PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'REPORT_VIEWER')")
+@PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
 public class AiController {
 
     private final AiService aiService;
@@ -90,17 +91,8 @@ public class AiController {
             SecurityContextHolder.setContext(securityContext);
             try {
                 sendModelSelection(emitter, request, clientDisconnected);
-                aiService.askStream(request, fragment -> {
-                    if (clientDisconnected.get()) {
-                        return;
-                    }
-                    try {
-                        emitter.send(fragment);
-                    } catch (IOException e) {
-                        clientDisconnected.set(true);
-                        log.debug("SSE client disconnected: {}", e.getMessage());
-                    }
-                });
+                aiService.askStream(request, fragment -> sendMessageFragment(emitter, fragment, clientDisconnected),
+                        metadata -> sendMetadata(emitter, metadata, clientDisconnected));
                 if (!clientDisconnected.get()) {
                     emitter.complete();
                 }
@@ -139,6 +131,32 @@ public class AiController {
         } catch (Exception e) {
             clientDisconnected.set(true);
             log.debug("Cannot send AI model selection event: {}", e.getMessage());
+        }
+    }
+
+    private void sendMetadata(SseEmitter emitter, AiResponseMetadata metadata, AtomicBoolean clientDisconnected) {
+        if (clientDisconnected.get() || metadata == null) {
+            return;
+        }
+        try {
+            emitter.send(SseEmitter.event()
+                    .name("metadata")
+                    .data(objectMapper.writeValueAsString(metadata)));
+        } catch (Exception e) {
+            clientDisconnected.set(true);
+            log.debug("Cannot send AI metadata event: {}", e.getMessage());
+        }
+    }
+
+    private void sendMessageFragment(SseEmitter emitter, String fragment, AtomicBoolean clientDisconnected) {
+        if (clientDisconnected.get()) {
+            return;
+        }
+        try {
+            emitter.send(fragment);
+        } catch (IOException e) {
+            clientDisconnected.set(true);
+            log.debug("SSE client disconnected: {}", e.getMessage());
         }
     }
 
