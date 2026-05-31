@@ -138,6 +138,19 @@ class AiIntentRouterServiceTest {
     }
 
     @Test
+    void doesNotReusePreviousWarehouseForNamedProductAvailabilityQuestion() {
+        List<Map<String, String>> history = List.of(
+                Map.of("role", "user", "content", "Tồn kho ở WH-HN hôm nay thế nào?"),
+                Map.of("role", "assistant", "content", "Kho WH-HN còn 100 đơn vị.")
+        );
+
+        AiIntentResult result = router.route("Banh quy bo còn hàng không?", history);
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.STOCK_BY_PRODUCT);
+        assertThat(result.safeParameters()).doesNotContainKey("warehouseCode");
+    }
+
+    @Test
     void removesStaleModelSkuWhenQuestionDoesNotReferenceHistory() {
         AiTextClient staleModel = new AiTextClient() {
             @Override

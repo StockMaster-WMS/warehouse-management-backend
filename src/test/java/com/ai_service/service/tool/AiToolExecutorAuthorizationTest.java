@@ -17,7 +17,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class AiToolExecutorAuthorizationTest {
 
@@ -72,6 +74,40 @@ class AiToolExecutorAuthorizationTest {
         String keyword = (String) method.invoke(service, question);
 
         assertThat(keyword).isEqualTo(expectedKeyword);
+    }
+
+    @Test
+    void resolvesProductNameAccentInsensitivelyWithoutWeakSubstringMatch() throws Exception {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        AiToolExecutorService service = new AiToolExecutorService(jdbcTemplate);
+        when(jdbcTemplate.queryForList(contains("FROM products")))
+                .thenReturn(List.of(
+                        Map.of("sku", "SP-260416011544171-5C6C", "name", "Cá Thu Nhật"),
+                        Map.of("sku", "SP-BANH-QUY-BO", "name", "Bánh quy bơ")
+                ));
+        Method method = AiToolExecutorService.class.getDeclaredMethod("resolveProductSku", String.class);
+        method.setAccessible(true);
+
+        String cookieSku = (String) method.invoke(service, "Banh quy bo có trong kho không?");
+        String wrongSku = (String) method.invoke(service,
+                "Xinh Ủng bảo hộ cao su đóng gói thương mại có trong kho không");
+
+        assertThat(cookieSku).isEqualTo("SP-BANH-QUY-BO");
+        assertThat(wrongSku).isNull();
+    }
+
+    @Test
+    void treatsGenericAvailabilityQuestionAsAllWarehouses() throws Exception {
+        Method method = AiToolExecutorService.class.getDeclaredMethod("hasWarehouseHint", Map.class);
+        method.setAccessible(true);
+
+        boolean generic = (boolean) method.invoke(service,
+                Map.of("query", "Banh quy bo có trong kho không"));
+        boolean hcm = (boolean) method.invoke(service,
+                Map.of("query", "Banh quy bo có trong kho Hồ Chí Minh không"));
+
+        assertThat(generic).isFalse();
+        assertThat(hcm).isTrue();
     }
 
     private static void authenticateAs(String authority) {

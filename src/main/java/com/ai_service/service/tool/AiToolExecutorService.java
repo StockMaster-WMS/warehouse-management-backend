@@ -860,7 +860,11 @@ public class AiToolExecutorService {
         }
 
         List<Map<String, Object>> rows = getStockByProduct(resolvedParams);
-        if (rows.isEmpty() && StringUtils.hasText(text(resolvedParams.get("sku")))) {
+        if (warehouse != null) {
+            rows = markRequestedWarehouse(rows, warehouse);
+        }
+        if (StringUtils.hasText(text(resolvedParams.get("sku")))
+                && (rows.isEmpty() || (warehouse != null && sumRows(rows, "qty_on_hand") <= 0))) {
             rows = getProductStockFallback(resolvedParams);
         }
         if (rows.isEmpty() && warehouse != null) {
@@ -890,7 +894,9 @@ public class AiToolExecutorService {
                     sl.qty_on_hand,
                     sl.qty_reserved,
                     sl.qty_available,
-                    sl.updated_at
+                    sl.updated_at,
+                    NULL AS requested_warehouse_code,
+                    NULL AS requested_warehouse_name
                 FROM stock_levels sl
                 LEFT JOIN products p ON p.id = sl.product_id
                 JOIN warehouses w ON w.id = sl.warehouse_id
@@ -934,23 +940,67 @@ public class AiToolExecutorService {
         }
         if (StringUtils.hasText(warehouse)) {
             return jdbcTemplate.queryForList("""
+                    WITH product_match AS (
+                        SELECT id, sku, name
+                        FROM products
+                        WHERE LOWER(sku) = LOWER(?) OR LOWER(sku) LIKE LOWER(?) OR LOWER(sku) LIKE LOWER(?)
+                        ORDER BY name ASC
+                        LIMIT 1
+                    ),
+                    target_warehouse AS (
+                        SELECT id, code, name
+                        FROM warehouses
+                        WHERE LOWER(code) = LOWER(?)
+                        LIMIT 1
+                    ),
+                    stock_rows AS (
+                        SELECT
+                            p.sku,
+                            p.name AS product_name,
+                            w.code AS warehouse_code,
+                            w.name AS warehouse_name,
+                            NULL::text AS location_code,
+                            NULL::text AS lot_number,
+                            NULL::date AS expiry_date,
+                            COALESCE(SUM(sl.qty_on_hand), 0) AS qty_on_hand,
+                            COALESCE(SUM(sl.qty_reserved), 0) AS qty_reserved,
+                            COALESCE(SUM(sl.qty_available), 0) AS qty_available,
+                            MAX(sl.updated_at) AS updated_at
+                        FROM product_match p
+                        JOIN target_warehouse w ON TRUE
+                        LEFT JOIN stock_levels sl ON sl.product_id = p.id AND sl.warehouse_id = w.id
+                        GROUP BY p.id, p.sku, p.name, w.id, w.code, w.name
+                        UNION ALL
+                        SELECT
+                            p.sku,
+                            p.name AS product_name,
+                            w.code AS warehouse_code,
+                            w.name AS warehouse_name,
+                            NULL::text AS location_code,
+                            NULL::text AS lot_number,
+                            NULL::date AS expiry_date,
+                            COALESCE(SUM(sl.qty_on_hand), 0) AS qty_on_hand,
+                            COALESCE(SUM(sl.qty_reserved), 0) AS qty_reserved,
+                            COALESCE(SUM(sl.qty_available), 0) AS qty_available,
+                            MAX(sl.updated_at) AS updated_at
+                        FROM product_match p
+                        JOIN stock_levels sl ON sl.product_id = p.id
+                        JOIN warehouses w ON w.id = sl.warehouse_id
+                        WHERE LOWER(w.code) <> LOWER(?)
+                        GROUP BY p.id, p.sku, p.name, w.id, w.code, w.name
+                        HAVING COALESCE(SUM(sl.qty_on_hand), 0) > 0
+                    )
                     SELECT
-                        p.sku,
-                        p.name AS product_name,
-                        w.code AS warehouse_code,
-                        w.name AS warehouse_name,
-                        NULL AS location_code,
-                        NULL AS lot_number,
-                        NULL AS expiry_date,
-                        0 AS qty_on_hand,
-                        0 AS qty_reserved,
-                        0 AS qty_available,
-                        NULL AS updated_at
-                    FROM products p
-                    JOIN warehouses w ON LOWER(w.code) = LOWER(?)
-                    WHERE LOWER(p.sku) = LOWER(?) OR LOWER(p.sku) LIKE LOWER(?) OR LOWER(p.sku) LIKE LOWER(?)
-                    LIMIT 1
-                    """, warehouse, sku, sku + "%", "%" + sku);
+                        stock_rows.*,
+                        ? AS requested_warehouse_code,
+                        ? AS requested_warehouse_name
+                    FROM stock_rows
+                    ORDER BY CASE WHEN LOWER(warehouse_code) = LOWER(?) THEN 0 ELSE 1 END,
+                             qty_on_hand DESC,
+                             warehouse_code ASC
+                    LIMIT 20
+                    """, sku, sku + "%", "%" + sku, warehouse, warehouse,
+                    warehouse, firstText(params, "warehouse"), warehouse);
         }
         return jdbcTemplate.queryForList("""
                 SELECT
@@ -964,7 +1014,9 @@ public class AiToolExecutorService {
                     COALESCE(SUM(sl.qty_on_hand), 0) AS qty_on_hand,
                     COALESCE(SUM(sl.qty_reserved), 0) AS qty_reserved,
                     COALESCE(SUM(sl.qty_available), 0) AS qty_available,
-                    MAX(sl.updated_at) AS updated_at
+                    MAX(sl.updated_at) AS updated_at,
+                    NULL AS requested_warehouse_code,
+                    NULL AS requested_warehouse_name
                 FROM products p
                 LEFT JOIN stock_levels sl ON sl.product_id = p.id
                 WHERE LOWER(p.sku) = LOWER(?) OR LOWER(p.sku) LIKE LOWER(?) OR LOWER(p.sku) LIKE LOWER(?)
@@ -3794,6 +3846,8 @@ public class AiToolExecutorService {
             return null;
         }
         String normalizedQuery = normalize(query);
+        String normalizedKeyword = normalize(cleanProductKeyword(query));
+        String scoringText = StringUtils.hasText(normalizedKeyword) ? normalizedKeyword : normalizedQuery;
         String directSku = resolveProductSkuByKeyword(normalizedQuery);
         if (StringUtils.hasText(directSku)) {
             return directSku;
@@ -3811,14 +3865,14 @@ public class AiToolExecutorService {
         for (Map<String, Object> product : products) {
             String sku = text(product.get("sku"));
             String name = text(product.get("name"));
-            int score = scoreCandidate(normalizedQuery, sku, name);
+            int score = scoreCandidate(scoringText, sku, name);
             if (score > bestScore) {
                 bestScore = score;
                 bestSku = sku;
             }
         }
         int threshold = normalizedQuery.contains("iphone") || normalizedQuery.contains("dell")
-                || normalizedQuery.contains("laptop") ? 1 : 2;
+                || normalizedQuery.contains("laptop") ? 1 : productMatchThreshold(scoringText);
         return bestScore >= threshold ? bestSku : null;
     }
 
@@ -3898,7 +3952,7 @@ public class AiToolExecutorService {
         String code = null;
         if (normalizedSearch.contains("wh-hcm") || normalizedSearch.contains("kho hcm")
                 || normalizedSearch.contains("tp hcm") || normalizedSearch.contains("tphcm")
-                || normalizedSearch.contains("tp.hcm")) {
+                || normalizedSearch.contains("tp.hcm") || normalizedSearch.contains("ho chi minh")) {
             code = "WH-HCM";
         } else if (normalizedSearch.contains("wh-hn") || normalizedSearch.contains("kho hn")
                 || normalizedSearch.contains("ha noi") || normalizedSearch.contains("hanoi")) {
@@ -3931,7 +3985,8 @@ public class AiToolExecutorService {
         String normalized = normalize(firstText(params, "query"));
         return normalized.contains(" kho wh-") || normalized.contains("kho hcm") || normalized.contains("kho hn")
                 || normalized.contains("kho ha noi") || normalized.contains("kho da nang")
-                || normalized.contains("tp hcm") || normalized.contains("wh-hcm") || normalized.contains("wh-hn");
+                || normalized.contains("tp hcm") || normalized.contains("ho chi minh")
+                || normalized.contains("wh-hcm") || normalized.contains("wh-hn");
     }
 
     private boolean asksByWarehouse(String query) {
@@ -3955,6 +4010,7 @@ public class AiToolExecutorService {
     // Chấm điểm candidate theo token xuất hiện trong câu hỏi.
     private int scoreCandidate(String normalizedQuery, String... values) {
         int score = 0;
+        List<String> queryTokens = meaningfulTokens(normalizedQuery);
         for (String value : values) {
             if (!StringUtils.hasText(value)) {
                 continue;
@@ -3966,16 +4022,46 @@ public class AiToolExecutorService {
             if (!numbersCompatible(normalizedQuery, normalizedValue)) {
                 continue;
             }
-            if (normalizedQuery.contains(normalizedValue)) {
+            if (containsNormalizedPhrase(normalizedQuery, normalizedValue)) {
                 score += 5;
             }
             for (String token : normalizedValue.split("[^a-z0-9]+")) {
-                if (isMeaningfulToken(token) && normalizedQuery.contains(token)) {
+                if (isMeaningfulToken(token) && queryTokens.contains(token)) {
                     score++;
                 }
             }
         }
         return score;
+    }
+
+    private boolean containsNormalizedPhrase(String text, String phrase) {
+        if (!StringUtils.hasText(text) || !StringUtils.hasText(phrase)) {
+            return false;
+        }
+        return Pattern.compile("(^|[^a-z0-9])" + Pattern.quote(phrase) + "([^a-z0-9]|$)")
+                .matcher(text)
+                .find();
+    }
+
+    private int productMatchThreshold(String normalizedKeyword) {
+        int tokenCount = meaningfulTokens(normalizedKeyword).size();
+        if (tokenCount <= 2) {
+            return 2;
+        }
+        return Math.max(3, Math.min(5, (int) Math.ceil(tokenCount * 0.6)));
+    }
+
+    private List<String> meaningfulTokens(String normalizedText) {
+        if (!StringUtils.hasText(normalizedText)) {
+            return List.of();
+        }
+        return Pattern.compile("[a-z0-9]+")
+                .matcher(normalizedText)
+                .results()
+                .map(MatchResult::group)
+                .filter(this::isMeaningfulToken)
+                .distinct()
+                .toList();
     }
 
     // Tránh match nhầm model sản phẩm khác đời, ví dụ hỏi iPhone 16 nhưng chỉ có
@@ -4022,6 +4108,45 @@ public class AiToolExecutorService {
                 .replaceAll("\\bbn\\b", "bao nhieu")
                 .replaceAll("\\bko\\b", "khong")
                 .replaceAll("\\bk\\b", "khong");
+    }
+
+    private List<Map<String, Object>> markRequestedWarehouse(List<Map<String, Object>> rows, ResolvedWarehouse warehouse) {
+        if (rows == null || rows.isEmpty() || warehouse == null) {
+            return rows == null ? List.of() : rows;
+        }
+        List<Map<String, Object>> marked = new ArrayList<>(rows.size());
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> copy = new LinkedHashMap<>(row);
+            copy.put("requested_warehouse_code", warehouse.code());
+            copy.put("requested_warehouse_name", warehouse.name());
+            marked.add(copy);
+        }
+        return marked;
+    }
+
+    private long sumRows(List<Map<String, Object>> rows, String key) {
+        if (rows == null || rows.isEmpty()) {
+            return 0;
+        }
+        long sum = 0;
+        for (Map<String, Object> row : rows) {
+            sum += longValue(row == null ? null : row.get(key));
+        }
+        return sum;
+    }
+
+    private long longValue(Object value) {
+        if (value instanceof Number number) {
+            return Math.round(number.doubleValue());
+        }
+        if (value == null) {
+            return 0;
+        }
+        try {
+            return new java.math.BigDecimal(String.valueOf(value).replace(",", "")).longValue();
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     private record ResolvedWarehouse(String code, String name, boolean active) {

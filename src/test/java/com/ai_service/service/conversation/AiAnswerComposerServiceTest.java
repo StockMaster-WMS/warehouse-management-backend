@@ -110,4 +110,66 @@ class AiAnswerComposerServiceTest {
 
         assertThat(reply).startsWith("Không,");
     }
+
+    @Test
+    void answersGenericProductAvailabilityAcrossAllWarehouses() {
+        String reply = composer.compose(
+                "Banh quy bo có trong kho không",
+                AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, Map.of("query", "Banh quy bo có trong kho không"), 0.9, "test"),
+                AiToolResult.data("StockByProductTool", List.of(
+                        Map.of(
+                                "sku", "SP-BANH-QUY-BO",
+                                "product_name", "Bánh quy bơ",
+                                "warehouse_code", "WH-HN",
+                                "qty_on_hand", 4,
+                                "qty_reserved", 0,
+                                "qty_available", 4),
+                        Map.of(
+                                "sku", "SP-BANH-QUY-BO",
+                                "product_name", "Bánh quy bơ",
+                                "warehouse_code", "WH-HCM",
+                                "qty_on_hand", 6,
+                                "qty_reserved", 1,
+                                "qty_available", 5)
+                )),
+                List.of());
+
+        assertThat(reply).startsWith("Có,");
+        assertThat(reply).contains("**10** đơn vị");
+        assertThat(reply).contains("**WH-HN**");
+        assertThat(reply).contains("**WH-HCM**");
+    }
+
+    @Test
+    void answersSpecificWarehouseMissWithOtherWarehouseAvailability() {
+        String reply = composer.compose(
+                "Banh quy bo có trong kho Hà Nội không",
+                AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, Map.of(
+                        "query", "Banh quy bo có trong kho Hà Nội không",
+                        "warehouseCode", "WH-HN"), 0.9, "test"),
+                AiToolResult.data("StockByProductTool", List.of(
+                        Map.of(
+                                "sku", "SP-BANH-QUY-BO",
+                                "product_name", "Bánh quy bơ",
+                                "warehouse_code", "WH-HN",
+                                "requested_warehouse_code", "WH-HN",
+                                "qty_on_hand", 0,
+                                "qty_reserved", 0,
+                                "qty_available", 0),
+                        Map.of(
+                                "sku", "SP-BANH-QUY-BO",
+                                "product_name", "Bánh quy bơ",
+                                "warehouse_code", "WH-HCM",
+                                "requested_warehouse_code", "WH-HN",
+                                "qty_on_hand", 6,
+                                "qty_reserved", 0,
+                                "qty_available", 6)
+                )),
+                List.of());
+
+        assertThat(reply).startsWith("Không,");
+        assertThat(reply).contains("kho **WH-HN**");
+        assertThat(reply).contains("nhưng còn ở kho khác");
+        assertThat(reply).contains("**WH-HCM** (6 đơn vị)");
+    }
 }

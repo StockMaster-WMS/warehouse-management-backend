@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -1434,6 +1435,9 @@ public class AiIntentRouterService {
 
     private boolean shouldUseHistoryContext(String userMessage) {
         String normalized = normalize(userMessage);
+        if (hasExplicitAvailabilitySubject(normalized)) {
+            return false;
+        }
         if (containsAnyPhrase(normalized,
                 "kho do", "kho nay", "kho kia",
                 "san pham do", "san pham nay", "san pham kia",
@@ -1449,6 +1453,30 @@ public class AiIntentRouterService {
                 "o dau", "o kho nao", "tai kho nao",
                 "trang thai gi", "sao roi", "chi tiet hon")
                 && !looksGlobalInventoryQuestion(normalized);
+    }
+
+    private boolean hasExplicitAvailabilitySubject(String normalized) {
+        if (!looksNaturalProductAvailabilityQuestion(normalized)) {
+            return false;
+        }
+        if (containsAny(normalized, "iphone", "dell", "xps", "laptop")) {
+            return true;
+        }
+        String cleaned = normalized
+                .replaceAll("\\b(co|con|hang|khong|trong|kho|o|tai|ton|bao|nhieu|san|pham|mat|sku|nao)\\b", " ")
+                .replaceAll("[^a-z0-9]+", " ")
+                .trim();
+        if (cleaned.isEmpty()) {
+            return false;
+        }
+        long tokenCount = Pattern.compile("[a-z0-9]+")
+                .matcher(cleaned)
+                .results()
+                .map(MatchResult::group)
+                .filter(token -> token.length() >= 2)
+                .distinct()
+                .count();
+        return tokenCount >= 2;
     }
 
     private boolean looksGlobalInventoryQuestion(String normalized) {

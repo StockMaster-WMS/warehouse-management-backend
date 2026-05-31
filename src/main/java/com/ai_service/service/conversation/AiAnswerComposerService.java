@@ -420,11 +420,19 @@ public class AiAnswerComposerService {
         long totalReserved = sumLong(list, "qty_reserved");
         long totalAvailable = sumLong(list, "qty_available");
         Map<String, long[]> byWarehouse = stockByWarehouse(list);
+        String requestedWarehouseCandidate = firstNonBlank(list, "requested_warehouse_code");
+        if ("N/A".equals(requestedWarehouseCandidate)) {
+            requestedWarehouseCandidate = routeParam(route, "warehouseCode", "warehouse");
+        }
+        final String requestedWarehouse = requestedWarehouseCandidate;
+        boolean availabilityQuestion = containsAny(query, "co trong kho", "co o kho", "co tai kho", "trong kho khong",
+                "con hang", "con khong");
 
         if (containsAny(query, "o kho nao", "tai kho nao", "kho nao co", "nam o kho nao")
                 && !(query.contains("nhieu") && query.contains("nhat"))) {
             String warehouses = byWarehouse.keySet().stream()
                     .filter(code -> !"N/A".equals(code))
+                    .filter(code -> byWarehouse.get(code)[0] > 0)
                     .map(code -> "**" + code + "**")
                     .reduce((a, b) -> a + ", " + b)
                     .orElse("chưa xác định kho");
@@ -442,13 +450,34 @@ public class AiAnswerComposerService {
             return "Bạn có thể xuất tối đa **" + formatNumber(totalAvailable) + "** đơn vị cho " + productLabel + ".";
         }
 
-        if (containsAny(query, "co trong kho", "co o kho", "co tai kho", "trong kho khong",
-                "con hang", "con khong")) {
+        if (availabilityQuestion) {
+            if (requestedWarehouse != null) {
+                long requestedOnHand = warehouseQty(byWarehouse, requestedWarehouse, 0);
+                long requestedAvailable = warehouseQty(byWarehouse, requestedWarehouse, 2);
+                if (requestedOnHand > 0) {
+                    return "Có, " + productLabel + " hiện có ở kho **" + requestedWarehouse + "**.\n"
+                            + "- **Tồn hiện có:** **" + formatNumber(requestedOnHand) + "** đơn vị\n"
+                            + "- **Khả dụng:** **" + formatNumber(requestedAvailable) + "** đơn vị.";
+                }
+                String otherWarehouses = byWarehouse.entrySet().stream()
+                        .filter(entry -> !"N/A".equals(entry.getKey()))
+                        .filter(entry -> !entry.getKey().equalsIgnoreCase(requestedWarehouse))
+                        .filter(entry -> entry.getValue()[0] > 0)
+                        .map(entry -> "**" + entry.getKey() + "** (" + formatNumber(entry.getValue()[0]) + " đơn vị)")
+                        .reduce((a, b) -> a + ", " + b)
+                        .orElse(null);
+                if (otherWarehouses != null) {
+                    return "Không, " + productLabel + " hiện chưa có tồn ở kho **" + requestedWarehouse
+                            + "**, nhưng còn ở kho khác: " + otherWarehouses + ".";
+                }
+                return "Không, " + productLabel + " hiện chưa có tồn kho ở kho **" + requestedWarehouse + "**.";
+            }
             if (totalOnHand <= 0) {
-                return "Không, " + productLabel + " hiện chưa có tồn kho theo dữ liệu hiện tại.";
+                return "Không, " + productLabel + " hiện chưa có tồn kho ở bất kỳ kho nào theo dữ liệu hiện tại.";
             }
             String warehouses = byWarehouse.keySet().stream()
                     .filter(code -> !"N/A".equals(code))
+                    .filter(code -> byWarehouse.get(code)[0] > 0)
                     .map(code -> "**" + code + "**")
                     .reduce((a, b) -> a + ", " + b)
                     .orElse("chưa xác định kho");
@@ -1508,6 +1537,19 @@ public class AiAnswerComposerService {
                 .filter(code -> !"N/A".equals(code))
                 .toList();
         return codes.size() == 1 ? codes.get(0) : null;
+    }
+
+    private long warehouseQty(Map<String, long[]> byWarehouse, String warehouseCode, int index) {
+        if (warehouseCode == null) {
+            return 0;
+        }
+        for (Map.Entry<String, long[]> entry : byWarehouse.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(warehouseCode)) {
+                long[] values = entry.getValue();
+                return index >= 0 && index < values.length ? values[index] : 0;
+            }
+        }
+        return 0;
     }
 
     private long sumLong(List<?> rows, String key) {
