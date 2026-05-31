@@ -4,6 +4,7 @@ import com.ai_service.client.AiModelSelectionContext;
 import com.ai_service.context.AiQueryContext;
 import com.ai_service.dto.AiAskRequest;
 import com.ai_service.dto.AiAskResponse;
+import com.ai_service.dto.AiAskResponse.AiActionSuggestion;
 import com.ai_service.dto.AiAskResponse.AiResponseMetadata;
 import com.ai_service.intent.AiIntentResult;
 import com.ai_service.service.conversation.AiAnswerComposerService;
@@ -20,14 +21,20 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AiService {
+
+    private static final int MAX_BATCH_QUESTIONS = 20;
 
     private final AiIntentRouterService intentRouterService;
     private final AiToolExecutorService toolExecutorService;
@@ -54,6 +61,16 @@ public class AiService {
             log.info("AI ask start session={} provider={} model={} question='{}'",
                     sessionId, req.getProvider(), req.getModel(), preview(userMessage));
             List<Map<String, String>> history = historyService.getMessages(sessionId);
+            List<String> batchQuestions = splitBatchQuestions(userMessage);
+            if (batchQuestions.size() > 1) {
+                List<SingleAiResult> results = processBatchQuestions(batchQuestions, history);
+                rowsReturned = results.stream().mapToInt(SingleAiResult::rowsReturned).sum();
+                auditPayload = toBatchAuditPayload(results);
+                finalReply = formatBatchReply(results);
+                log.info("AI batch sync session={} questions={} totalRows={} totalMs={}",
+                        sessionId, results.size(), rowsReturned, System.currentTimeMillis() - start);
+                return new AiAskResponse(finalReply, null, buildBatchMetadata(results, rowsReturned));
+            }
             long routeStart = System.currentTimeMillis();
             AiIntentResult route = intentRouterService.route(userMessage, history);
             long toolStart = System.currentTimeMillis();
@@ -121,6 +138,32 @@ public class AiService {
                 log.info("AI stream cancelled before cache session={} request={}", sessionId, requestId);
                 return;
             }
+            List<String> batchQuestions = splitBatchQuestions(userMessage);
+            if (batchQuestions.size() > 1) {
+                List<SingleAiResult> results = new ArrayList<>();
+                for (String question : batchQuestions) {
+                    if (cancelService.isCancelled(requestId)) {
+                        break;
+                    }
+                    SingleAiResult result = processSingleQuestion(question, history);
+                    results.add(result);
+                    rowsReturned += result.rowsReturned();
+                    String fragment = formatBatchReplyItem(results.size(), result);
+                    finalReply.append(fragment);
+                    fragmentConsumer.accept(fragment);
+                }
+                if (!results.isEmpty()) {
+                    auditPayload = toBatchAuditPayload(results);
+                    if (metadataConsumer != null && !cancelService.isCancelled(requestId)) {
+                        metadataConsumer.accept(buildBatchMetadata(results, rowsReturned));
+                    }
+                }
+                cancelled = cancelService.isCancelled(requestId);
+                log.info("AI batch stream session={} request={} questions={} totalRows={} cancelled={} totalMs={}",
+                        sessionId, requestId, results.size(), rowsReturned, cancelled,
+                        System.currentTimeMillis() - start);
+                return;
+            }
             long routeStart = System.currentTimeMillis();
             AiIntentResult route = intentRouterService.route(userMessage, history);
             if (cancelService.isCancelled(requestId)) {
@@ -184,6 +227,128 @@ public class AiService {
         return compact.substring(0, Math.min(120, compact.length()));
     }
 
+    private List<SingleAiResult> processBatchQuestions(List<String> questions, List<Map<String, String>> history) {
+        List<SingleAiResult> results = new ArrayList<>();
+        for (String question : questions) {
+            results.add(processSingleQuestion(question, history));
+        }
+        return results;
+    }
+
+    private SingleAiResult processSingleQuestion(String question, List<Map<String, String>> history) {
+        AiIntentResult route = intentRouterService.route(question, history);
+        AiToolResult toolResult = toolExecutorService.execute(route);
+        int rows = toolExecutorService.estimateRows(toolResult);
+        AiQueryContext context = AiQueryContext.from(question, route, toolResult, rows);
+        String reply = answerComposerService.compose(question, route, toolResult, history, context);
+        return new SingleAiResult(question, route, toolResult, context, reply, rows);
+    }
+
+    private List<String> splitBatchQuestions(String userMessage) {
+        if (!StringUtils.hasText(userMessage)) {
+            return List.of();
+        }
+        String normalized = userMessage.replace("\r\n", "\n").replace('\r', '\n').trim();
+        List<String> candidates = new ArrayList<>();
+        for (String line : normalized.split("\n")) {
+            String cleaned = cleanQuestionLine(line);
+            if (StringUtils.hasText(cleaned)) {
+                candidates.add(cleaned);
+            }
+        }
+        if (candidates.size() <= 1 && normalized.indexOf('?') >= 0) {
+            candidates.clear();
+            for (String part : normalized.split("(?<=\\?)\\s+")) {
+                String cleaned = cleanQuestionLine(part);
+                if (StringUtils.hasText(cleaned)) {
+                    candidates.add(cleaned);
+                }
+            }
+        }
+        if (candidates.size() <= 1) {
+            return candidates;
+        }
+        return candidates.stream()
+                .filter(question -> question.length() >= 4)
+                .limit(MAX_BATCH_QUESTIONS)
+                .toList();
+    }
+
+    private String cleanQuestionLine(String line) {
+        if (line == null) {
+            return "";
+        }
+        return line.trim()
+                .replaceAll("^[\\-•*]+\\s*", "")
+                .replaceAll("^\\d+[\\).:-]\\s*", "")
+                .trim();
+    }
+
+    private String formatBatchReply(List<SingleAiResult> results) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < results.size(); i++) {
+            builder.append(formatBatchReplyItem(i + 1, results.get(i)));
+        }
+        return builder.toString().trim();
+    }
+
+    private String formatBatchReplyItem(int index, SingleAiResult result) {
+        return index + ". " + result.question() + "\n"
+                + result.reply().trim() + "\n\n";
+    }
+
+    private AiResponseMetadata buildBatchMetadata(List<SingleAiResult> results, int totalRows) {
+        Set<String> dataSources = new LinkedHashSet<>();
+        Set<String> missingParams = new LinkedHashSet<>();
+        List<String> suggestedQuestions = new ArrayList<>();
+        List<AiActionSuggestion> actions = new ArrayList<>();
+        double confidenceSum = 0.0;
+        int confidenceCount = 0;
+
+        for (SingleAiResult result : results) {
+            AiResponseMetadata metadata = responseEnrichmentService.build(
+                    result.route(), result.toolResult(), result.context());
+            dataSources.addAll(metadata.dataSources());
+            missingParams.addAll(metadata.missingParams());
+            addLimited(suggestedQuestions, metadata.suggestedQuestions(), 8);
+            addLimited(actions, metadata.actions(), 5);
+            if (metadata.confidence() != null) {
+                confidenceSum += metadata.confidence();
+                confidenceCount++;
+            }
+        }
+
+        Map<String, Object> parameters = new LinkedHashMap<>();
+        parameters.put("questionCount", results.size());
+        parameters.put("questions", results.stream().map(SingleAiResult::question).toList());
+
+        return new AiResponseMetadata(
+                "MULTI_QUESTION",
+                confidenceCount == 0 ? 0.0 : confidenceSum / confidenceCount,
+                "BatchAiTool",
+                List.copyOf(dataSources),
+                List.copyOf(missingParams),
+                totalRows,
+                parameters,
+                suggestedQuestions,
+                actions
+        );
+    }
+
+    private <T> void addLimited(List<T> target, List<T> source, int limit) {
+        if (source == null || target.size() >= limit) {
+            return;
+        }
+        for (T item : source) {
+            if (target.size() >= limit) {
+                return;
+            }
+            if (!target.contains(item)) {
+                target.add(item);
+            }
+        }
+    }
+
     // Lấy nội dung người dùng từ message hoặc question.
     private String getUserMessage(AiAskRequest req) {
         String message = req.getMessage();
@@ -211,5 +376,38 @@ public class AiService {
         } catch (Exception e) {
             return context == null ? null : context.intent().name();
         }
+    }
+
+    private String toBatchAuditPayload(List<SingleAiResult> results) {
+        try {
+            List<Map<String, Object>> items = results.stream()
+                    .map(result -> Map.<String, Object>of(
+                            "question", result.question(),
+                            "intent", result.context().intent().name(),
+                            "parameters", result.context().parameters(),
+                            "tool", result.context().toolName(),
+                            "dataSources", result.context().dataSources(),
+                            "missingParams", result.context().missingParams(),
+                            "rows", result.context().rowCount()
+                    ))
+                    .toList();
+            return objectMapper.writeValueAsString(Map.of(
+                    "intent", "MULTI_QUESTION",
+                    "questionCount", results.size(),
+                    "items", items
+            ));
+        } catch (Exception e) {
+            return "MULTI_QUESTION";
+        }
+    }
+
+    private record SingleAiResult(
+            String question,
+            AiIntentResult route,
+            AiToolResult toolResult,
+            AiQueryContext context,
+            String reply,
+            int rowsReturned
+    ) {
     }
 }

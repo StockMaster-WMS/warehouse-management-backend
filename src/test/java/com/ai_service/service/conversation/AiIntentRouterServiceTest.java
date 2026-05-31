@@ -6,6 +6,7 @@ import com.ai_service.intent.AiIntentResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
@@ -209,6 +210,29 @@ class AiIntentRouterServiceTest {
 
         assertThat(result.getIntent()).isEqualTo(AiIntent.STOCK_BY_PRODUCT);
         assertThat(result.safeParameters()).containsEntry("query", question);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "'Xoài cát còn hàng không?', STOCK_BY_PRODUCT",
+            "'Bàn phím cơ còn bao nhiêu cái?', STOCK_BY_PRODUCT",
+            "'Sản phẩm iPhone còn ở kho nào?', STOCK_BY_PRODUCT",
+            "'Hàng nào sắp hết trong kho?', LOW_STOCK",
+            "'Mặt hàng nào còn nhiều nhất hiện tại?', STOCK_HIGHEST",
+            "'Hôm nay có hàng nào mới nhập không?', INBOUND_TODAY",
+            "'Có phiếu nhập nào đang chờ nhận hàng không?', PENDING_PO_RECEIPT",
+            "'Phiếu nhập gần đây nhất là của nhà cung cấp nào?', LATEST_INBOUND",
+            "'Có đơn nào đang bị trễ không?', OUTBOUND_DELAYED",
+            "'Đơn nào còn thiếu hàng để giao?', OUTBOUND_SHORTAGE",
+            "'Ai đang có nhiều việc picking nhất?', PICKING_PRODUCTIVITY",
+            "'Hôm nay tôi cần làm những việc gì?', MY_TASKS",
+            "'Có task putaway nào đang chờ lâu không?', PENDING_PUTAWAY",
+            "'Tình hình kho hôm nay có gì cần chú ý?', REPORT_SUMMARY"
+    })
+    void routesNaturalWarehouseOperationsQuestions(String question, AiIntent expectedIntent) {
+        AiIntentResult result = router.route(question, List.of());
+
+        assertThat(result.getIntent()).isEqualTo(expectedIntent);
     }
 
     @Test
