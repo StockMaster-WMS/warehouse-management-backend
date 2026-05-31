@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 @Slf4j
@@ -435,7 +436,14 @@ public class AiAnswerComposerService {
                     .filter(code -> byWarehouse.get(code)[0] > 0)
                     .map(code -> "**" + code + "**")
                     .reduce((a, b) -> a + ", " + b)
-                    .orElse("chưa xác định kho");
+                    .orElse(null);
+            if (warehouses == null) {
+                if (totalOnHand <= 0) {
+                    return "Không, " + productLabel + " hiện chưa có tồn kho ở bất kỳ kho nào theo dữ liệu hiện tại.";
+                }
+                return productLabel + " có tồn tổng **" + formatNumber(totalOnHand)
+                        + "** đơn vị, nhưng dữ liệu tồn hiện chưa gắn được kho cụ thể.";
+            }
             return productLabel + " hiện đang có tại các kho: " + warehouses + ".";
         }
 
@@ -505,6 +513,13 @@ public class AiAnswerComposerService {
                    "- **Tại kho:** **" + warehouseCode + "**\n" +
                    "- **Tồn kho hiện có:** **" + formatNumber(totalOnHand) + "** đơn vị\n" +
                    "- **Trạng thái khả dụng:** " + availableText + ".";
+        }
+
+        if (totalOnHand <= 0 && totalAvailable <= 0) {
+            return "**Thông tin tồn kho " + productLabel + " trên toàn hệ thống:**\n" +
+                   "- **Tồn kho hiện có:** **0** đơn vị\n" +
+                   "- **Khả dụng:** **0** đơn vị\n" +
+                   "- **Trạng thái:** Chưa có tồn ở bất kỳ kho nào theo dữ liệu hiện tại.";
         }
 
         StringBuilder sb = new StringBuilder();
@@ -648,7 +663,7 @@ public class AiAnswerComposerService {
                 ? "\n\n*Còn " + formatNumber(list.size() - displayed.size()) + " task khác chưa hiển thị.*"
                 : "";
         return "**Có " + formatNumber(list.size()) + " putaway task đang chờ/xử lý:**\n"
-                + joinRowsAsBulletList(displayed, row -> value(row, "product_name")
+                + joinRowsAsBulletList(displayed, row -> productDisplay(row)
                 + "\n  - Số lượng: **" + formatNumber(longValue(row, "qty_to_putaway")) + "**"
                 + "\n  - Trạng thái: `" + statusValue(row, "status") + "`"
                 + "\n  - Vị trí gợi ý: `" + value(row, "suggested_location") + "`")
@@ -1189,7 +1204,7 @@ public class AiAnswerComposerService {
                 : "";
         return "**Có " + formatNumber(list.size()) + " sản phẩm cần kiểm tra vị trí:**\n"
                 + joinRowsAsBulletList(displayed, row -> "`" + value(row, "sku") + "` - "
-                + value(row, "product_name")
+                + productNameDisplay(row)
                 + "\n  - Lý do: `" + value(row, "reason") + "`"
                 + "\n  - Tồn: **" + formatNumber(longValue(row, "qty_on_hand"))
                 + "**, chờ putaway: **" + formatNumber(longValue(row, "pending_putaway_qty")) + "**")
@@ -1451,7 +1466,7 @@ public class AiAnswerComposerService {
                 ? "\n\n*Còn " + formatNumber(list.size() - displayed.size()) + " người khác chưa hiển thị.*"
                 : "";
         return "**Năng suất picking theo người:**\n"
-                + joinRowsAsBulletList(displayed, row -> "**" + value(row, "assignee") + "**"
+                + joinRowsAsBulletList(displayed, row -> "**" + assigneeDisplay(row) + "**"
                 + "\n  - Đã pick: **" + formatNumber(longValue(row, "qty_picked")) + "** / **"
                 + formatNumber(longValue(row, "qty_to_pick")) + "** đơn vị"
                 + "\n  - Dòng hoàn tất: **" + formatNumber(longValue(row, "completed_lines")) + "**")
@@ -1723,6 +1738,60 @@ public class AiAnswerComposerService {
     private String readableSuffix(Object row, String key) {
         String value = value(row, key);
         return "N/A".equals(value) || value.isBlank() ? "" : " - " + value;
+    }
+
+    private String productDisplay(Object row) {
+        String name = value(row, "product_name");
+        if (!"N/A".equals(name) && !name.isBlank() && !looksGeneratedProductName(name)) {
+            return name;
+        }
+        String sku = value(row, "sku");
+        return !"N/A".equals(sku) && !sku.isBlank() ? "SKU `" + sku + "`" : "Sản phẩm chưa có tên";
+    }
+
+    private String productNameDisplay(Object row) {
+        String name = value(row, "product_name");
+        if (!"N/A".equals(name) && !name.isBlank() && !looksGeneratedProductName(name)) {
+            return name;
+        }
+        return "Sản phẩm chưa có tên";
+    }
+
+    private boolean looksGeneratedProductName(String name) {
+        if (name == null) {
+            return false;
+        }
+        String trimmed = name.trim();
+        if (isUuid(trimmed)) {
+            return true;
+        }
+        String normalized = normalize(trimmed);
+        if (!normalized.startsWith("san pham ")) {
+            return false;
+        }
+        return isUuid(trimmed.substring(Math.min(trimmed.length(), "Sản phẩm ".length())).trim());
+    }
+
+    private String assigneeDisplay(Object row) {
+        String assignee = value(row, "assignee");
+        if ("N/A".equals(assignee) || assignee.isBlank()
+                || "unassigned".equalsIgnoreCase(assignee)
+                || isUuid(assignee)) {
+            return "Chưa gán nhân viên";
+        }
+        return assignee;
+    }
+
+    private boolean isUuid(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            UUID.fromString(value.trim());
+            return true;
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
     }
 
     private String metricSuffix(Object row, String key, String label) {

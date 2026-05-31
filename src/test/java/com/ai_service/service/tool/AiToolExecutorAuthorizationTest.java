@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -17,8 +18,10 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AiToolExecutorAuthorizationTest {
@@ -108,6 +111,23 @@ class AiToolExecutorAuthorizationTest {
 
         assertThat(generic).isFalse();
         assertThat(hcm).isTrue();
+    }
+
+    @Test
+    void pendingPoReceiptExcludesDraftCancelledAndCompletedOrders() throws Exception {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        when(jdbcTemplate.queryForList(anyString())).thenReturn(List.of());
+        AiToolExecutorService service = new AiToolExecutorService(jdbcTemplate);
+        Method method = AiToolExecutorService.class.getDeclaredMethod("getPendingPoReceipt");
+        method.setAccessible(true);
+
+        method.invoke(service);
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).queryForList(sql.capture());
+        assertThat(sql.getValue()).contains("po.status IN ('APPROVED', 'PARTIAL')");
+        assertThat(sql.getValue()).contains("HAVING COALESCE(SUM(pi.ordered_qty - pi.received_qty), 0) > 0");
+        assertThat(sql.getValue()).doesNotContain("po.status <> 'COMPLETED'");
     }
 
     private static void authenticateAs(String authority) {

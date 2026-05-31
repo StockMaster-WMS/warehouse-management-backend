@@ -172,4 +172,76 @@ class AiAnswerComposerServiceTest {
         assertThat(reply).contains("nhưng còn ở kho khác");
         assertThat(reply).contains("**WH-HCM** (6 đơn vị)");
     }
+
+    @Test
+    void answersZeroQuantityWithoutEmptyWarehouseSection() {
+        String reply = composer.compose(
+                "Bàn phím cơ còn bao nhiêu cái?",
+                AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, Map.of("query", "Bàn phím cơ còn bao nhiêu cái?"), 0.9, "test"),
+                AiToolResult.data("StockByProductTool", List.of(
+                        Map.of(
+                                "sku", "SP-BAN-PHIM",
+                                "product_name", "Bàn Phím Cơ",
+                                "warehouse_code", "N/A",
+                                "qty_on_hand", 0,
+                                "qty_reserved", 0,
+                                "qty_available", 0)
+                )),
+                List.of());
+
+        assertThat(reply).contains("Chưa có tồn ở bất kỳ kho nào");
+        assertThat(reply).doesNotContain("Chi tiết theo từng kho");
+    }
+
+    @Test
+    void explainsWhenWarehouseRowsAreMissingForWhichWarehouseQuestion() {
+        String reply = composer.compose(
+                "Sản phẩm iPhone còn ở kho nào?",
+                AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, Map.of("query", "Sản phẩm iPhone còn ở kho nào?"), 0.9, "test"),
+                AiToolResult.data("StockByProductTool", List.of(
+                        Map.of(
+                                "sku", "SP-IPHONE",
+                                "product_name", "iPhone 15 Pro Max",
+                                "warehouse_code", "N/A",
+                                "qty_on_hand", 20,
+                                "qty_reserved", 0,
+                                "qty_available", 20)
+                )),
+                List.of());
+
+        assertThat(reply).contains("có tồn tổng **20** đơn vị");
+        assertThat(reply).contains("chưa gắn được kho cụ thể");
+        assertThat(reply).doesNotContain("chưa xác định kho");
+    }
+
+    @Test
+    void hidesOperationalTechnicalIdsInUserFacingLists() {
+        String uuid = "00000000-0000-0000-0000-000000000001";
+        String pickingReply = composer.compose(
+                "Ai đang có nhiều việc picking nhất?",
+                AiIntentResult.of(AiIntent.PICKING_PRODUCTIVITY, Map.of("query", "Ai đang có nhiều việc picking nhất?"), 0.9, "test"),
+                AiToolResult.data("PickingProductivityTool", List.of(
+                        Map.of("assignee", "Unassigned", "qty_picked", 0, "qty_to_pick", 10, "completed_lines", 0),
+                        Map.of("assignee", uuid, "qty_picked", 1, "qty_to_pick", 5, "completed_lines", 1)
+                )),
+                List.of());
+        String putawayReply = composer.compose(
+                "Có task putaway nào đang chờ lâu không?",
+                AiIntentResult.of(AiIntent.PENDING_PUTAWAY, Map.of("query", "Có task putaway nào đang chờ lâu không?"), 0.9, "test"),
+                AiToolResult.data("PendingPutawayTool", List.of(
+                        Map.of(
+                                "sku", "SP-UNKNOWN",
+                                "product_name", "Sản phẩm 019e213e-d3f8-7e34-8a1c-d5c0819afe10",
+                                "qty_to_putaway", 20,
+                                "status", "PENDING",
+                                "suggested_location", "HCM-TT-A01")
+                )),
+                List.of());
+
+        assertThat(pickingReply).contains("Chưa gán nhân viên");
+        assertThat(pickingReply).doesNotContain("Unassigned");
+        assertThat(pickingReply).doesNotContain(uuid);
+        assertThat(putawayReply).contains("SKU `SP-UNKNOWN`");
+        assertThat(putawayReply).doesNotContain("019e213e-d3f8-7e34-8a1c-d5c0819afe10");
+    }
 }

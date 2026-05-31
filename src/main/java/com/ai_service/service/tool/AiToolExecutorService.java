@@ -900,7 +900,7 @@ public class AiToolExecutorService {
                 FROM stock_levels sl
                 LEFT JOIN products p ON p.id = sl.product_id
                 JOIN warehouses w ON w.id = sl.warehouse_id
-                JOIN locations l ON l.id = sl.location_id
+                LEFT JOIN locations l ON l.id = sl.location_id
                 WHERE 1 = 1
                 """);
 
@@ -1678,8 +1678,9 @@ public class AiToolExecutorService {
                 LEFT JOIN po_items pi ON pi.po_id = po.id
                 LEFT JOIN suppliers s ON s.id = po.supplier_id
                 LEFT JOIN warehouses w ON w.id = po.warehouse_id
-                WHERE po.status <> 'COMPLETED'
+                WHERE po.status IN ('APPROVED', 'PARTIAL')
                 GROUP BY po.id, po.po_number, po.status, po.order_date, po.expected_date, s.name, w.code
+                HAVING COALESCE(SUM(pi.ordered_qty - pi.received_qty), 0) > 0
                 ORDER BY po.expected_date ASC NULLS LAST, po.order_date DESC
                 LIMIT 50
                 """);

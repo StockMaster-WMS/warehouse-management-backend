@@ -151,6 +151,14 @@ class AiIntentRouterServiceTest {
     }
 
     @Test
+    void routesNearExpiryQuestionBeforeLowStockQuestion() {
+        AiIntentResult result = router.route("Có hàng nào sắp hết hạn không?", List.of());
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.NEAR_EXPIRY);
+        assertThat(result.safeParameters()).containsEntry("days", 30);
+    }
+
+    @Test
     void removesStaleModelSkuWhenQuestionDoesNotReferenceHistory() {
         AiTextClient staleModel = new AiTextClient() {
             @Override

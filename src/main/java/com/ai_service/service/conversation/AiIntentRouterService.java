@@ -872,14 +872,14 @@ public class AiIntentRouterService {
                     "deterministic stock by product code");
         }
 
-        if (containsAny(normalized, "hang nao sap het", "mat hang nao sap het", "san pham nao sap het",
-                "sap het trong kho", "sap het hang", "gan het hang", "hang gan het", "mat hang gan het")) {
-            return AiIntentResult.of(AiIntent.LOW_STOCK, params, 0.9, "deterministic low stock natural");
-        }
-
         if (containsAnyPhrase(normalized, "sap het han", "gan het han", "het han", "expiry", "expired", "fefo")) {
             params.putIfAbsent("days", params.get("days") == null ? 30 : params.get("days"));
             return AiIntentResult.of(AiIntent.NEAR_EXPIRY, params, 0.9, "deterministic near expiry");
+        }
+
+        if (containsAny(normalized, "hang nao sap het", "mat hang nao sap het", "san pham nao sap het",
+                "sap het trong kho", "sap het hang", "gan het hang", "hang gan het", "mat hang gan het")) {
+            return AiIntentResult.of(AiIntent.LOW_STOCK, params, 0.9, "deterministic low stock natural");
         }
 
         if (containsAny(normalized, "phieu nhap", "don nhap", "purchase order", "po")
@@ -1250,15 +1250,15 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.WAREHOUSE_DETAIL, params, 0.9, "deterministic warehouse detail");
         }
 
+        if (containsAnyPhrase(normalized, "sap het han", "gan het han", "het han", "expiry", "expired", "fefo")) {
+            params.putIfAbsent("days", params.get("days") == null ? 30 : params.get("days"));
+            return AiIntentResult.of(AiIntent.NEAR_EXPIRY, params, 0.9, "deterministic near expiry");
+        }
+
         if (containsAny(normalized, "ton thap", "gan het hang", "duoi dinh muc", "duoi muc an toan",
                 "can bo sung", "sap het hang", "sku nao sap het", "sap het trong tuan",
                 "low stock", "nhap them gap", "nen nhap them", "bo sung gap")) {
             return AiIntentResult.of(AiIntent.LOW_STOCK, params, 0.9, "deterministic low stock");
-        }
-
-        if (containsAnyPhrase(normalized, "sap het han", "gan het han", "het han", "expiry", "expired", "fefo")) {
-            params.putIfAbsent("days", params.get("days") == null ? 30 : params.get("days"));
-            return AiIntentResult.of(AiIntent.NEAR_EXPIRY, params, 0.9, "deterministic near expiry");
         }
 
         if (containsAny(normalized, "rma", "tra hang", "yeu cau tra")) {
