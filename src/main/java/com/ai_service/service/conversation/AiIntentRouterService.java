@@ -1460,8 +1460,8 @@ public class AiIntentRouterService {
     }
 
     private boolean looksNaturalProductAvailabilityQuestion(String normalized) {
-        if (containsAny(normalized, "don", "phieu", "task", "putaway", "picking",
-                "lo ", "lo hang", "lot", "hang nhat", "nhieu hang nhat")) {
+        if (containsAnyPhrase(normalized, "don", "phieu", "task", "putaway", "picking", "lo", "lo hang", "lot")
+                || containsAny(normalized, "hang nhat", "nhieu hang nhat")) {
             return false;
         }
         if (containsAny(normalized, "kho nao")
@@ -1471,6 +1471,7 @@ public class AiIntentRouterService {
         return (containsAny(normalized, "san pham", "mat hang", "hang", "iphone", "laptop", "dell", "xps")
                 && containsAny(normalized, "o kho nao", "tai kho nao", "kho nao"))
                 || containsAny(normalized, "con hang", "con khong", "con bao nhieu", "ton bao nhieu")
+                || containsAny(normalized, "co trong kho", "co o kho", "co tai kho", "trong kho khong")
                 || (containsAny(normalized, "co san pham", "co mat hang", "co hang")
                 && containsAny(normalized, "trong kho", "o kho", "tai kho", "kho khong", "hang khong"));
     }

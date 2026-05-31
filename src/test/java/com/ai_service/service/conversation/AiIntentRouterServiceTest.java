@@ -203,7 +203,9 @@ class AiIntentRouterServiceTest {
     @ValueSource(strings = {
             "có sản phẩm Xoài cát trong kho không",
             "có sản phẩm Bàn phím cơ trong kho không",
-            "có mặt hàng Sữa tươi ở kho không"
+            "có mặt hàng Sữa tươi ở kho không",
+            "Xinh Ủng bảo hộ cao su đóng gói thương mại có trong kho không",
+            "Banh quy bo có trong kho không"
     })
     void routesNaturalProductAvailabilityQuestionToStockLookup(String question) {
         AiIntentResult result = router.route(question, List.of());

@@ -77,4 +77,37 @@ class AiAnswerComposerServiceTest {
         assertThat(reply).contains("- Bút Bi TL-027");
         assertThat(reply).contains("\n  - Vị trí gợi ý:");
     }
+
+    @Test
+    void answersProductExistenceQuestionWithExplicitYes() {
+        String reply = composer.compose(
+                "Xinh Ủng bảo hộ cao su đóng gói thương mại có trong kho không",
+                AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, Map.of(
+                        "query", "Xinh Ủng bảo hộ cao su đóng gói thương mại có trong kho không"), 0.9, "test"),
+                AiToolResult.data("StockByProductTool", List.of(
+                        Map.of(
+                                "sku", "FROZ-00634",
+                                "product_name", "Xinh Ủng bảo hộ cao su đóng gói thương mại",
+                                "warehouse_code", "HN-TT",
+                                "qty_on_hand", 12,
+                                "qty_reserved", 2,
+                                "qty_available", 10)
+                )),
+                List.of());
+
+        assertThat(reply).startsWith("Có,");
+        assertThat(reply).contains("hiện có trong kho");
+        assertThat(reply).contains("**HN-TT**");
+    }
+
+    @Test
+    void answersMissingProductExistenceQuestionWithExplicitNo() {
+        String reply = composer.compose(
+                "Banh quy bo có trong kho không",
+                AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, Map.of("query", "Banh quy bo có trong kho không"), 0.9, "test"),
+                AiToolResult.data("StockByProductTool", List.of()),
+                List.of());
+
+        assertThat(reply).startsWith("Không,");
+    }
 }

@@ -61,7 +61,9 @@ class AiToolExecutorAuthorizationTest {
     @CsvSource({
             "'có sản phẩm Xoài cát trong kho không','Xoài cát'",
             "'có sản phẩm Bàn phím cơ trong kho không','Bàn phím cơ'",
-            "'có mặt hàng Sữa tươi ở kho không','Sữa tươi'"
+            "'có mặt hàng Sữa tươi ở kho không','Sữa tươi'",
+            "'Xinh Ủng bảo hộ cao su đóng gói thương mại có trong kho không','Xinh Ủng bảo hộ cao su đóng gói thương mại'",
+            "'Banh quy bo có trong kho không?','Banh quy bo'"
     })
     void cleansNaturalProductAvailabilityQuestionToProductKeyword(String question, String expectedKeyword) throws Exception {
         Method method = AiToolExecutorService.class.getDeclaredMethod("cleanProductKeyword", String.class);

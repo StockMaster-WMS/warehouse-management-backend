@@ -116,7 +116,7 @@ public class AiAnswerComposerService {
             return switch (route.getIntent()) {
                 case LOW_STOCK -> "Hiện chưa ghi nhận SKU nào dưới mức tồn tối thiểu.";
                 case NEAR_EXPIRY -> "Hiện chưa có lô hàng nào sắp hết hạn trong khoảng thời gian này.";
-                case STOCK_BY_PRODUCT -> "Tôi chưa tìm thấy tồn kho phù hợp với sản phẩm hoặc SKU bạn hỏi.";
+                case STOCK_BY_PRODUCT -> "Không, tôi chưa tìm thấy tồn kho phù hợp với sản phẩm hoặc SKU bạn hỏi.";
                 case STOCK_LOWEST -> "Hiện chưa có dữ liệu tồn kho để xác định sản phẩm thấp nhất.";
                 case STOCK_HIGHEST -> "Hiện chưa có dữ liệu tồn kho để xác định sản phẩm cao nhất.";
                 case PRODUCT_BY_BARCODE -> "Barcode chưa được đăng ký hoặc không tồn tại.";
@@ -440,6 +440,22 @@ public class AiAnswerComposerService {
 
         if (containsAny(query, "xuat duoc", "xuat toi da", "co the xuat", "ban duoc bao nhieu")) {
             return "Bạn có thể xuất tối đa **" + formatNumber(totalAvailable) + "** đơn vị cho " + productLabel + ".";
+        }
+
+        if (containsAny(query, "co trong kho", "co o kho", "co tai kho", "trong kho khong",
+                "con hang", "con khong")) {
+            if (totalOnHand <= 0) {
+                return "Không, " + productLabel + " hiện chưa có tồn kho theo dữ liệu hiện tại.";
+            }
+            String warehouses = byWarehouse.keySet().stream()
+                    .filter(code -> !"N/A".equals(code))
+                    .map(code -> "**" + code + "**")
+                    .reduce((a, b) -> a + ", " + b)
+                    .orElse("chưa xác định kho");
+            return "Có, " + productLabel + " hiện có trong kho.\n"
+                    + "- **Tổng tồn hiện có:** **" + formatNumber(totalOnHand) + "** đơn vị\n"
+                    + "- **Khả dụng:** **" + formatNumber(totalAvailable) + "** đơn vị\n"
+                    + "- **Kho có hàng:** " + warehouses + ".";
         }
 
         if (query.contains("kho nao") && query.contains("nhieu") && query.contains("nhat")) {

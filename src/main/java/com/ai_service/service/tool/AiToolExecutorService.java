@@ -3748,7 +3748,8 @@ public class AiToolExecutorService {
         if (value == null) {
             return "";
         }
-        return value.replaceAll("(?i)tồn kho|ton kho|còn bao nhiêu|con bao nhieu|còn hàng|con hang|còn không|con khong|có sản phẩm|co san pham|có mặt hàng|co mat hang|có hàng|co hang|trong kho|ở kho|o kho|tại kho|tai kho|kho không|kho khong|hàng không|hang khong|không|khong|sku|sản phẩm|san pham", "")
+        return value.replaceAll("(?i)tồn kho|ton kho|còn bao nhiêu|con bao nhieu|còn hàng|con hang|còn không|con khong|có trong kho|co trong kho|có ở kho|co o kho|có tại kho|co tai kho|có sản phẩm|co san pham|có mặt hàng|co mat hang|có hàng|co hang|trong kho|ở kho|o kho|tại kho|tai kho|kho không|kho khong|hàng không|hang khong|không|khong|sku|sản phẩm|san pham", "")
+                .replaceAll("[?？]", "")
                 .trim();
     }
 
