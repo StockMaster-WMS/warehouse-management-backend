@@ -3,8 +3,10 @@ package com.config;
 import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -17,6 +19,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -34,6 +37,9 @@ public class SecurityConfig {
             "http://warehouse.ryon.website",
             "https://apiwarehouse.ryon.website",
             "http://apiwarehouse.ryon.website");
+    private static final List<String> DEFAULT_ALLOWED_ORIGIN_PATTERNS = List.of(
+            "https://*.ryon.website",
+            "http://*.ryon.website");
 
     private final com.auth_service.security.JwtAuthenticationFilter jwtAuthenticationFilter;
 
@@ -85,14 +91,24 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(parseAllowedOrigins());
+        config.setAllowedOriginPatterns(parseAllowedOriginPatterns());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
         config.setExposedHeaders(List.of("Authorization"));
+        config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
+    }
+
+    @Bean
+    public FilterRegistrationBean<CorsFilter> corsFilterRegistration(CorsConfigurationSource corsConfigurationSource) {
+        FilterRegistrationBean<CorsFilter> registration = new FilterRegistrationBean<>(
+                new CorsFilter(corsConfigurationSource));
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        return registration;
     }
 
     private List<String> parseAllowedOrigins() {
@@ -101,6 +117,18 @@ public class SecurityConfig {
         Arrays.stream(allowedOrigin.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isBlank())
+                .forEach(origins::add);
+
+        return List.copyOf(origins);
+    }
+
+    private List<String> parseAllowedOriginPatterns() {
+        LinkedHashSet<String> origins = new LinkedHashSet<>(DEFAULT_ALLOWED_ORIGIN_PATTERNS);
+
+        Arrays.stream(allowedOrigin.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isBlank())
+                .filter(origin -> origin.contains("*"))
                 .forEach(origins::add);
 
         return List.copyOf(origins);

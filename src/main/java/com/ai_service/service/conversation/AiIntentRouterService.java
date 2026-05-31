@@ -486,6 +486,11 @@ public class AiIntentRouterService {
                     "deterministic purchase order approval audit");
         }
 
+        if (looksNaturalProductAvailabilityQuestion(normalized)) {
+            return AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, params, 0.88,
+                    "deterministic product availability natural");
+        }
+
         if (looksUnsupported(userMessage)) {
             return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.95, "deterministic unsupported");
         }
@@ -866,15 +871,31 @@ public class AiIntentRouterService {
                     "deterministic stock by product code");
         }
 
-        if (containsAny(normalized, "sap het han", "gan het han", "het han ", "het han?", "expiry", "expired", "fefo")) {
+        if (containsAny(normalized, "hang nao sap het", "mat hang nao sap het", "san pham nao sap het",
+                "sap het trong kho", "sap het hang", "gan het hang", "hang gan het", "mat hang gan het")) {
+            return AiIntentResult.of(AiIntent.LOW_STOCK, params, 0.9, "deterministic low stock natural");
+        }
+
+        if (containsAnyPhrase(normalized, "sap het han", "gan het han", "het han", "expiry", "expired", "fefo")) {
             params.putIfAbsent("days", params.get("days") == null ? 30 : params.get("days"));
             return AiIntentResult.of(AiIntent.NEAR_EXPIRY, params, 0.9, "deterministic near expiry");
         }
 
-        if (containsAny(normalized, "hom nay co hang nao moi nhap", "hang nao moi nhap", "hang moi nhap",
+        if (containsAny(normalized, "phieu nhap", "don nhap", "purchase order", "po")
+                && containsAny(normalized, "cho duyet", "chua duyet", "pending approval", "draft")
+                && containsAny(normalized, "bao nhieu", "may", "count", "so luong")) {
+            params.put("status", "DRAFT");
+            params.put("countOnly", true);
+            return AiIntentResult.of(AiIntent.PURCHASE_ORDER_STATUS, params, 0.92,
+                    "deterministic pending approval purchase orders");
+        }
+
+        boolean asksPendingPurchaseApproval = containsAny(normalized, "cho duyet", "chua duyet", "pending approval", "draft");
+        if (!asksPendingPurchaseApproval
+                && (containsAny(normalized, "hom nay co hang nao moi nhap", "hang nao moi nhap", "hang moi nhap",
                 "moi nhap khong", "nhap kho hom nay", "vua duoc nhap kho hom nay", "lo hang hom nay")
                 || (containsAny(normalized, "hom nay") && containsAny(normalized, "bao nhieu don nhap",
-                "bao nhieu phieu nhap", "co bao nhieu don nhap", "co bao nhieu phieu nhap"))) {
+                "bao nhieu phieu nhap", "co bao nhieu don nhap", "co bao nhieu phieu nhap")))) {
             params.putIfAbsent("dateRange", "TODAY");
             return AiIntentResult.of(AiIntent.INBOUND_TODAY, params, 0.9, "deterministic inbound today");
         }
@@ -917,20 +938,12 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.MY_TASKS, params, 0.92, "deterministic my tasks natural");
         }
 
-        if (containsAny(normalized, "hang nao sap het", "mat hang nao sap het", "san pham nao sap het",
-                "sap het trong kho", "hang gan het", "mat hang gan het")) {
-            return AiIntentResult.of(AiIntent.LOW_STOCK, params, 0.9, "deterministic low stock natural");
-        }
-
         if (containsAny(normalized, "mat hang nao con nhieu nhat", "hang nao con nhieu nhat",
                 "san pham nao con nhieu nhat", "mat hang ton nhieu nhat", "hang ton nhieu nhat")) {
             return AiIntentResult.of(AiIntent.STOCK_HIGHEST, params, 0.9, "deterministic stock highest natural");
         }
 
-        if ((containsAny(normalized, "san pham", "mat hang", "hang", "iphone", "laptop", "dell", "xps")
-                && containsAny(normalized, "o kho nao", "tai kho nao", "kho nao"))
-                || (containsAny(normalized, "con hang", "con khong", "con bao nhieu")
-                && !containsAny(normalized, "don", "phieu", "task"))) {
+        if (looksNaturalProductAvailabilityQuestion(normalized)) {
             return AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, params, 0.88,
                     "deterministic product availability natural");
         }
@@ -1242,7 +1255,7 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.LOW_STOCK, params, 0.9, "deterministic low stock");
         }
 
-        if (containsAny(normalized, "sap het han", "gan het han", "het han ", "het han?", "expiry", "expired", "fefo")) {
+        if (containsAnyPhrase(normalized, "sap het han", "gan het han", "het han", "expiry", "expired", "fefo")) {
             params.putIfAbsent("days", params.get("days") == null ? 30 : params.get("days"));
             return AiIntentResult.of(AiIntent.NEAR_EXPIRY, params, 0.9, "deterministic near expiry");
         }
@@ -1251,9 +1264,10 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.RMA_PENDING, params, 0.9, "deterministic rma");
         }
 
-        if (containsAny(normalized, "vua duoc nhap kho hom nay", "nhap kho hom nay", "lo hang hom nay")
+        if (!asksPendingPurchaseApproval
+                && (containsAny(normalized, "vua duoc nhap kho hom nay", "nhap kho hom nay", "lo hang hom nay")
                 || (containsAny(normalized, "hom nay") && containsAny(normalized, "bao nhieu don nhap",
-                "bao nhieu phieu nhap", "co bao nhieu don nhap", "co bao nhieu phieu nhap"))) {
+                "bao nhieu phieu nhap", "co bao nhieu don nhap", "co bao nhieu phieu nhap")))) {
             params.putIfAbsent("dateRange", "TODAY");
             return AiIntentResult.of(AiIntent.INBOUND_TODAY, params, 0.9, "deterministic inbound today");
         }
@@ -1443,6 +1457,22 @@ public class AiIntentRouterService {
                 "ton kho nhieu nhat", "ton kho cao nhat", "ton nhieu nhat",
                 "ton kho thap nhat", "ton thap nhat", "san pham nao",
                 "sku nao", "hang nao", "mat hang nao", "kho nao");
+    }
+
+    private boolean looksNaturalProductAvailabilityQuestion(String normalized) {
+        if (containsAny(normalized, "don", "phieu", "task", "putaway", "picking",
+                "lo ", "lo hang", "lot", "hang nhat", "nhieu hang nhat")) {
+            return false;
+        }
+        if (containsAny(normalized, "kho nao")
+                && !containsAny(normalized, "san pham", "mat hang", "iphone", "laptop", "dell", "xps")) {
+            return false;
+        }
+        return (containsAny(normalized, "san pham", "mat hang", "hang", "iphone", "laptop", "dell", "xps")
+                && containsAny(normalized, "o kho nao", "tai kho nao", "kho nao"))
+                || containsAny(normalized, "con hang", "con khong", "con bao nhieu", "ton bao nhieu")
+                || (containsAny(normalized, "co san pham", "co mat hang", "co hang")
+                && containsAny(normalized, "trong kho", "o kho", "tai kho", "kho khong", "hang khong"));
     }
 
     // Trích các tham số chung như query, SKU, mã kho, số ngày.
