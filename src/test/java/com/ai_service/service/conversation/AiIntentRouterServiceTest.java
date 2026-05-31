@@ -1,5 +1,6 @@
 package com.ai_service.service.conversation;
 
+import com.ai_service.client.AiTextClient;
 import com.ai_service.intent.AiIntent;
 import com.ai_service.intent.AiIntentResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -7,6 +8,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -113,6 +116,52 @@ class AiIntentRouterServiceTest {
         AiIntentResult result = router.route("Tổng giá trị hàng tồn kho hiện tại là bao nhiêu?", List.of());
 
         assertThat(result.getIntent()).isEqualTo(AiIntent.INVENTORY_VALUE);
+    }
+
+    @Test
+    void doesNotReusePreviousSkuForGlobalInventoryQuestions() {
+        List<Map<String, String>> history = List.of(
+                Map.of("role", "user", "content", "Sản phẩm Meko Máy tính bảng phiên bản mới 00013 còn tồn bao nhiêu?"),
+                Map.of("role", "assistant", "content", "SKU ELEC-00013 hiện còn 0 đơn vị.")
+        );
+
+        AiIntentResult inventoryValue = router.route("Tổng giá trị tồn kho hiện tại khoảng bao nhiêu?", history);
+        AiIntentResult highestStock = router.route("Sản phẩm nào tồn kho nhiều nhất hiện nay?", history);
+
+        assertThat(inventoryValue.getIntent()).isEqualTo(AiIntent.INVENTORY_VALUE);
+        assertThat(inventoryValue.safeParameters()).doesNotContainKey("sku");
+        assertThat(highestStock.getIntent()).isEqualTo(AiIntent.STOCK_HIGHEST);
+        assertThat(highestStock.safeParameters()).doesNotContainKey("sku");
+    }
+
+    @Test
+    void removesStaleModelSkuWhenQuestionDoesNotReferenceHistory() {
+        AiTextClient staleModel = new AiTextClient() {
+            @Override
+            public String generateIntent(String prompt) {
+                return """
+                        {"intent":"INVENTORY_VALUE","parameters":{"sku":"ELEC-00013","query":"Tổng giá trị hàng trong kho hiện nay?"},"confidence":0.88,"reason":"model stale context"}
+                        """;
+            }
+
+            @Override
+            public String generateAnswer(String prompt) {
+                return "";
+            }
+
+            @Override
+            public void generateAnswerStream(String prompt, Consumer<String> consumer, Supplier<Boolean> isCancelled) {
+            }
+        };
+        AiIntentRouterService modelRouter = new AiIntentRouterService(staleModel, new ObjectMapper());
+
+        AiIntentResult result = modelRouter.route("Tổng giá trị hàng trong kho hiện nay?", List.of(
+                Map.of("role", "user", "content", "Sản phẩm Meko Máy tính bảng phiên bản mới 00013 còn tồn bao nhiêu?"),
+                Map.of("role", "assistant", "content", "SKU ELEC-00013 hiện còn 0 đơn vị.")
+        ));
+
+        assertThat(result.getIntent()).isEqualTo(AiIntent.INVENTORY_VALUE);
+        assertThat(result.safeParameters()).doesNotContainKey("sku");
     }
 
     @Test
