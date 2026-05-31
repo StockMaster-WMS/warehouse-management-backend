@@ -4,9 +4,11 @@ import com.ai_service.client.AiModelSelectionContext;
 import com.ai_service.context.AiQueryContext;
 import com.ai_service.dto.AiAskRequest;
 import com.ai_service.dto.AiAskResponse;
+import com.ai_service.dto.AiAskResponse.AiResponseMetadata;
 import com.ai_service.intent.AiIntentResult;
 import com.ai_service.service.conversation.AiAnswerComposerService;
 import com.ai_service.service.conversation.AiIntentRouterService;
+import com.ai_service.service.conversation.AiResponseEnrichmentService;
 import com.ai_service.service.session.AiAuditService;
 import com.ai_service.service.session.AiCancelService;
 import com.ai_service.service.session.AiHistoryService;
@@ -30,6 +32,7 @@ public class AiService {
     private final AiIntentRouterService intentRouterService;
     private final AiToolExecutorService toolExecutorService;
     private final AiAnswerComposerService answerComposerService;
+    private final AiResponseEnrichmentService responseEnrichmentService;
     private final AiHistoryService historyService;
     private final AiAuditService auditService;
     private final AiCancelService cancelService;
@@ -68,7 +71,8 @@ public class AiService {
             log.info("AI timings sync session={} intent={} routeMs={} toolMs={} composeMs={} totalMs={}",
                     sessionId, route.getIntent(), toolStart - routeStart, composeStart - toolStart,
                     System.currentTimeMillis() - composeStart, System.currentTimeMillis() - start);
-            return new AiAskResponse(finalReply, null);
+            return new AiAskResponse(finalReply, null,
+                    responseEnrichmentService.build(route, toolResult, queryContext));
         } catch (Exception e) {
             error = e.getMessage();
             log.error("AI Service error", e);
@@ -86,6 +90,12 @@ public class AiService {
 
     // Xử lý câu hỏi AI dạng stream và đẩy từng đoạn trả lời ra callback.
     public void askStream(AiAskRequest req, Consumer<String> fragmentConsumer) {
+        askStream(req, fragmentConsumer, null);
+    }
+
+    // Xử lý câu hỏi AI dạng stream, kèm metadata để UI có thể hiển thị nguồn dữ liệu và gợi ý.
+    public void askStream(AiAskRequest req, Consumer<String> fragmentConsumer,
+            Consumer<AiResponseMetadata> metadataConsumer) {
         String sessionId = req.getSessionId();
         String requestId = StringUtils.hasText(req.getRequestId()) ? req.getRequestId() : sessionId;
         cancelService.startSession(requestId);
@@ -131,6 +141,9 @@ public class AiService {
             log.info("AI stream intent={} tool={} sources={} missingParams={} rows={}",
                     route.getIntent(), toolResult.toolName(), queryContext.dataSources(),
                     queryContext.missingParams(), rowsReturned);
+            if (metadataConsumer != null && !cancelService.isCancelled(requestId)) {
+                metadataConsumer.accept(responseEnrichmentService.build(route, toolResult, queryContext));
+            }
 
             answerComposerService.composeStream(userMessage, route, toolResult, history, queryContext, fragment -> {
                 if (cancelService.isCancelled(requestId)) {

@@ -1235,6 +1235,12 @@ public class AiIntentRouterService {
             return AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, params, 0.85, "deterministic stock by product");
         }
 
+        if (containsAny(normalized, "co san pham", "co mat hang", "co hang")
+                && containsAny(normalized, "trong kho", "o kho", "tai kho", "kho khong", "hang khong")) {
+            return AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, params, 0.88,
+                    "deterministic product availability in stock");
+        }
+
         if (containsAny(normalized, "lich kiem ke", "dang dien ra", "dang thuc hien", "dang kiem ke")) {
             return AiIntentResult.of(AiIntent.ACTIVE_CYCLE_COUNTS, params, 0.9, "deterministic active cycle count");
         }
