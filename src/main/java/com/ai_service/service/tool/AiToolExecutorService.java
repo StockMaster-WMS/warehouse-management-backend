@@ -873,12 +873,26 @@ public class AiToolExecutorService {
                             + " có tồn tại, nhưng tôi chưa tìm thấy tồn kho phù hợp với sản phẩm hoặc SKU bạn hỏi trong kho này.");
         }
         if (rows.isEmpty() && StringUtils.hasText(query)) {
-            List<String> suggestions = suggestProductCandidates(query, 3);
+            List<ProductCandidate> suggestions = suggestProductCandidates(query, 3);
             if (!suggestions.isEmpty()) {
+                List<Map<String, Object>> suggestionRows = suggestions.stream()
+                        .map(candidate -> Map.<String, Object>of(
+                                "sku", candidate.sku(),
+                                "product_name", candidate.name(),
+                                "score", candidate.score(),
+                                "query", "SKU " + candidate.sku() + " còn hàng không?"))
+                        .toList();
                 return AiToolResult.message("StockTool.getStockByProduct",
                         "Tôi chưa tìm thấy tồn kho khớp chắc chắn với tên sản phẩm bạn hỏi. Có phải bạn muốn hỏi: "
-                                + String.join("; ", suggestions)
-                                + "? Bạn có thể hỏi lại bằng SKU hoặc tên gần đúng hơn.");
+                                + suggestions.stream()
+                                        .map(candidate -> candidate.sku() + " - " + candidate.name())
+                                        .reduce((a, b) -> a + "; " + b)
+                                        .orElse("")
+                                + "? Bạn có thể hỏi lại bằng SKU hoặc tên gần đúng hơn.")
+                        .withUiMetadata(Map.of(
+                                "candidateSuggestions", suggestionRows,
+                                "display", Map.of("type", "candidate_list", "title", "Có phải bạn muốn hỏi?")
+                        ));
             }
         }
         return AiToolResult.data("StockTool.getStockByProduct", rows);
@@ -4136,7 +4150,7 @@ public class AiToolExecutorService {
                 .toList();
     }
 
-    private List<String> suggestProductCandidates(String query, int max) {
+    private List<ProductCandidate> suggestProductCandidates(String query, int max) {
         String normalizedQuery = normalize(query);
         String normalizedKeyword = normalize(cleanProductKeyword(query));
         String scoringText = StringUtils.hasText(normalizedKeyword) ? normalizedKeyword : normalizedQuery;
@@ -4161,7 +4175,6 @@ public class AiToolExecutorService {
                     return scoreCompare != 0 ? scoreCompare : a.name().compareToIgnoreCase(b.name());
                 })
                 .limit(Math.max(1, max))
-                .map(candidate -> candidate.sku() + " - " + candidate.name())
                 .toList();
     }
 

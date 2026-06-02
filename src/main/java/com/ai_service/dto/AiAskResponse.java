@@ -25,6 +25,9 @@ public class AiAskResponse {
     private Boolean needsClarification;
     private String clarificationReason;
     private List<String> qualitySignals = List.of();
+    private Map<String, Object> display = Map.of();
+    private List<Map<String, Object>> resultRows = List.of();
+    private List<Map<String, Object>> candidateSuggestions = List.of();
 
     public AiAskResponse(String reply, String error) {
         this.reply = reply;
@@ -49,6 +52,9 @@ public class AiAskResponse {
             this.needsClarification = metadata.needsClarification();
             this.clarificationReason = metadata.clarificationReason();
             this.qualitySignals = metadata.qualitySignals();
+            this.display = metadata.display();
+            this.resultRows = metadata.resultRows();
+            this.candidateSuggestions = metadata.candidateSuggestions();
         }
     }
 
@@ -66,7 +72,10 @@ public class AiAskResponse {
             String intentQuality,
             Boolean needsClarification,
             String clarificationReason,
-            List<String> qualitySignals
+            List<String> qualitySignals,
+            Map<String, Object> display,
+            List<Map<String, Object>> resultRows,
+            List<Map<String, Object>> candidateSuggestions
     ) {
         public AiResponseMetadata {
             domain = domain == null ? "general" : domain;
@@ -79,6 +88,9 @@ public class AiAskResponse {
             needsClarification = needsClarification != null && needsClarification;
             clarificationReason = clarificationReason == null ? "" : clarificationReason;
             qualitySignals = qualitySignals == null ? List.of() : qualitySignals;
+            display = display == null ? Map.of() : display;
+            resultRows = resultRows == null ? List.of() : resultRows;
+            candidateSuggestions = candidateSuggestions == null ? List.of() : candidateSuggestions;
         }
     }
 

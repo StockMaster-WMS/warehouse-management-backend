@@ -40,7 +40,10 @@ public class AiResponseEnrichmentService {
                 quality.intentQuality(),
                 quality.needsClarification(),
                 quality.clarificationReason(),
-                quality.qualitySignals()
+                quality.qualitySignals(),
+                displayMetadata(intent, toolResult),
+                resultRows(toolResult, 50),
+                mapListFromUiMetadata(toolResult, "candidateSuggestions")
         );
     }
 
@@ -170,5 +173,125 @@ public class AiResponseEnrichmentService {
             return map.size();
         }
         return 1;
+    }
+
+    private Map<String, Object> displayMetadata(AiIntent intent, AiToolResult result) {
+        Map<String, Object> explicit = mapFromUiMetadata(result, "display");
+        if (!explicit.isEmpty()) {
+            return explicit;
+        }
+        if (result == null || !result.dataBacked()) {
+            return Map.of("type", "text");
+        }
+        return switch (intent) {
+            case STOCK_BY_PRODUCT -> Map.of(
+                    "type", "table",
+                    "title", "Tồn kho sản phẩm",
+                    "columns", List.of("sku", "product_name", "warehouse_code", "qty_on_hand", "qty_reserved", "qty_available"));
+            case NEAR_EXPIRY -> Map.of(
+                    "type", "table",
+                    "title", "Lô sắp hết hạn",
+                    "columns", List.of("product_name", "warehouse_code", "location_code", "lot_number", "expiry_date", "days_left", "qty_on_hand"));
+            case PRODUCT_LIST, PRODUCT_BY_CATEGORY -> Map.of(
+                    "type", "table",
+                    "title", "Danh sách sản phẩm",
+                    "columns", List.of("sku", "product_name", "category_name", "status", "qty_on_hand"));
+            case CATEGORY_LIST -> Map.of(
+                    "type", "list",
+                    "title", "Danh mục sản phẩm",
+                    "columns", List.of("code", "name", "product_count"));
+            case SUPPLIER_LIST, SUPPLIER_SEARCH -> Map.of(
+                    "type", "table",
+                    "title", "Nhà cung cấp",
+                    "columns", List.of("code", "name", "status", "contact_name"));
+            case CUSTOMER_LIST, CUSTOMER_SEARCH -> Map.of(
+                    "type", "table",
+                    "title", "Khách hàng",
+                    "columns", List.of("code", "name", "is_active", "contact_name"));
+            case LOCATION_SEARCH -> Map.of(
+                    "type", "table",
+                    "title", "Vị trí kho",
+                    "columns", List.of("warehouse_code", "code", "zone", "location_type", "status"));
+            case USER_LOOKUP -> Map.of(
+                    "type", "table",
+                    "title", "Người dùng",
+                    "columns", List.of("username", "full_name", "roles", "warehouses"));
+            case ROLE_LIST -> Map.of(
+                    "type", "list",
+                    "title", "Vai trò",
+                    "columns", List.of("code", "name", "user_count"));
+            default -> Map.of("type", "text");
+        };
+    }
+
+    private List<Map<String, Object>> resultRows(AiToolResult result, int limit) {
+        if (result == null || result.data() == null) {
+            return List.of();
+        }
+        Object data = result.data();
+        if (data instanceof List<?> list) {
+            return list.stream()
+                    .filter(Map.class::isInstance)
+                    .map(row -> sanitizeRow((Map<?, ?>) row))
+                    .limit(Math.max(0, limit))
+                    .toList();
+        }
+        if (data instanceof Map<?, ?> map && map.get("items") instanceof List<?> items) {
+            return items.stream()
+                    .filter(Map.class::isInstance)
+                    .map(row -> sanitizeRow((Map<?, ?>) row))
+                    .limit(Math.max(0, limit))
+                    .toList();
+        }
+        return List.of();
+    }
+
+    private Map<String, Object> sanitizeRow(Map<?, ?> row) {
+        Map<String, Object> safe = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : row.entrySet()) {
+            if (entry.getKey() == null) {
+                continue;
+            }
+            String key = String.valueOf(entry.getKey());
+            if (isSensitiveKey(key)) {
+                continue;
+            }
+            safe.put(key, entry.getValue());
+        }
+        return safe;
+    }
+
+    private boolean isSensitiveKey(String key) {
+        String normalized = key == null ? "" : key.toLowerCase();
+        return normalized.contains("password")
+                || normalized.contains("secret")
+                || normalized.contains("token")
+                || normalized.contains("apikey")
+                || normalized.contains("api_key");
+    }
+
+    private Map<String, Object> mapFromUiMetadata(AiToolResult result, String key) {
+        if (result == null || result.uiMetadata() == null) {
+            return Map.of();
+        }
+        Object value = result.uiMetadata().get(key);
+        if (!(value instanceof Map<?, ?> map)) {
+            return Map.of();
+        }
+        return sanitizeRow(map);
+    }
+
+    private List<Map<String, Object>> mapListFromUiMetadata(AiToolResult result, String key) {
+        if (result == null || result.uiMetadata() == null) {
+            return List.of();
+        }
+        Object value = result.uiMetadata().get(key);
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream()
+                .filter(Map.class::isInstance)
+                .map(row -> sanitizeRow((Map<?, ?>) row))
+                .toList();
     }
 }

@@ -336,7 +336,10 @@ public class AiService {
                 List.copyOf(missingParams).isEmpty() ? "MEDIUM" : "LOW",
                 !List.copyOf(missingParams).isEmpty(),
                 List.copyOf(missingParams).isEmpty() ? "" : "missing_parameters",
-                List.of("questions:" + results.size(), "rowsReturned:" + totalRows)
+                List.of("questions:" + results.size(), "rowsReturned:" + totalRows),
+                Map.of("type", "text", "title", "Nhiều câu hỏi"),
+                List.of(),
+                List.of()
         );
     }
 

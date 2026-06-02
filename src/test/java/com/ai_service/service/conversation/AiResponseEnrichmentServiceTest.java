@@ -41,6 +41,38 @@ class AiResponseEnrichmentServiceTest {
         assertThat(metadata.intentQuality()).isEqualTo("HIGH");
         assertThat(metadata.needsClarification()).isFalse();
         assertThat(metadata.qualitySignals()).contains("confidence:high", "dataBacked:true", "rowsReturned:1");
+        assertThat(metadata.display()).containsEntry("type", "table");
+        assertThat(metadata.display()).containsEntry("title", "Tồn kho sản phẩm");
+        assertThat(metadata.resultRows()).hasSize(1);
+        assertThat(metadata.resultRows().get(0)).containsEntry("sku", "AIRCON-DAIKIN");
+    }
+
+    @Test
+    void includesCandidateSuggestionsFromToolMetadata() {
+        AiIntentResult route = AiIntentResult.of(
+                AiIntent.STOCK_BY_PRODUCT,
+                Map.of("query", "ban quy bo con hang khong"),
+                0.9,
+                "test");
+        AiToolResult toolResult = AiToolResult
+                .message("StockTool.getStockByProduct", "Có phải bạn muốn hỏi Bánh quy bơ?")
+                .withUiMetadata(Map.of(
+                        "display", Map.of("type", "candidate_list", "title", "Có phải bạn muốn hỏi?"),
+                        "candidateSuggestions", List.of(Map.of(
+                                "sku", "SP-BANH-QUY-BO",
+                                "product_name", "Bánh quy bơ",
+                                "query", "SKU SP-BANH-QUY-BO còn hàng không?"
+                        ))
+                ));
+        AiQueryContext context = AiQueryContext.from("ban quy bo con hang khong", route, toolResult, 0);
+
+        AiResponseMetadata metadata = service.build(route, toolResult, context);
+
+        assertThat(metadata.display()).containsEntry("type", "candidate_list");
+        assertThat(metadata.candidateSuggestions()).hasSize(1);
+        assertThat(metadata.candidateSuggestions().get(0))
+                .containsEntry("sku", "SP-BANH-QUY-BO")
+                .containsEntry("query", "SKU SP-BANH-QUY-BO còn hàng không?");
     }
 
     @Test
