@@ -100,6 +100,25 @@ class AiToolExecutorAuthorizationTest {
     }
 
     @Test
+    void resolvesProductNameWithSmallTypos() throws Exception {
+        JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+        AiToolExecutorService service = new AiToolExecutorService(jdbcTemplate);
+        when(jdbcTemplate.queryForList(contains("FROM products")))
+                .thenReturn(List.of(
+                        Map.of("sku", "SP-BUT-BI-XANH", "name", "Bút bi xanh loại cao cấp"),
+                        Map.of("sku", "SP-BANH-QUY-BO", "name", "Bánh quy bơ")
+                ));
+        Method method = AiToolExecutorService.class.getDeclaredMethod("resolveProductSku", String.class);
+        method.setAccessible(true);
+
+        String cookieSku = (String) method.invoke(service, "Ban quy bo có còn hàng không?");
+        String penSku = (String) method.invoke(service, "But bi xnh còn hàng không?");
+
+        assertThat(cookieSku).isEqualTo("SP-BANH-QUY-BO");
+        assertThat(penSku).isEqualTo("SP-BUT-BI-XANH");
+    }
+
+    @Test
     void treatsGenericAvailabilityQuestionAsAllWarehouses() throws Exception {
         Method method = AiToolExecutorService.class.getDeclaredMethod("hasWarehouseHint", Map.class);
         method.setAccessible(true);

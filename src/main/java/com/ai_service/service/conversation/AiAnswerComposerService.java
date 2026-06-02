@@ -196,9 +196,9 @@ public class AiAnswerComposerService {
             return switch (route.getIntent()) {
                 case PRODUCT_COUNT -> productCountReply(map);
                 case LOCATION_COUNT -> locationCountReply(map, route);
-                case PRODUCT_LIST -> productListReply(map);
-                case SUPPLIER_LIST, SUPPLIER_SEARCH -> supplierListReply(map);
-                case CUSTOMER_LIST, CUSTOMER_SEARCH -> customerListReply(map);
+                case PRODUCT_LIST -> productListReply(map, route);
+                case SUPPLIER_LIST, SUPPLIER_SEARCH -> supplierListReply(map, route);
+                case CUSTOMER_LIST, CUSTOMER_SEARCH -> customerListReply(map, route);
                 case GLOBAL_SEARCH -> globalSearchReply(map);
                 case STOCK_TOTAL -> "Tổng tồn kho hiện có: " + value(map, "qty_on_hand") + " đơn vị, đã giữ chỗ "
                         + value(map, "qty_reserved") + ", khả dụng " + value(map, "qty_available")
@@ -257,7 +257,7 @@ public class AiAnswerComposerService {
                 case SLOW_MOVING_STOCK -> slowMovingStockReply(list);
                 case WAREHOUSE_STOCK_SUMMARY -> warehouseStockSummaryReply(list);
                 case BEST_HEAVY_LOCATION -> heavyLocationReply(list);
-                case NEAR_EXPIRY -> nearExpiryReply(list);
+                case NEAR_EXPIRY -> nearExpiryReply(list, route);
                 case PENDING_PUTAWAY -> putawayReply(list, route);
                 case PUTAWAY_BY_WAREHOUSE -> putawayByWarehouseReply(list);
                 case INBOUND_TODAY -> inboundTodayReply(list);
@@ -280,12 +280,12 @@ public class AiAnswerComposerService {
                 case CYCLE_COUNT_VARIANCE -> cycleVarianceReply(list, route);
                 case CYCLE_COUNT_STATUS -> cycleCountStatusReply(list);
                 case RMA_PENDING -> rmaReply(list, route);
-                case LOCATION_SEARCH -> locationReply(list);
+                case LOCATION_SEARCH -> locationReply(list, route);
                 case AUDIT_LOG -> auditLogReply(list);
                 case AI_AUDIT_LOG -> aiAuditLogReply(list);
                 case NOTIFICATION_LIST -> notificationReply(list);
-                case CATEGORY_LIST -> categoryReply(list);
-                case PRODUCT_BY_CATEGORY -> productByCategoryReply(list);
+                case CATEGORY_LIST -> categoryReply(list, route);
+                case PRODUCT_BY_CATEGORY -> productByCategoryReply(list, route);
                 case STOCK_BY_LOCATION -> stockByLocationReply(list);
                 case STOCK_BY_LOT -> stockByLotReply(list);
                 case DEAD_STOCK -> deadStockReply(list);
@@ -309,8 +309,8 @@ public class AiAnswerComposerService {
                 case WAREHOUSE_CAPACITY -> warehouseCapacityReply(list);
                 case PICKING_PRODUCTIVITY -> pickingProductivityReply(list);
                 case SUPPLIER_PERFORMANCE -> supplierPerformanceReply(list);
-                case USER_LOOKUP -> userLookupReply(list);
-                case ROLE_LIST -> roleListReply(list);
+                case USER_LOOKUP -> userLookupReply(list, route);
+                case ROLE_LIST -> roleListReply(list, route);
                 default -> null;
             };
         }
@@ -347,7 +347,7 @@ public class AiAnswerComposerService {
                 + value(map, "available") + ", maintenance " + value(map, "maintenance") + ".";
     }
 
-    private String productListReply(Map<?, ?> map) {
+    private String productListReply(Map<?, ?> map, AiIntentResult route) {
         Object itemsObject = map.get("items");
         if (!(itemsObject instanceof List<?> items)) {
             return "Tôi chưa lấy được danh sách sản phẩm phù hợp.";
@@ -355,9 +355,14 @@ public class AiAnswerComposerService {
         if (items.isEmpty()) {
             return "Hiện chưa có sản phẩm nào phù hợp với điều kiện bạn hỏi.";
         }
-        return "Có " + value(map, "total") + " sản phẩm trong hệ thống. Một số sản phẩm gần nhất: "
-                + joinRows(limit(items, 5), row -> value(row, "sku") + " - " + value(row, "product_name")
-                + " (" + value(row, "category_name") + ", " + statusValue(row, "status") + ")");
+        List<?> displayed = displayRows(items, route, 5);
+        long total = longValue(value(map, "total"));
+        return "Có " + value(map, "total") + " sản phẩm trong hệ thống. "
+                + (displayed.size() < total ? "Một số sản phẩm gần nhất:\n" : "Danh sách sản phẩm:\n")
+                + joinRowsAsBulletList(displayed, row -> value(row, "sku") + " - " + value(row, "product_name")
+                + " (" + value(row, "category_name") + ", " + statusValue(row, "status") + ")")
+                + continuationSuffix(total, displayed.size(), items.size(), "sản phẩm",
+                        "hiển thị tất cả sản phẩm", "lọc theo danh mục, trạng thái hoặc tên sản phẩm");
     }
 
     private String productCountReply(Map<?, ?> map) {
@@ -370,24 +375,34 @@ public class AiAnswerComposerService {
         return "Hệ thống hiện có " + value(map, "total") + " sản phẩm.";
     }
 
-    private String supplierListReply(Map<?, ?> map) {
+    private String supplierListReply(Map<?, ?> map, AiIntentResult route) {
         Object itemsObject = map.get("items");
         if (!(itemsObject instanceof List<?> items) || items.isEmpty()) {
             return "Tôi chưa tìm thấy nhà cung cấp phù hợp.";
         }
-        return "Tìm thấy " + value(map, "total") + " nhà cung cấp. Một số dòng: "
-                + joinRows(limit(items, 6), row -> value(row, "code") + " - " + value(row, "name")
-                + " (" + statusValue(row, "status") + ", liên hệ " + value(row, "contact_name") + ")");
+        List<?> displayed = displayRows(items, route, 6);
+        long total = longValue(value(map, "total"));
+        return "Tìm thấy " + value(map, "total") + " nhà cung cấp. "
+                + (displayed.size() < total ? "Một số dòng:\n" : "Danh sách nhà cung cấp:\n")
+                + joinRowsAsBulletList(displayed, row -> value(row, "code") + " - " + value(row, "name")
+                + " (" + statusValue(row, "status") + ", liên hệ " + value(row, "contact_name") + ")")
+                + continuationSuffix(total, displayed.size(), items.size(), "nhà cung cấp",
+                        "hiển thị tất cả nhà cung cấp", "lọc theo trạng thái, tên hoặc mã nhà cung cấp");
     }
 
-    private String customerListReply(Map<?, ?> map) {
+    private String customerListReply(Map<?, ?> map, AiIntentResult route) {
         Object itemsObject = map.get("items");
         if (!(itemsObject instanceof List<?> items) || items.isEmpty()) {
             return "Tôi chưa tìm thấy khách hàng phù hợp.";
         }
-        return "Tìm thấy " + value(map, "total") + " khách hàng. Một số dòng: "
-                + joinRows(limit(items, 6), row -> value(row, "code") + " - " + value(row, "name")
-                + " (" + activeText(value(row, "is_active")) + ", liên hệ " + value(row, "contact_name") + ")");
+        List<?> displayed = displayRows(items, route, 6);
+        long total = longValue(value(map, "total"));
+        return "Tìm thấy " + value(map, "total") + " khách hàng. "
+                + (displayed.size() < total ? "Một số dòng:\n" : "Danh sách khách hàng:\n")
+                + joinRowsAsBulletList(displayed, row -> value(row, "code") + " - " + value(row, "name")
+                + " (" + activeText(value(row, "is_active")) + ", liên hệ " + value(row, "contact_name") + ")")
+                + continuationSuffix(total, displayed.size(), items.size(), "khách hàng",
+                        "hiển thị tất cả khách hàng", "lọc theo trạng thái, tên hoặc mã khách hàng");
     }
 
     private String productDetailReply(List<?> list) {
@@ -638,8 +653,9 @@ public class AiAnswerComposerService {
                 + ", sức chứa kg " + value(first, "max_weight_kg") + ".";
     }
 
-    private String nearExpiryReply(List<?> list) {
-        List<?> displayed = limit(list, 10);
+    private String nearExpiryReply(List<?> list, AiIntentResult route) {
+        boolean showAll = containsAny(routeQuery(route), "tat ca", "toan bo", "day du", "all");
+        List<?> displayed = showAll ? list : limit(list, 10);
         String prefix = "**Phát hiện " + list.size() + " lô hàng sắp hết hạn hoặc đã quá hạn:**\n\n";
         String items = joinRowsAsBulletList(displayed, row -> {
             long daysLeft = longValue(value(row, "days_left"));
@@ -649,9 +665,17 @@ public class AiAnswerComposerService {
             return value(row, "product_name") + " (Kho **" + value(row, "warehouse_code") + "**) " +
                    "- Hạn dùng: `" + value(row, "expiry_date") + "` (" + statusText + ")";
         });
-        String suffix = list.size() > displayed.size() 
-            ? "\n\n*(Chỉ hiển thị " + displayed.size() + " lô hàng khẩn cấp nhất)*" 
-            : "";
+        String suffix = "";
+        if (!showAll && list.size() > displayed.size()) {
+            suffix = "\n\n*(Đang hiển thị " + displayed.size() + " lô khẩn cấp nhất. "
+                    + "Bạn có thể nhắn: \"hiển thị tất cả lô sắp hết hạn\" để xem đủ "
+                    + list.size() + " lô đã tìm thấy.)*";
+        }
+        if (list.size() >= 50) {
+            suffix += "\n\n*Lưu ý: kết quả truy vấn hiện giới hạn 50 lô đầu tiên. "
+                    + "Nếu cần xem sâu hơn, hãy lọc thêm theo kho hoặc khoảng ngày, ví dụ: "
+                    + "\"lô sắp hết hạn ở kho WH-HN trong 7 ngày tới\".*";
+        }
         return prefix + items + suffix;
     }
 
@@ -1004,11 +1028,14 @@ public class AiAnswerComposerService {
                 + ", lý do " + value(row, "reason"));
     }
 
-    private String locationReply(List<?> list) {
-        return "Tìm thấy " + list.size() + " vị trí: " + joinRows(limit(list, 8), row ->
+    private String locationReply(List<?> list, AiIntentResult route) {
+        List<?> displayed = displayRows(list, route, 8);
+        return "Tìm thấy " + list.size() + " vị trí:\n" + joinRowsAsBulletList(displayed, row ->
                 value(row, "warehouse_code") + "/" + value(row, "code")
                         + " zone " + value(row, "zone")
-                        + ", trạng thái " + statusValue(row, "status"));
+                        + ", trạng thái " + statusValue(row, "status"))
+                + continuationSuffix(list.size(), displayed.size(), list.size(), "vị trí",
+                        "hiển thị tất cả vị trí", "lọc theo kho, zone hoặc trạng thái vị trí");
     }
 
     private String auditLogReply(List<?> list) {
@@ -1400,31 +1427,29 @@ public class AiAnswerComposerService {
                         + " (" + value(row, "created_at") + ")");
     }
 
-    private String categoryReply(List<?> list) {
-        List<?> displayed = limit(list, 8);
+    private String categoryReply(List<?> list, AiIntentResult route) {
+        List<?> displayed = displayRows(list, route, 8);
         String prefix = displayed.size() < list.size()
                 ? "Có " + list.size() + " danh mục. Hiển thị " + displayed.size() + " danh mục đầu tiên:"
                 : "Có " + list.size() + " danh mục:";
-        String suffix = displayed.size() < list.size()
-                ? "\nCòn " + (list.size() - displayed.size()) + " danh mục khác chưa hiển thị."
-                : "";
         return prefix + "\n" + joinRowsAsBulletList(displayed, row ->
                 value(row, "code") + " - " + value(row, "name")
-                        + ", sản phẩm " + value(row, "product_count")) + suffix;
+                        + ", sản phẩm " + value(row, "product_count"))
+                + continuationSuffix(list.size(), displayed.size(), list.size(), "danh mục",
+                        "hiển thị tất cả danh mục", "lọc theo tên hoặc mã danh mục");
     }
 
-    private String productByCategoryReply(List<?> list) {
-        List<?> displayed = limit(list, 8);
+    private String productByCategoryReply(List<?> list, AiIntentResult route) {
+        List<?> displayed = displayRows(list, route, 8);
         String prefix = displayed.size() < list.size()
                 ? "Tìm thấy " + list.size() + " sản phẩm trong danh mục. Hiển thị "
                         + displayed.size() + " sản phẩm đầu tiên:"
                 : "Tìm thấy " + list.size() + " sản phẩm trong danh mục:";
-        String suffix = displayed.size() < list.size()
-                ? "\nCòn " + (list.size() - displayed.size()) + " sản phẩm khác chưa hiển thị."
-                : "";
         return prefix + "\n" + joinRowsAsBulletList(displayed, row ->
                 value(row, "sku") + " - " + value(row, "product_name")
-                        + ", tồn " + value(row, "qty_on_hand")) + suffix;
+                        + ", tồn " + value(row, "qty_on_hand"))
+                + continuationSuffix(list.size(), displayed.size(), list.size(), "sản phẩm",
+                        "hiển thị tất cả sản phẩm trong danh mục", "lọc thêm theo trạng thái hoặc tên sản phẩm");
     }
 
     private String stockByLocationReply(List<?> list) {
@@ -1499,17 +1524,23 @@ public class AiAnswerComposerService {
                         + value(row, "on_time_orders"));
     }
 
-    private String userLookupReply(List<?> list) {
-        return "Tìm thấy " + list.size() + " người dùng: " + joinRows(limit(list, 8), row ->
+    private String userLookupReply(List<?> list, AiIntentResult route) {
+        List<?> displayed = displayRows(list, route, 8);
+        return "Tìm thấy " + list.size() + " người dùng:\n" + joinRowsAsBulletList(displayed, row ->
                 value(row, "username") + " - " + value(row, "full_name")
                         + ", vai trò " + value(row, "roles")
-                        + ", kho " + value(row, "warehouses"));
+                        + ", kho " + value(row, "warehouses"))
+                + continuationSuffix(list.size(), displayed.size(), list.size(), "người dùng",
+                        "hiển thị tất cả người dùng", "lọc theo tên, vai trò hoặc kho");
     }
 
-    private String roleListReply(List<?> list) {
-        return "Hệ thống có " + list.size() + " vai trò: " + joinRows(limit(list, 10), row ->
+    private String roleListReply(List<?> list, AiIntentResult route) {
+        List<?> displayed = displayRows(list, route, 10);
+        return "Hệ thống có " + list.size() + " vai trò:\n" + joinRowsAsBulletList(displayed, row ->
                 value(row, "code") + " - " + value(row, "name")
-                        + " (" + value(row, "user_count") + " user)");
+                        + " (" + value(row, "user_count") + " user)")
+                + continuationSuffix(list.size(), displayed.size(), list.size(), "vai trò",
+                        "hiển thị tất cả vai trò", "lọc theo tên hoặc mã vai trò");
     }
 
     private String missingParameterReply(AiIntentResult route, AiToolResult toolResult) {
@@ -1911,6 +1942,39 @@ public class AiAnswerComposerService {
     private int listSize(Map<?, ?> map, String key) {
         Object value = map.get(key);
         return value instanceof List<?> rows ? rows.size() : 0;
+    }
+
+    private List<?> displayRows(List<?> rows, AiIntentResult route, int defaultLimit) {
+        return wantsFullList(route) ? rows : limit(rows, defaultLimit);
+    }
+
+    private boolean wantsFullList(AiIntentResult route) {
+        return containsAny(routeQuery(route), "tat ca", "toan bo", "day du", "all");
+    }
+
+    private String continuationSuffix(long total, int displayed, int loaded, String noun,
+            String fullListPrompt, String filterHint) {
+        StringBuilder suffix = new StringBuilder();
+        if (total > displayed) {
+            suffix.append("\n\n*Đang hiển thị ").append(formatNumber(displayed)).append(" ")
+                    .append(noun).append(" tiêu biểu. Bạn có thể nhắn: \"")
+                    .append(fullListPrompt).append("\" để xem ");
+            if (total > loaded) {
+                suffix.append("toàn bộ ").append(formatNumber(loaded)).append(" ")
+                        .append(noun).append(" đã tải.");
+            } else {
+                suffix.append("đủ ").append(formatNumber(total)).append(" ")
+                        .append(noun).append(" đã tìm thấy.");
+            }
+            suffix.append("*");
+        }
+        if (loaded >= 50 && total >= loaded) {
+            suffix.append("\n\n*Lưu ý: kết quả truy vấn hiện có thể đang giới hạn ")
+                    .append(formatNumber(loaded)).append(" ").append(noun)
+                    .append(" đầu tiên. Nếu cần xem sâu hơn, hãy ")
+                    .append(filterHint).append(".*");
+        }
+        return suffix.toString();
     }
 
     private List<?> limit(List<?> rows, int limit) {

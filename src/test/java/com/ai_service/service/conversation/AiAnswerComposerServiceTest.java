@@ -63,6 +63,147 @@ class AiAnswerComposerServiceTest {
     }
 
     @Test
+    void formatsNearExpiryRowsAsTenUrgentItemsWithFollowUpHint() {
+        List<Map<String, Object>> rows = java.util.stream.IntStream.rangeClosed(1, 12)
+                .mapToObj(index -> Map.<String, Object>of(
+                        "product_name", "Sản phẩm " + index,
+                        "warehouse_code", "WH-HN",
+                        "expiry_date", "2026-06-" + String.format("%02d", index),
+                        "days_left", index - 6
+                ))
+                .toList();
+
+        String reply = composer.compose(
+                "Sản phẩm nào sắp hết hạn?",
+                AiIntentResult.of(AiIntent.NEAR_EXPIRY, Map.of("days", 30), 0.9, "test"),
+                AiToolResult.data("StockTool.getNearExpiry", rows),
+                List.of());
+
+        assertThat(reply).contains("**Phát hiện 12 lô hàng sắp hết hạn hoặc đã quá hạn:**");
+        assertThat(reply).contains("Sản phẩm 1");
+        assertThat(reply).contains("Sản phẩm 10");
+        assertThat(reply).doesNotContain("Sản phẩm 11");
+        assertThat(reply).doesNotContain("Sản phẩm 12");
+        assertThat(reply).contains("hiển thị tất cả lô sắp hết hạn");
+        assertThat(reply).contains("xem đủ 12 lô đã tìm thấy");
+    }
+
+    @Test
+    void formatsAllNearExpiryRowsWhenUserRequestsFullList() {
+        List<Map<String, Object>> rows = java.util.stream.IntStream.rangeClosed(1, 12)
+                .mapToObj(index -> Map.<String, Object>of(
+                        "product_name", "Sản phẩm " + index,
+                        "warehouse_code", "WH-HN",
+                        "expiry_date", "2026-06-" + String.format("%02d", index),
+                        "days_left", index - 6
+                ))
+                .toList();
+
+        String reply = composer.compose(
+                "Hiển thị toàn bộ lô sắp hết hạn",
+                AiIntentResult.of(AiIntent.NEAR_EXPIRY, Map.of("days", 30, "query", "Hiển thị toàn bộ lô sắp hết hạn"), 0.9, "test"),
+                AiToolResult.data("StockTool.getNearExpiry", rows),
+                List.of());
+
+        assertThat(reply).contains("Sản phẩm 1");
+        assertThat(reply).contains("Sản phẩm 10");
+        assertThat(reply).contains("Sản phẩm 11");
+        assertThat(reply).contains("Sản phẩm 12");
+        assertThat(reply).doesNotContain("Đang hiển thị 10 lô khẩn cấp nhất");
+    }
+
+    @Test
+    void warnsWhenNearExpiryResultHitsBackendLimit() {
+        List<Map<String, Object>> rows = java.util.stream.IntStream.rangeClosed(1, 50)
+                .mapToObj(index -> Map.<String, Object>of(
+                        "product_name", "Sản phẩm " + index,
+                        "warehouse_code", "WH-HN",
+                        "expiry_date", "2026-06-" + String.format("%02d", Math.min(index, 28)),
+                        "days_left", index - 6
+                ))
+                .toList();
+
+        String reply = composer.compose(
+                "Sản phẩm nào sắp hết hạn?",
+                AiIntentResult.of(AiIntent.NEAR_EXPIRY, Map.of("days", 30), 0.9, "test"),
+                AiToolResult.data("StockTool.getNearExpiry", rows),
+                List.of());
+
+        assertThat(reply).contains("kết quả truy vấn hiện giới hạn 50 lô đầu tiên");
+        assertThat(reply).contains("lô sắp hết hạn ở kho WH-HN trong 7 ngày tới");
+    }
+
+    @Test
+    void productListShowsSampleAndFollowUpWhenThereAreMoreRows() {
+        List<Map<String, Object>> items = java.util.stream.IntStream.rangeClosed(1, 7)
+                .mapToObj(index -> Map.<String, Object>of(
+                        "sku", "SKU-" + index,
+                        "product_name", "Sản phẩm " + index,
+                        "category_name", "Danh mục A",
+                        "status", "ACTIVE"
+                ))
+                .toList();
+
+        String reply = composer.compose(
+                "Danh sách sản phẩm",
+                AiIntentResult.of(AiIntent.PRODUCT_LIST, Map.of("query", "Danh sách sản phẩm"), 0.9, "test"),
+                AiToolResult.data("ProductTool.listProducts", Map.of("total", 7, "items", items)),
+                List.of());
+
+        assertThat(reply).contains("Có 7 sản phẩm trong hệ thống");
+        assertThat(reply).contains("SKU-5");
+        assertThat(reply).doesNotContain("SKU-6");
+        assertThat(reply).contains("hiển thị tất cả sản phẩm");
+        assertThat(reply).contains("đủ 7 sản phẩm đã tìm thấy");
+    }
+
+    @Test
+    void categoryListCanShowAllWhenRequested() {
+        List<Map<String, Object>> rows = java.util.stream.IntStream.rangeClosed(1, 10)
+                .mapToObj(index -> Map.<String, Object>of(
+                        "code", "CAT-" + index,
+                        "name", "Danh mục " + index,
+                        "product_count", index
+                ))
+                .toList();
+
+        String reply = composer.compose(
+                "Hiển thị toàn bộ danh mục",
+                AiIntentResult.of(AiIntent.CATEGORY_LIST, Map.of("query", "Hiển thị toàn bộ danh mục"), 0.9, "test"),
+                AiToolResult.data("ProductTool.listCategories", rows),
+                List.of());
+
+        assertThat(reply).contains("CAT-1");
+        assertThat(reply).contains("CAT-8");
+        assertThat(reply).contains("CAT-9");
+        assertThat(reply).contains("CAT-10");
+        assertThat(reply).doesNotContain("Đang hiển thị");
+    }
+
+    @Test
+    void userLookupWarnsWhenResultHitsLoadedLimit() {
+        List<Map<String, Object>> rows = java.util.stream.IntStream.rangeClosed(1, 50)
+                .mapToObj(index -> Map.<String, Object>of(
+                        "username", "user" + index,
+                        "full_name", "User " + index,
+                        "roles", "WAREHOUSE_STAFF",
+                        "warehouses", "WH-HN"
+                ))
+                .toList();
+
+        String reply = composer.compose(
+                "Danh sách người dùng",
+                AiIntentResult.of(AiIntent.USER_LOOKUP, Map.of("query", "Danh sách người dùng"), 0.9, "test"),
+                AiToolResult.data("UserTool.lookupUsers", rows),
+                List.of());
+
+        assertThat(reply).contains("user8");
+        assertThat(reply).doesNotContain("user9");
+        assertThat(reply).contains("hiển thị tất cả người dùng");
+        assertThat(reply).contains("kết quả truy vấn hiện có thể đang giới hạn 50 người dùng đầu tiên");
+    }
+
+    @Test
     void formatsPutawayTasksAsBullets() {
         String reply = composer.compose(
                 "Có task putaway nào đang chờ lâu không?",

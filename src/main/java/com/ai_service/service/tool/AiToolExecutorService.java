@@ -872,6 +872,15 @@ public class AiToolExecutorService {
                     "Kho " + warehouse.code()
                             + " có tồn tại, nhưng tôi chưa tìm thấy tồn kho phù hợp với sản phẩm hoặc SKU bạn hỏi trong kho này.");
         }
+        if (rows.isEmpty() && StringUtils.hasText(query)) {
+            List<String> suggestions = suggestProductCandidates(query, 3);
+            if (!suggestions.isEmpty()) {
+                return AiToolResult.message("StockTool.getStockByProduct",
+                        "Tôi chưa tìm thấy tồn kho khớp chắc chắn với tên sản phẩm bạn hỏi. Có phải bạn muốn hỏi: "
+                                + String.join("; ", suggestions)
+                                + "? Bạn có thể hỏi lại bằng SKU hoặc tên gần đúng hơn.");
+            }
+        }
         return AiToolResult.data("StockTool.getStockByProduct", rows);
     }
 
@@ -4029,10 +4038,72 @@ public class AiToolExecutorService {
             for (String token : normalizedValue.split("[^a-z0-9]+")) {
                 if (isMeaningfulToken(token) && queryTokens.contains(token)) {
                     score++;
+                } else if (isMeaningfulToken(token) && approximatelyContainsToken(queryTokens, token)) {
+                    score++;
                 }
             }
         }
         return score;
+    }
+
+    private boolean approximatelyContainsToken(List<String> queryTokens, String candidateToken) {
+        if (queryTokens == null || queryTokens.isEmpty() || !StringUtils.hasText(candidateToken)) {
+            return false;
+        }
+        for (String queryToken : queryTokens) {
+            if (tokensApproximatelyMatch(queryToken, candidateToken)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean tokensApproximatelyMatch(String queryToken, String candidateToken) {
+        if (!StringUtils.hasText(queryToken) || !StringUtils.hasText(candidateToken)) {
+            return false;
+        }
+        if (queryToken.equals(candidateToken)) {
+            return true;
+        }
+        int minLength = Math.min(queryToken.length(), candidateToken.length());
+        int maxLength = Math.max(queryToken.length(), candidateToken.length());
+        if (minLength < 3 || maxLength - minLength > 2) {
+            return false;
+        }
+        if (queryToken.charAt(0) != candidateToken.charAt(0)) {
+            return false;
+        }
+        int maxDistance = maxLength <= 5 ? 1 : 2;
+        return editDistanceAtMost(queryToken, candidateToken, maxDistance);
+    }
+
+    private boolean editDistanceAtMost(String left, String right, int maxDistance) {
+        if (Math.abs(left.length() - right.length()) > maxDistance) {
+            return false;
+        }
+        int[] previous = new int[right.length() + 1];
+        int[] current = new int[right.length() + 1];
+        for (int j = 0; j <= right.length(); j++) {
+            previous[j] = j;
+        }
+        for (int i = 1; i <= left.length(); i++) {
+            current[0] = i;
+            int rowMin = current[0];
+            for (int j = 1; j <= right.length(); j++) {
+                int cost = left.charAt(i - 1) == right.charAt(j - 1) ? 0 : 1;
+                current[j] = Math.min(
+                        Math.min(current[j - 1] + 1, previous[j] + 1),
+                        previous[j - 1] + cost);
+                rowMin = Math.min(rowMin, current[j]);
+            }
+            if (rowMin > maxDistance) {
+                return false;
+            }
+            int[] temp = previous;
+            previous = current;
+            current = temp;
+        }
+        return previous[right.length()] <= maxDistance;
     }
 
     private boolean containsNormalizedPhrase(String text, String phrase) {
@@ -4062,6 +4133,35 @@ public class AiToolExecutorService {
                 .map(MatchResult::group)
                 .filter(this::isMeaningfulToken)
                 .distinct()
+                .toList();
+    }
+
+    private List<String> suggestProductCandidates(String query, int max) {
+        String normalizedQuery = normalize(query);
+        String normalizedKeyword = normalize(cleanProductKeyword(query));
+        String scoringText = StringUtils.hasText(normalizedKeyword) ? normalizedKeyword : normalizedQuery;
+        if (meaningfulTokens(scoringText).isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> products = jdbcTemplate.queryForList("""
+                SELECT sku, name
+                FROM products
+                WHERE status = 'ACTIVE'
+                ORDER BY name ASC
+                LIMIT 500
+                """);
+        return products.stream()
+                .map(product -> new ProductCandidate(
+                        text(product.get("sku")),
+                        text(product.get("name")),
+                        scoreCandidate(scoringText, text(product.get("sku")), text(product.get("name")))))
+                .filter(candidate -> candidate.score() > 0)
+                .sorted((a, b) -> {
+                    int scoreCompare = Integer.compare(b.score(), a.score());
+                    return scoreCompare != 0 ? scoreCompare : a.name().compareToIgnoreCase(b.name());
+                })
+                .limit(Math.max(1, max))
+                .map(candidate -> candidate.sku() + " - " + candidate.name())
                 .toList();
     }
 
@@ -4151,5 +4251,8 @@ public class AiToolExecutorService {
     }
 
     private record ResolvedWarehouse(String code, String name, boolean active) {
+    }
+
+    private record ProductCandidate(String sku, String name, int score) {
     }
 }
