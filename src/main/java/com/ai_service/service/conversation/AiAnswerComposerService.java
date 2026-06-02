@@ -110,6 +110,13 @@ public class AiAnswerComposerService {
             return "Tôi chưa xử lý được yêu cầu này. Bạn vui lòng thử lại với câu hỏi cụ thể hơn.";
         }
         if (!toolResult.dataBacked()) {
+            if (toolResult.missingParams() != null && !toolResult.missingParams().isEmpty()) {
+                return missingParameterReply(route, toolResult);
+            }
+            if ((route != null && route.getIntent() == AiIntent.AMBIGUOUS)
+                    || toolResult.toolName() != null && toolResult.toolName().toLowerCase(Locale.ROOT).contains("clarification")) {
+                return clarificationReply(route, toolResult);
+            }
             return toolResult.message();
         }
         Object data = toolResult.data();
@@ -465,7 +472,8 @@ public class AiAnswerComposerService {
                 if (requestedOnHand > 0) {
                     return "Có, " + productLabel + " hiện có ở kho **" + requestedWarehouse + "**.\n"
                             + "- **Tồn hiện có:** **" + formatNumber(requestedOnHand) + "** đơn vị\n"
-                            + "- **Khả dụng:** **" + formatNumber(requestedAvailable) + "** đơn vị.";
+                            + "- **Khả dụng:** **" + formatNumber(requestedAvailable) + "** đơn vị.\n"
+                            + stockInsight(requestedOnHand, requestedAvailable, 0);
                 }
                 String otherWarehouses = byWarehouse.entrySet().stream()
                         .filter(entry -> !"N/A".equals(entry.getKey()))
@@ -492,7 +500,8 @@ public class AiAnswerComposerService {
             return "Có, " + productLabel + " hiện có trong kho.\n"
                     + "- **Tổng tồn hiện có:** **" + formatNumber(totalOnHand) + "** đơn vị\n"
                     + "- **Khả dụng:** **" + formatNumber(totalAvailable) + "** đơn vị\n"
-                    + "- **Kho có hàng:** " + warehouses + ".";
+                    + "- **Kho có hàng:** " + warehouses + ".\n"
+                    + stockInsight(totalOnHand, totalAvailable, totalReserved);
         }
 
         if (query.contains("kho nao") && query.contains("nhieu") && query.contains("nhat")) {
@@ -512,7 +521,8 @@ public class AiAnswerComposerService {
             return "**Thông tin tồn kho " + productLabel + ":**\n" +
                    "- **Tại kho:** **" + warehouseCode + "**\n" +
                    "- **Tồn kho hiện có:** **" + formatNumber(totalOnHand) + "** đơn vị\n" +
-                   "- **Trạng thái khả dụng:** " + availableText + ".";
+                   "- **Trạng thái khả dụng:** " + availableText + ".\n" +
+                   stockInsight(totalOnHand, totalAvailable, totalReserved);
         }
 
         if (totalOnHand <= 0 && totalAvailable <= 0) {
@@ -527,6 +537,7 @@ public class AiAnswerComposerService {
           .append("- **Tổng tồn hiện có:** **").append(formatNumber(totalOnHand)).append("** đơn vị\n")
           .append("- **Khả dụng:** **").append(formatNumber(totalAvailable)).append("** đơn vị\n")
           .append("- **Đang giữ chỗ:** **").append(formatNumber(totalReserved)).append("** đơn vị\n\n")
+          .append(stockInsight(totalOnHand, totalAvailable, totalReserved)).append("\n\n")
           .append("**Chi tiết theo từng kho:**\n");
           
         for (Map.Entry<String, long[]> entry : byWarehouse.entrySet()) {
@@ -662,12 +673,15 @@ public class AiAnswerComposerService {
         String suffix = list.size() > displayed.size()
                 ? "\n\n*Còn " + formatNumber(list.size() - displayed.size()) + " task khác chưa hiển thị.*"
                 : "";
+        long totalQty = sumLong(list, "qty_to_putaway");
         return "**Có " + formatNumber(list.size()) + " putaway task đang chờ/xử lý:**\n"
+                + "- **Tổng số lượng cần xếp kệ:** **" + formatNumber(totalQty) + "** đơn vị\n\n"
                 + joinRowsAsBulletList(displayed, row -> productDisplay(row)
                 + "\n  - Số lượng: **" + formatNumber(longValue(row, "qty_to_putaway")) + "**"
                 + "\n  - Trạng thái: `" + statusValue(row, "status") + "`"
                 + "\n  - Vị trí gợi ý: `" + value(row, "suggested_location") + "`")
-                + suffix;
+                + suffix
+                + "\n\n**Khuyến nghị:** xử lý trước các task có số lượng lớn hoặc vị trí gợi ý rõ ràng để giảm tồn chờ putaway.";
     }
 
     private String putawayByWarehouseReply(List<?> list) {
@@ -758,12 +772,15 @@ public class AiAnswerComposerService {
         String suffix = list.size() > displayed.size()
                 ? "\n\n*Còn " + formatNumber(list.size() - displayed.size()) + " PO khác chưa hiển thị.*"
                 : "";
+        long totalRemaining = sumLong(list, "remaining_qty");
         return "**Có " + formatNumber(list.size()) + " PO đang chờ nhận/chưa hoàn tất:**\n"
+                + "- **Tổng số lượng còn phải nhận:** **" + formatNumber(totalRemaining) + "** đơn vị\n\n"
                 + joinRowsAsBulletList(displayed, row -> "**" + value(row, "po_number") + "**"
                 + " - " + value(row, "supplier_name")
                 + "\n  - Trạng thái: `" + statusValue(row, "status") + "`"
                 + "\n  - Còn phải nhận: **" + formatNumber(longValue(row, "remaining_qty")) + "** đơn vị")
-                + suffix;
+                + suffix
+                + "\n\n**Khuyến nghị:** ưu tiên xác nhận lịch giao của các PO có số lượng còn phải nhận lớn, rồi đối chiếu với phiếu nhập/GR khi hàng về.";
     }
 
     private String outboundPriorityReply(List<?> list) {
@@ -1234,7 +1251,8 @@ public class AiAnswerComposerService {
                 + "**Một số dòng cần xử lý:**\n"
                 + joinRowsFromMapListAsBulletList(map, "items", row -> "**" + value(row, "so_number")
                 + "** - SKU `" + value(row, "sku") + "` thiếu **"
-                + formatNumber(longValue(row, "shortage_qty")) + "** đơn vị", 5);
+                + formatNumber(longValue(row, "shortage_qty")) + "** đơn vị", 5)
+                + "\n\n**Khuyến nghị:** kiểm tra tồn khả dụng và đơn nhập đang chờ nhận cho các SKU thiếu nhiều nhất trước khi xác nhận lịch giao.";
     }
 
     private String cycleCountRecountSkusReply(List<?> list) {
@@ -1492,6 +1510,94 @@ public class AiAnswerComposerService {
         return "Hệ thống có " + list.size() + " vai trò: " + joinRows(limit(list, 10), row ->
                 value(row, "code") + " - " + value(row, "name")
                         + " (" + value(row, "user_count") + " user)");
+    }
+
+    private String missingParameterReply(AiIntentResult route, AiToolResult toolResult) {
+        AiIntent intent = route == null || route.getIntent() == null ? AiIntent.UNSUPPORTED : route.getIntent();
+        String missing = toolResult.missingParams().stream()
+                .map(this::paramLabel)
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("thông tin cần thiết");
+        return "**Mình chưa đủ thông tin để " + taskLabel(intent) + ".**\n"
+                + "- **Cần bổ sung:** " + missing + "\n"
+                + "- **Ví dụ:** \"" + exampleQuestion(intent) + "\"\n\n"
+                + "Bạn gửi thêm thông tin đó, mình sẽ kiểm tra tiếp trên dữ liệu kho.";
+    }
+
+    private String clarificationReply(AiIntentResult route, AiToolResult toolResult) {
+        String originalMessage = toolResult == null ? "" : toolResult.message();
+        String message = originalMessage == null || originalMessage.isBlank()
+                ? "Bạn vui lòng nói rõ thêm nghiệp vụ cần kiểm tra."
+                : originalMessage;
+        return "**Mình cần bạn làm rõ thêm câu hỏi.**\n"
+                + "- " + message + "\n"
+                + "- Bạn có thể hỏi theo mẫu: \"SKU 00018 còn bao nhiêu?\", \"PO-2026-0001 đã nhận đủ chưa?\" hoặc \"Đơn xuất nào đang thiếu hàng?\"";
+    }
+
+    private String taskLabel(AiIntent intent) {
+        return switch (intent) {
+            case STOCK_BY_PRODUCT -> "kiểm tra tồn kho sản phẩm";
+            case STOCK_BY_LOCATION -> "kiểm tra hàng theo vị trí";
+            case STOCK_BY_LOT -> "kiểm tra tồn theo lô";
+            case PURCHASE_ORDER_DETAIL, PURCHASE_ORDER_STATUS -> "kiểm tra phiếu nhập";
+            case SALES_ORDER_DETAIL, SALES_ORDER_STATUS -> "kiểm tra đơn xuất";
+            case WAREHOUSE_DETAIL -> "kiểm tra thông tin kho";
+            default -> "xử lý yêu cầu này";
+        };
+    }
+
+    private String exampleQuestion(AiIntent intent) {
+        return switch (intent) {
+            case STOCK_BY_PRODUCT -> "SKU 00018 còn bao nhiêu trong kho WH-001?";
+            case STOCK_BY_LOCATION -> "Vị trí A-01-02 đang chứa hàng gì?";
+            case STOCK_BY_LOT -> "Lô LOT-2026-001 còn bao nhiêu?";
+            case PURCHASE_ORDER_DETAIL, PURCHASE_ORDER_STATUS -> "PO-2026-0001 đã nhận đủ chưa?";
+            case SALES_ORDER_DETAIL, SALES_ORDER_STATUS -> "SO-2026-0001 còn thiếu gì?";
+            case WAREHOUSE_DETAIL -> "Kho WH-001 ở đâu?";
+            default -> "Tình hình kho hôm nay có gì cần chú ý?";
+        };
+    }
+
+    private String paramLabel(String param) {
+        if (param == null || param.isBlank()) {
+            return "thông tin cần thiết";
+        }
+        String normalized = normalize(param);
+        if (normalized.contains("sku") || normalized.contains("product")) {
+            return "SKU hoặc tên sản phẩm";
+        }
+        if (normalized.contains("warehouse")) {
+            return "mã kho";
+        }
+        if (normalized.contains("location")) {
+            return "mã vị trí";
+        }
+        if (normalized.contains("lot")) {
+            return "mã lô";
+        }
+        if (normalized.contains("po")) {
+            return "mã phiếu nhập/PO";
+        }
+        if (normalized.contains("so")) {
+            return "mã đơn xuất/SO";
+        }
+        return param.replace('|', '/');
+    }
+
+    private String stockInsight(long onHand, long available, long reserved) {
+        if (onHand <= 0) {
+            return "- **Nhận định:** chưa có tồn để xuất. Nên kiểm tra PO đang chờ nhận hoặc dữ liệu putaway.";
+        }
+        if (available <= 0) {
+            return "- **Nhận định:** có tồn nhưng chưa khả dụng để xuất, khả năng đang bị giữ chỗ hoặc chưa hoàn tất xử lý kho.";
+        }
+        if (reserved > 0 && available < onHand) {
+            return "- **Nhận định:** một phần tồn đang được giữ chỗ. Khi tạo đơn xuất mới, nên dùng số khả dụng thay vì tổng tồn.";
+        }
+        if (available <= 5) {
+            return "- **Nhận định:** tồn khả dụng thấp, nên xem xét nhập bổ sung hoặc chuyển kho nếu sản phẩm bán nhanh.";
+        }
+        return "- **Nhận định:** tồn khả dụng đang ổn theo dữ liệu hiện tại.";
     }
 
     private String routeQuery(AiIntentResult route) {

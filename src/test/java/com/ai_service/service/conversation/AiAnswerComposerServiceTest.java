@@ -35,8 +35,10 @@ class AiAnswerComposerServiceTest {
                 List.of());
 
         assertThat(reply).contains("**Có 2 PO đang chờ nhận/chưa hoàn tất:**");
+        assertThat(reply).contains("**Tổng số lượng còn phải nhận:** **2.350** đơn vị");
         assertThat(reply).contains("- **PO-2026-000180**");
         assertThat(reply).contains("\n  - Trạng thái:");
+        assertThat(reply).contains("**Khuyến nghị:** ưu tiên xác nhận lịch giao");
         assertThat(reply).doesNotContain("PO-2026-000180 trạng thái");
     }
 
@@ -57,6 +59,7 @@ class AiAnswerComposerServiceTest {
         assertThat(reply).contains("**Có 768 đơn xuất thiếu hàng để giao.**");
         assertThat(reply).contains("**Một số dòng cần xử lý:**");
         assertThat(reply).contains("- **SO-2026-000198**");
+        assertThat(reply).contains("**Khuyến nghị:** kiểm tra tồn khả dụng");
     }
 
     @Test
@@ -74,8 +77,10 @@ class AiAnswerComposerServiceTest {
                 List.of());
 
         assertThat(reply).contains("**Có 1 putaway task đang chờ/xử lý:**");
+        assertThat(reply).contains("**Tổng số lượng cần xếp kệ:** **15** đơn vị");
         assertThat(reply).contains("- Bút Bi TL-027");
         assertThat(reply).contains("\n  - Vị trí gợi ý:");
+        assertThat(reply).contains("**Khuyến nghị:** xử lý trước các task");
     }
 
     @Test
@@ -98,6 +103,7 @@ class AiAnswerComposerServiceTest {
         assertThat(reply).startsWith("Có,");
         assertThat(reply).contains("hiện có trong kho");
         assertThat(reply).contains("**HN-TT**");
+        assertThat(reply).contains("**Nhận định:** một phần tồn đang được giữ chỗ");
     }
 
     @Test
@@ -138,6 +144,7 @@ class AiAnswerComposerServiceTest {
         assertThat(reply).contains("**10** đơn vị");
         assertThat(reply).contains("**WH-HN**");
         assertThat(reply).contains("**WH-HCM**");
+        assertThat(reply).contains("**Nhận định:** một phần tồn đang được giữ chỗ");
     }
 
     @Test
@@ -191,6 +198,33 @@ class AiAnswerComposerServiceTest {
 
         assertThat(reply).contains("Chưa có tồn ở bất kỳ kho nào");
         assertThat(reply).doesNotContain("Chi tiết theo từng kho");
+    }
+
+    @Test
+    void asksForSpecificMissingParameterWithExample() {
+        String reply = composer.compose(
+                "Còn bao nhiêu hàng?",
+                AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, Map.of("query", "Còn bao nhiêu hàng?"), 0.88, "test"),
+                AiToolResult.message("StockTool.getStockByProduct", "Cần tên sản phẩm hoặc SKU.")
+                        .withMetadata(List.of("products", "stock_levels"), List.of("sku|product")),
+                List.of());
+
+        assertThat(reply).contains("**Mình chưa đủ thông tin để kiểm tra tồn kho sản phẩm.**");
+        assertThat(reply).contains("SKU hoặc tên sản phẩm");
+        assertThat(reply).contains("SKU 00018 còn bao nhiêu trong kho WH-001?");
+    }
+
+    @Test
+    void clarifiesAmbiguousQuestionWithConcreteExamples() {
+        String reply = composer.compose(
+                "Kiểm tra giúp tôi",
+                AiIntentResult.of(AiIntent.AMBIGUOUS, Map.of("query", "Kiểm tra giúp tôi"), 0.5, "test"),
+                AiToolResult.message("Clarification", "Bạn vui lòng nói rõ thêm mã kho, SKU, đơn hàng hoặc khoảng thời gian cần kiểm tra."),
+                List.of());
+
+        assertThat(reply).contains("**Mình cần bạn làm rõ thêm câu hỏi.**");
+        assertThat(reply).contains("SKU 00018 còn bao nhiêu?");
+        assertThat(reply).contains("Đơn xuất nào đang thiếu hàng?");
     }
 
     @Test

@@ -1,9 +1,11 @@
 package com.ai_service.service.conversation;
 
 import com.ai_service.context.AiQueryContext;
+import com.ai_service.context.AiQualityAssessment;
 import com.ai_service.dto.AiAskResponse.AiActionSuggestion;
 import com.ai_service.dto.AiAskResponse.AiResponseMetadata;
 import com.ai_service.intent.AiIntent;
+import com.ai_service.intent.AiIntentCatalog;
 import com.ai_service.intent.AiIntentResult;
 import com.ai_service.tool.AiToolResult;
 import org.springframework.stereotype.Service;
@@ -19,16 +21,26 @@ public class AiResponseEnrichmentService {
     public AiResponseMetadata build(AiIntentResult route, AiToolResult toolResult, AiQueryContext context) {
         AiIntent intent = route == null || route.getIntent() == null ? AiIntent.UNSUPPORTED : route.getIntent();
         Map<String, Object> parameters = route == null ? Map.of() : route.safeParameters();
+        List<String> missing = context == null ? missingParams(toolResult) : context.missingParams();
+        int rowsReturned = context == null ? estimateRows(toolResult) : context.rowCount();
+        AiQualityAssessment quality = context == null
+                ? AiQualityAssessment.from(route, toolResult, missing, rowsReturned)
+                : context.quality();
         return new AiResponseMetadata(
                 intent.name(),
                 route == null ? 0.0 : route.getConfidence(),
+                context == null ? AiIntentCatalog.get(intent).domain() : context.domain(),
                 context == null ? toolName(toolResult) : context.toolName(),
                 context == null ? dataSources(toolResult) : context.dataSources(),
-                context == null ? missingParams(toolResult) : context.missingParams(),
-                context == null ? estimateRows(toolResult) : context.rowCount(),
+                missing,
+                rowsReturned,
                 sanitizedParameters(parameters),
                 suggestedQuestions(intent, context),
-                suggestedActions(intent, parameters)
+                suggestedActions(intent, parameters),
+                quality.intentQuality(),
+                quality.needsClarification(),
+                quality.clarificationReason(),
+                quality.qualitySignals()
         );
     }
 

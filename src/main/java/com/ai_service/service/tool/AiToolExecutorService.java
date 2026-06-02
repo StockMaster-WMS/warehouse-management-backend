@@ -1,7 +1,6 @@
 package com.ai_service.service.tool;
 
 import com.ai_service.intent.AiIntent;
-import com.ai_service.intent.AiIntentCatalog;
 import com.ai_service.intent.AiIntentResult;
 import com.ai_service.tool.AiToolResult;
 import lombok.RequiredArgsConstructor;
@@ -39,14 +38,16 @@ public class AiToolExecutorService {
     // Chọn tool tương ứng với intent và thực thi truy vấn.
     public AiToolResult execute(AiIntentResult route) {
         AiIntent intent = route == null || route.getIntent() == null ? AiIntent.UNSUPPORTED : route.getIntent();
-        Map<String, Object> params = route == null ? Map.of() : route.safeParameters();
+        AiToolExecutionPlan plan = AiToolExecutionPlan.from(route, isIntentAllowed(intent));
+        Map<String, Object> params = plan.parameters();
 
-        if (!isIntentAllowed(intent)) {
+        if (!plan.allowed()) {
             return AiToolResult.message("Authorization.forbidden",
-                    "Bạn không có quyền truy xuất dữ liệu này qua AI.");
+                    "Bạn không có quyền truy xuất dữ liệu này qua AI.")
+                    .withMetadata(plan.dataSources(), plan.missingParams());
         }
 
-        AiToolResult result = switch (intent) {
+        AiToolResult result = switch (plan.intent()) {
             case WAREHOUSE_COUNT -> AiToolResult.data("WarehouseTool.countWarehouses", countWarehouses());
             case WAREHOUSE_LIST -> AiToolResult.data("WarehouseTool.listWarehouses", listWarehouses());
             case WAREHOUSE_DETAIL -> AiToolResult.data("WarehouseTool.getWarehouseDetail", getWarehouseDetail(params));
@@ -214,8 +215,7 @@ public class AiToolExecutorService {
             default -> AiToolResult.message("UnsupportedIntent",
                     "Intent này đã được khai báo nhưng backend chưa có tool xử lý dữ liệu tương ứng.");
         };
-        var definition = AiIntentCatalog.get(intent);
-        return result.withMetadata(definition.dataSources(), definition.missingParams(params));
+        return result.withMetadata(plan.dataSources(), plan.missingParams());
     }
 
     // Ước lượng số dòng dữ liệu trả về để ghi audit.

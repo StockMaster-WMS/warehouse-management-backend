@@ -32,11 +32,15 @@ class AiResponseEnrichmentServiceTest {
 
         assertThat(metadata.intent()).isEqualTo("STOCK_BY_PRODUCT");
         assertThat(metadata.confidence()).isEqualTo(0.94);
+        assertThat(metadata.domain()).isEqualTo("inventory");
         assertThat(metadata.toolName()).isEqualTo("StockTool.getStockByProduct");
         assertThat(metadata.dataSources()).containsExactly("products", "stock_levels", "warehouses");
         assertThat(metadata.rowsReturned()).isEqualTo(1);
         assertThat(metadata.parameters()).containsEntry("sku", "AIRCON-DAIKIN");
         assertThat(metadata.suggestedQuestions()).contains("Lịch sử biến động 7 ngày qua?");
+        assertThat(metadata.intentQuality()).isEqualTo("HIGH");
+        assertThat(metadata.needsClarification()).isFalse();
+        assertThat(metadata.qualitySignals()).contains("confidence:high", "dataBacked:true", "rowsReturned:1");
     }
 
     @Test
@@ -71,5 +75,44 @@ class AiResponseEnrichmentServiceTest {
 
         assertThat(metadata.parameters()).containsEntry("query", "hello");
         assertThat(metadata.parameters()).doesNotContainKeys("password", "apiKey");
+    }
+
+    @Test
+    void marksMissingRequiredParametersAsClarificationNeeded() {
+        AiIntentResult route = AiIntentResult.of(
+                AiIntent.STOCK_BY_PRODUCT,
+                Map.of("query", "còn bao nhiêu hàng?"),
+                0.88,
+                "test");
+        AiToolResult toolResult = AiToolResult
+                .message("StockTool.getStockByProduct", "Cần tên sản phẩm hoặc SKU.")
+                .withMetadata(List.of("products", "stock_levels"), List.of("sku|product"));
+        AiQueryContext context = AiQueryContext.from("còn bao nhiêu hàng?", route, toolResult, 0);
+
+        AiResponseMetadata metadata = service.build(route, toolResult, context);
+
+        assertThat(metadata.intentQuality()).isEqualTo("HIGH");
+        assertThat(metadata.needsClarification()).isTrue();
+        assertThat(metadata.clarificationReason()).isEqualTo("missing_parameters");
+        assertThat(metadata.qualitySignals()).contains("missingParams:1", "dataBacked:false");
+        assertThat(metadata.suggestedQuestions()).contains("Bạn muốn kiểm tra mã kho, SKU hay mã đơn nào?");
+    }
+
+    @Test
+    void marksAmbiguousIntentAsLowQualityClarification() {
+        AiIntentResult route = AiIntentResult.of(
+                AiIntent.AMBIGUOUS,
+                Map.of("query", "kiểm tra giúp tôi"),
+                0.5,
+                "test");
+        AiToolResult toolResult = AiToolResult.message("Clarification", "Bạn vui lòng nói rõ thêm.");
+        AiQueryContext context = AiQueryContext.from("kiểm tra giúp tôi", route, toolResult, 0);
+
+        AiResponseMetadata metadata = service.build(route, toolResult, context);
+
+        assertThat(metadata.intentQuality()).isEqualTo("LOW");
+        assertThat(metadata.needsClarification()).isTrue();
+        assertThat(metadata.clarificationReason()).isEqualTo("ambiguous_intent");
+        assertThat(metadata.qualitySignals()).contains("confidence:low", "intent:ambiguous");
     }
 }

@@ -325,13 +325,18 @@ public class AiService {
         return new AiResponseMetadata(
                 "MULTI_QUESTION",
                 confidenceCount == 0 ? 0.0 : confidenceSum / confidenceCount,
+                "batch",
                 "BatchAiTool",
                 List.copyOf(dataSources),
                 List.copyOf(missingParams),
                 totalRows,
                 parameters,
                 suggestedQuestions,
-                actions
+                actions,
+                List.copyOf(missingParams).isEmpty() ? "MEDIUM" : "LOW",
+                !List.copyOf(missingParams).isEmpty(),
+                List.copyOf(missingParams).isEmpty() ? "" : "missing_parameters",
+                List.of("questions:" + results.size(), "rowsReturned:" + totalRows)
         );
     }
 
@@ -369,8 +374,11 @@ public class AiService {
                     "intent", context == null ? "UNSUPPORTED" : context.intent().name(),
                     "parameters", context == null ? Map.of() : context.parameters(),
                     "tool", context == null ? "none" : context.toolName(),
+                    "domain", context == null ? "general" : context.domain(),
                     "dataSources", context == null ? List.of() : context.dataSources(),
                     "missingParams", context == null ? List.of() : context.missingParams(),
+                    "intentQuality", context == null ? "LOW" : context.quality().intentQuality(),
+                    "needsClarification", context != null && context.quality().needsClarification(),
                     "rows", context == null ? 0 : context.rowCount()
             ));
         } catch (Exception e) {
@@ -386,8 +394,11 @@ public class AiService {
                             "intent", result.context().intent().name(),
                             "parameters", result.context().parameters(),
                             "tool", result.context().toolName(),
+                            "domain", result.context().domain(),
                             "dataSources", result.context().dataSources(),
                             "missingParams", result.context().missingParams(),
+                            "intentQuality", result.context().quality().intentQuality(),
+                            "needsClarification", result.context().quality().needsClarification(),
                             "rows", result.context().rowCount()
                     ))
                     .toList();
