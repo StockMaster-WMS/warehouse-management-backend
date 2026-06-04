@@ -60,9 +60,10 @@ public class ProductController {
             @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) UUID supplierId,
             @RequestParam(required = false) String status) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(sortDir), sort));
-        PagedResponse<ProductResponse> pagedResponse = productService.findAll(pageable, keyword, categoryId, status);
+        PagedResponse<ProductResponse> pagedResponse = productService.findAll(pageable, keyword, categoryId, supplierId, status);
         return ApiResponse.success("Lấy danh sách sản phẩm thành công", pagedResponse);
     }
 
@@ -72,8 +73,9 @@ public class ProductController {
     public ResponseEntity<byte[]> exportXlsx(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) UUID categoryId,
+            @RequestParam(required = false) UUID supplierId,
             @RequestParam(required = false) String status) {
-        byte[] bytes = productExcelExportService.exportToXlsx(keyword, categoryId, status);
+        byte[] bytes = productExcelExportService.exportToXlsx(keyword, categoryId, supplierId, status);
         String filename = "products-export-" + LocalDate.now() + ".xlsx";
         ContentDisposition disposition = ContentDisposition.attachment()
                 .filename(filename, StandardCharsets.UTF_8)

@@ -34,16 +34,17 @@ public class ProductExcelExportService {
 
     // Xuất danh sách sản phẩm ra file Excel theo bộ lọc.
     @Transactional(readOnly = true)
-    public byte[] exportToXlsx(String keyword, UUID categoryId, String status) {
+    public byte[] exportToXlsx(String keyword, UUID categoryId, UUID supplierId, String status) {
         Specification<Product> spec = ProductSpecification.hasKeyword(keyword)
                 .and(ProductSpecification.hasCategory(categoryId))
+                .and(ProductSpecification.hasSupplier(supplierId))
                 .and(ProductSpecification.hasStatus(status));
         Page<Product> page = productRepository.findAll(spec,
                 PageRequest.of(0, MAX_EXPORT_ROWS, Sort.by(Sort.Direction.ASC, "sku")));
         if (page.getTotalElements() > MAX_EXPORT_ROWS) {
             throw new AppException(ErrorCode.BAD_REQUEST,
                     "Quá nhiều bản ghi (" + page.getTotalElements() + "). Tối đa " + MAX_EXPORT_ROWS
-                            + " dòng mỗi lần xuất; hãy thu hẹp bộ lọc (keyword, categoryId, status).");
+                            + " dòng mỗi lần xuất; hãy thu hẹp bộ lọc (keyword, categoryId, supplierId, status).");
         }
         List<Product> products = page.getContent();
 

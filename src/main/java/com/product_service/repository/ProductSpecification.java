@@ -30,6 +30,15 @@ public class ProductSpecification {
         };
     }
 
+    public static Specification<Product> hasSupplier(UUID supplierId) {
+        return (root, query, cb) -> {
+            if (supplierId == null) {
+                return null; // Bỏ qua nếu không có supplierId
+            }
+            return cb.equal(root.get("primarySupplier").get("id"), supplierId);
+        };
+    }
+
     public static Specification<Product> hasStatus(String status) {
         return (root, query, cb) -> {
             if (!StringUtils.hasText(status)) {
