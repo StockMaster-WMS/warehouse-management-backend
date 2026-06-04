@@ -36,7 +36,7 @@ public class AiResponseEnrichmentService {
                 rowsReturned,
                 sanitizedParameters(parameters),
                 suggestedQuestions(intent, context),
-                suggestedActions(intent, parameters),
+                suggestedActions(intent, parameters, toolResult),
                 quality.intentQuality(),
                 quality.needsClarification(),
                 quality.clarificationReason(),
@@ -50,7 +50,7 @@ public class AiResponseEnrichmentService {
     private List<String> suggestedQuestions(AiIntent intent, AiQueryContext context) {
         if (context != null && context.missingParams() != null && !context.missingParams().isEmpty()) {
             return List.of(
-                    "Bạn muốn kiểm tra mã kho, SKU hay mã đơn nào?",
+                    "Bạn muốn kiểm tra mã kho, mã hàng hay mã đơn nào?",
                     "Bạn có muốn lọc theo hôm nay, tuần này hoặc tháng này không?"
             );
         }
@@ -61,9 +61,9 @@ public class AiResponseEnrichmentService {
                     "Có cần nhập bổ sung không?"
             );
             case LOW_STOCK, REORDER_SUGGESTION -> List.of(
-                    "SKU nào cần nhập bổ sung trước?",
+                    "Sản phẩm nào cần nhập bổ sung trước?",
                     "Lọc theo từng kho được không?",
-                    "Có PO nào đang chờ nhận cho các SKU này không?"
+                    "Có phiếu nhập nào đang chờ nhận cho các sản phẩm này không?"
             );
             case NEAR_EXPIRY, STOCK_AT_RISK -> List.of(
                     "Lô nào cần xử lý trước?",
@@ -73,12 +73,12 @@ public class AiResponseEnrichmentService {
             case OUTBOUND_PRIORITY, OUTBOUND_DELAYED, PICKING_STATUS -> List.of(
                     "Đơn nào gần deadline nhất?",
                     "Dòng nào còn thiếu hàng?",
-                    "Ai đang phụ trách picking?"
+                    "Ai đang phụ trách lấy hàng?"
             );
             case PENDING_PUTAWAY, INBOUND_PENDING_PUTAWAY -> List.of(
                     "Task nào chờ lâu nhất?",
-                    "Kho nào đang tồn đọng putaway nhiều nhất?",
-                    "Có vị trí gợi ý cho các task này không?"
+                    "Kho nào đang tồn đọng hàng chờ xếp kệ nhiều nhất?",
+                    "Có vị trí gợi ý cho các việc này không?"
             );
             case PURCHASE_ORDER_STATUS, PURCHASE_ORDER_DETAIL, PENDING_PO_RECEIPT -> List.of(
                     "PO này còn dòng nào chưa nhận đủ?",
@@ -87,7 +87,7 @@ public class AiResponseEnrichmentService {
             );
             case SALES_ORDER_STATUS, SALES_ORDER_DETAIL -> List.of(
                     "Đơn này còn thiếu dòng nào?",
-                    "Trạng thái picking của đơn này?",
+                    "Trạng thái lấy hàng của đơn này?",
                     "Có nguy cơ trễ giao không?"
             );
             case DAILY_TASKS, REPORT_SUMMARY, FLOW_REPORT -> List.of(
@@ -97,13 +97,14 @@ public class AiResponseEnrichmentService {
             );
             case AMBIGUOUS -> List.of(
                     "Bạn muốn hỏi về tồn kho, nhập kho hay xuất kho?",
-                    "Bạn có mã SKU, PO, SO hoặc kho cụ thể không?"
+                    "Bạn có mã hàng, mã phiếu nhập, mã đơn xuất hoặc kho cụ thể không?"
             );
             default -> List.of();
         };
     }
 
-    private List<AiActionSuggestion> suggestedActions(AiIntent intent, Map<String, Object> parameters) {
+    private List<AiActionSuggestion> suggestedActions(AiIntent intent, Map<String, Object> parameters,
+            AiToolResult toolResult) {
         List<AiActionSuggestion> actions = new ArrayList<>();
         if (intent == AiIntent.STOCK_TRANSFER) {
             actions.add(new AiActionSuggestion(
@@ -129,13 +130,38 @@ public class AiResponseEnrichmentService {
             actions.add(new AiActionSuggestion(
                     "REVIEW_REORDER_SUGGESTIONS",
                     "Xem gợi ý nhập bổ sung",
-                    "Mở danh sách SKU dưới định mức để kiểm tra trước khi tạo PO.",
+                    "Mở danh sách sản phẩm dưới định mức để kiểm tra trước khi tạo phiếu nhập.",
                     false,
                     "WAREHOUSE_MANAGER",
                     sanitizedParameters(parameters)
             ));
         }
+        if (intent == AiIntent.LOW_STOCK) {
+            List<String> skus = skuListFromResult(toolResult, 50);
+            Map<String, Object> payload = new LinkedHashMap<>(sanitizedParameters(parameters));
+            payload.put("actionType", "MARK_PRODUCTS_OUT_OF_STOCK");
+            payload.put("source", "LOW_STOCK_RESULT");
+            payload.put("targetStatus", "OUT_OF_STOCK");
+            payload.put("skuList", skus);
+            actions.add(new AiActionSuggestion(
+                    "MARK_PRODUCTS_OUT_OF_STOCK",
+                    "Tạm ngừng bán sản phẩm hết hàng",
+                    "Xem trước danh sách sản phẩm tồn thấp/hết hàng rồi xác nhận chuyển sang trạng thái tạm ngừng bán.",
+                    true,
+                    "WAREHOUSE_MANAGER",
+                    payload
+            ));
+        }
         return actions;
+    }
+
+    private List<String> skuListFromResult(AiToolResult result, int limit) {
+        return resultRows(result, limit).stream()
+                .map(row -> row.get("sku"))
+                .filter(value -> value != null && !String.valueOf(value).isBlank())
+                .map(value -> String.valueOf(value).trim())
+                .distinct()
+                .toList();
     }
 
     private Map<String, Object> sanitizedParameters(Map<String, Object> parameters) {

@@ -16,18 +16,12 @@ public class AiProviderRouterClient implements AiTextClient {
 
     private final String provider;
     private final OllamaClient ollamaClient;
-    private final OpenAiCompatibleClient openAiCompatibleClient;
-    private final GeminiClient geminiClient;
 
     public AiProviderRouterClient(
             @Value("${ai.provider:ollama}") String provider,
-            OllamaClient ollamaClient,
-            OpenAiCompatibleClient openAiCompatibleClient,
-            GeminiClient geminiClient) {
+            OllamaClient ollamaClient) {
         this.provider = provider == null ? "ollama" : provider.trim().toLowerCase(Locale.ROOT);
         this.ollamaClient = ollamaClient;
-        this.openAiCompatibleClient = openAiCompatibleClient;
-        this.geminiClient = geminiClient;
     }
 
     @Override
@@ -57,8 +51,6 @@ public class AiProviderRouterClient implements AiTextClient {
         }
         return switch (selectedProvider) {
             case "ollama" -> ollamaClient;
-            case "openai", "openai-compatible" -> openAiCompatibleClient;
-            case "gemini", "google", "google-ai-studio" -> geminiClient;
             default -> {
                 log.warn("Unknown configured AI_PROVIDER='{}', falling back to ollama", provider);
                 yield ollamaClient;
@@ -68,7 +60,7 @@ public class AiProviderRouterClient implements AiTextClient {
 
     private boolean isSupportedProvider(String value) {
         return switch (value) {
-            case "ollama", "openai", "openai-compatible", "gemini", "google", "google-ai-studio" -> true;
+            case "ollama" -> true;
             default -> false;
         };
     }

@@ -20,34 +20,14 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AiProviderConfigService {
 
-    public static final String GEMINI_PROVIDER = "gemini";
-    public static final String OPENAI_PROVIDER = "openai";
-
     private static final Map<String, ProviderDefinition> SUPPORTED_PROVIDERS = new LinkedHashMap<>();
 
     static {
-        SUPPORTED_PROVIDERS.put(GEMINI_PROVIDER, new ProviderDefinition(GEMINI_PROVIDER, "Trợ lý AI Google"));
-        SUPPORTED_PROVIDERS.put(OPENAI_PROVIDER, new ProviderDefinition(OPENAI_PROVIDER, "Trợ lý AI OpenAI"));
     }
 
     private final AiProviderConfigRepository repository;
     private final AiSecretCryptoService cryptoService;
     private final AuditLogService auditLogService;
-
-    @Transactional(readOnly = true)
-    public AiProviderKeyStatusResponse getGeminiKeyStatus() {
-        return getKeyStatus(GEMINI_PROVIDER);
-    }
-
-    @Transactional
-    public AiProviderKeyStatusResponse updateGeminiKey(UpdateAiProviderKeyRequest request) {
-        return updateKey(GEMINI_PROVIDER, request);
-    }
-
-    @Transactional
-    public AiProviderKeyStatusResponse clearGeminiKey() {
-        return clearKey(GEMINI_PROVIDER);
-    }
 
     @Transactional(readOnly = true)
     public List<AiProviderKeyStatusResponse> getProviderKeyStatuses() {

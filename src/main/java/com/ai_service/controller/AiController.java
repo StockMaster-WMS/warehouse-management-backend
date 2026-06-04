@@ -1,10 +1,14 @@
 package com.ai_service.controller;
 
+import com.ai_service.dto.AiActionRequest;
+import com.ai_service.dto.AiActionResponse;
 import com.ai_service.dto.AiAskRequest;
 import com.ai_service.dto.AiAskResponse;
 import com.ai_service.dto.AiAskResponse.AiResponseMetadata;
 import com.ai_service.service.AiService;
+import com.ai_service.service.action.AiActionService;
 import com.ai_service.service.session.AiCancelService;
+import com.common.api.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,6 +42,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class AiController {
 
     private final AiService aiService;
+    private final AiActionService aiActionService;
     private final Executor aiTaskExecutor;
     private final AiCancelService aiCancelService;
     private final ObjectMapper objectMapper;
@@ -54,6 +59,22 @@ public class AiController {
             return ResponseEntity.status(500)
                     .body(new AiAskResponse(null, "Rất tiếc, hiện tại tôi chưa thể trả lời yêu cầu này."));
         }
+    }
+
+    @PostMapping("/actions/preview")
+    @Operation(summary = "Xem trước thao tác AI", description = "Lập bản xem trước trước khi ghi dữ liệu")
+    public ResponseEntity<ApiResponse<AiActionResponse>> previewAction(@RequestBody AiActionRequest request) {
+        AiActionResponse response = aiActionService.preview(request);
+        return ResponseEntity.ok(ApiResponse.success("Xem trước thao tác AI thành công", response));
+    }
+
+    @PostMapping("/actions/confirm")
+    @Operation(summary = "Xác nhận thao tác AI", description = "Chỉ ADMIN hoặc WAREHOUSE_MANAGER được xác nhận thao tác ghi dữ liệu")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
+    public ResponseEntity<ApiResponse<AiActionResponse>> confirmAction(@RequestBody AiActionRequest request,
+            Authentication authentication) {
+        AiActionResponse response = aiActionService.confirm(request, authentication);
+        return ResponseEntity.ok(ApiResponse.success("Thao tác AI đã được xử lý", response));
     }
 
     @PostMapping(value = "/ask/stream", consumes = MediaType.APPLICATION_JSON_VALUE,

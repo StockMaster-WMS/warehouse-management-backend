@@ -69,18 +69,6 @@ ai:
     num-ctx: ${AI_OLLAMA_NUM_CTX:8192}
     connect-timeout-seconds: ${AI_OLLAMA_CONNECT_TIMEOUT_SECONDS:5}
     read-timeout-seconds: ${AI_OLLAMA_READ_TIMEOUT_SECONDS:120}
-  openai:
-    api-url: ${AI_OPENAI_API_URL:https://api.openai.com/v1}
-    api-key: ${AI_OPENAI_API_KEY:}
-    model: ${AI_OPENAI_MODEL:gpt-4o-mini}
-    connect-timeout-seconds: ${AI_OPENAI_CONNECT_TIMEOUT_SECONDS:5}
-    read-timeout-seconds: ${AI_OPENAI_READ_TIMEOUT_SECONDS:120}
-  gemini:
-    api-url: ${AI_GEMINI_API_URL:https://generativelanguage.googleapis.com/v1beta}
-    api-key: ${AI_GEMINI_API_KEY:}
-    model: ${AI_GEMINI_MODEL:gemini-2.5-flash}
-    connect-timeout-seconds: ${AI_GEMINI_CONNECT_TIMEOUT_SECONDS:5}
-    read-timeout-seconds: ${AI_GEMINI_READ_TIMEOUT_SECONDS:120}
 
 springdoc:
   api-docs:

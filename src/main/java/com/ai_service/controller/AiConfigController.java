@@ -28,13 +28,6 @@ public class AiConfigController {
 
     private final AiProviderConfigService configService;
 
-    @GetMapping("/cloud-key")
-    @Operation(summary = "Lấy trạng thái API key AI đám mây")
-    public ApiResponse<AiProviderKeyStatusResponse> getCloudKeyStatus() {
-        return ApiResponse.success("Lấy trạng thái API key AI thành công",
-                configService.getGeminiKeyStatus());
-    }
-
     @GetMapping("/providers")
     @Operation(summary = "Lấy trạng thái API key theo provider")
     public ApiResponse<List<AiProviderKeyStatusResponse>> getProviderKeyStatuses() {
@@ -65,18 +58,4 @@ public class AiConfigController {
                 configService.clearKey(provider));
     }
 
-    @PutMapping("/cloud-key")
-    @Operation(summary = "Cập nhật API key AI đám mây")
-    public ApiResponse<AiProviderKeyStatusResponse> updateCloudKey(
-            @Valid @RequestBody UpdateAiProviderKeyRequest request) {
-        return ApiResponse.success("Cập nhật API key AI thành công",
-                configService.updateGeminiKey(request));
-    }
-
-    @DeleteMapping("/cloud-key")
-    @Operation(summary = "Xóa API key AI đám mây")
-    public ApiResponse<AiProviderKeyStatusResponse> clearCloudKey() {
-        return ApiResponse.success("Xóa API key AI thành công",
-                configService.clearGeminiKey());
-    }
 }

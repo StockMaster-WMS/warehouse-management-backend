@@ -13,8 +13,8 @@ public final class AiIntentCatalog {
         define(AiIntent.LOW_STOCK, "inventory", "StockTool.getLowStock",
                 List.of("products", "stock_levels", "warehouses"),
                 List.of(), List.of("warehouseCode", "limit"),
-                List.of("Sản phẩm nào sắp hết hàng?", "SKU nào dưới định mức tồn kho?"),
-                "Không có SKU dưới định mức theo dữ liệu hiện tại.");
+                List.of("Sản phẩm nào sắp hết hàng?", "Mã hàng nào dưới định mức tồn kho?"),
+                "Không có sản phẩm nào dưới định mức theo dữ liệu hiện tại.");
         define(AiIntent.WAREHOUSE_STOCK_SUMMARY, "inventory", "StockTool.getWarehouseStockSummary",
                 List.of("warehouses", "stock_levels", "products"),
                 List.of(), List.of("warehouseCode", "category", "limit"),
@@ -28,8 +28,8 @@ public final class AiIntentCatalog {
         define(AiIntent.STOCK_BY_PRODUCT, "inventory", "StockTool.getStockByProduct",
                 List.of("products", "stock_levels", "warehouses", "locations"),
                 List.of("sku|product"), List.of("warehouseCode", "location", "lot"),
-                List.of("Tồn kho hiện tại của sản phẩm X là bao nhiêu?", "SKU 00018 ở WH-002 còn bao nhiêu?"),
-                "Cần tên sản phẩm hoặc SKU để tra tồn kho.");
+                List.of("Tồn kho hiện tại của sản phẩm X là bao nhiêu?", "Mã hàng 00018 ở WH-002 còn bao nhiêu?"),
+                "Cần tên sản phẩm hoặc mã hàng để tra tồn kho.");
         define(AiIntent.STOCK_BY_LOCATION, "inventory", "StockTool.getStockByLocation",
                 List.of("locations", "stock_levels", "products", "warehouses"),
                 List.of("location"), List.of("warehouseCode"),
@@ -48,7 +48,7 @@ public final class AiIntentCatalog {
         define(AiIntent.PRODUCT_WITHOUT_LOCATION, "inventory", "StockTool.getProductsWithoutLocation",
                 List.of("products", "stock_levels", "putaway_tasks", "locations"),
                 List.of(), List.of("warehouseCode", "limit"),
-                List.of("Có sản phẩm nào chưa được gán vị trí không?", "SKU nào chưa có location?"),
+                List.of("Có sản phẩm nào chưa được gán vị trí không?", "Mã hàng nào chưa có vị trí?"),
                 "Chưa ghi nhận sản phẩm nào thiếu vị trí.");
         define(AiIntent.MONTH_OVER_MONTH_FLOW, "report", "ReportTool.getMonthOverMonthFlow",
                 List.of("inbound_receipts", "inbound_receipt_items", "sales_orders", "sales_order_items"),
@@ -68,8 +68,8 @@ public final class AiIntentCatalog {
         define(AiIntent.REORDER_SUGGESTION, "inventory", "StockTool.getReorderSuggestions",
                 List.of("products", "stock_levels", "po_items", "purchase_orders"),
                 List.of(), List.of("warehouseCode", "days", "limit"),
-                List.of("Gợi ý nhập thêm hàng dựa trên tồn kho thấp.", "SKU nào cần đặt bổ sung?"),
-                "Hiện chưa có SKU cần gợi ý nhập bổ sung.");
+                List.of("Gợi ý nhập thêm hàng dựa trên tồn kho thấp.", "Sản phẩm nào cần đặt bổ sung?"),
+                "Hiện chưa có sản phẩm nào cần gợi ý nhập bổ sung.");
     }
 
     private AiIntentCatalog() {

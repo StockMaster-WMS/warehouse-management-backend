@@ -1,0 +1,230 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  EXCEPTION_IN_PAGE_ERROR (0xc0000006) at pc=0x00007ffdedbe19a9, pid=8032, tid=3112
+#
+# JRE version:  (17.0.12+8) (build )
+# Java VM: Java HotSpot(TM) 64-Bit Server VM (17.0.12+8-LTS-286, mixed mode, sharing, tiered, compressed oops, compressed class ptrs, g1 gc, windows-amd64)
+# Problematic frame:
+# C  [VCRUNTIME140.dll+0x19a9]
+#
+# No core dump will be written. Minidumps are not enabled by default on client versions of Windows
+#
+#
+
+---------------  S U M M A R Y ------------
+
+Command Line: -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=53939 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dspring.jmx.enabled=true -Djava.rmi.server.hostname=localhost -Dspring.application.admin.enabled=true -Dspring.boot.project.name=warehouse-management-backend -XX:+ShowCodeDetailsInExceptionMessages -Dmanagement.endpoints.jmx.exposure.include=* com.WarehouseApplication
+
+Host: Intel(R) Core(TM) i5-6300HQ CPU @ 2.30GHz, 4 cores, 23G,  Windows 10 , 64 bit Build 19041 (10.0.19041.5915)
+Time: Thu Jun  4 19:54:39 2026 SE Asia Standard Time elapsed time: 0.033814 seconds (0d 0h 0m 0s)
+
+---------------  T H R E A D  ---------------
+
+Current thread is native thread
+
+Stack: [0x0000004a2d700000,0x0000004a2d800000],  sp=0x0000004a2d7ff320,  free space=1020k
+Native frames: (J=compiled Java code, j=interpreted, Vv=VM code, C=native code)
+C  [VCRUNTIME140.dll+0x19a9]
+V  [jvm.dll+0x69bc13]
+V  [jvm.dll+0x69a817]
+V  [jvm.dll+0x69a3ce]
+V  [jvm.dll+0x3676e7]
+V  [jvm.dll+0x78b7e1]
+V  [jvm.dll+0x3ec83f]
+V  [jvm.dll+0x3ee471]
+C  [jli.dll+0x5297]
+C  [ucrtbase.dll+0x21bb2]
+C  [KERNEL32.DLL+0x17374]
+C  [ntdll.dll+0x4cc91]
+
+
+siginfo: EXCEPTION_IN_PAGE_ERROR (0xc0000006), writing address 0x000001a5a6820000
+
+
+Registers:
+RAX=0x0000000000000000, RBX=0x000001a5a6820000, RCX=0x0000000000010000, RDX=0x0000000000000000
+RSP=0x0000004a2d7ff320, RBP=0x000001a59d7b0170, RSI=0x000001a59d671a00, RDI=0x000001a5a6820000
+R8 =0x0000000000010000, R9 =0x000001a5a6820000, R10=0x00007ffdedbe0000, R11=0x0000000000000000
+R12=0x0000000000000001, R13=0x00007ffd977f2730, R14=0x000001a59d79fad0, R15=0x0000000000010000
+RIP=0x00007ffdedbe19a9, EFLAGS=0x0000000000010202
+
+
+Top of Stack: (sp=0x0000004a2d7ff320)
+0x0000004a2d7ff320:   0000000000000000 00007ffd9752bc13
+0x0000004a2d7ff330:   000001a59d7b0170 000001a500000000
+0x0000004a2d7ff340:   000001a59d671a00 0000000000000184
+0x0000004a2d7ff350:   0000000000010000 0000004a2d7ff370
+0x0000004a2d7ff360:   0000004a2d7ff5f0 000001a500000104
+0x0000004a2d7ff370:   0000000000000103 000001a59d7b0175
+0x0000004a2d7ff380:   0000000000000101 0000000000000000
+0x0000004a2d7ff390:   0000000000000000 0000000000000020
+0x0000004a2d7ff3a0:   0000000000000014 0000000000000004
+0x0000004a2d7ff3b0:   000001a59d650000 0000004a2d7ff479
+0x0000004a2d7ff3c0:   0000000000000002 00007ffe2429b3c7
+0x0000004a2d7ff3d0:   000001a5005c3a43 00007ffe00000000
+0x0000004a2d7ff3e0:   0000000000000014 00007ffe00000000
+0x0000004a2d7ff3f0:   0000000200000000 00007ffe2427a36f
+0x0000004a2d7ff400:   0000000200000000 0000000080b3c4aa
+0x0000004a2d7ff410:   000000000000000c 0000000000000000 
+
+Instructions: (pc=0x00007ffdedbe19a9)
+0x00007ffdedbe18a9:   49 03 c8 0f 10 44 11 f0 48 83 e9 10 49 83 e8 10
+0x00007ffdedbe18b9:   f6 c1 0f 74 17 48 8b c1 48 83 e1 f0 0f 10 c8 0f
+0x00007ffdedbe18c9:   10 04 11 0f 11 08 4c 8b c1 4d 2b c3 4d 8b c8 49
+0x00007ffdedbe18d9:   c1 e9 07 74 6f 0f 29 01 eb 14 66 66 66 66 66 0f
+0x00007ffdedbe18e9:   1f 84 00 00 00 00 00 0f 29 41 10 0f 29 09 0f 10
+0x00007ffdedbe18f9:   44 11 f0 0f 10 4c 11 e0 48 81 e9 80 00 00 00 0f
+0x00007ffdedbe1909:   29 41 70 0f 29 49 60 0f 10 44 11 50 0f 10 4c 11
+0x00007ffdedbe1919:   40 49 ff c9 0f 29 41 50 0f 29 49 40 0f 10 44 11
+0x00007ffdedbe1929:   30 0f 10 4c 11 20 0f 29 41 30 0f 29 49 20 0f 10
+0x00007ffdedbe1939:   44 11 10 0f 10 0c 11 75 ae 0f 29 41 10 49 83 e0
+0x00007ffdedbe1949:   7f 0f 28 c1 4d 8b c8 49 c1 e9 04 74 1a 66 66 0f
+0x00007ffdedbe1959:   1f 84 00 00 00 00 00 0f 11 01 48 83 e9 10 0f 10
+0x00007ffdedbe1969:   04 11 49 ff c9 75 f0 49 83 e0 0f 74 08 41 0f 10
+0x00007ffdedbe1979:   0a 41 0f 11 0b 0f 11 01 49 8b c3 c3 cc cc cc cc
+0x00007ffdedbe1989:   cc cc cc cc cc cc cc cc cc cc cc cc cc 66 66 0f
+0x00007ffdedbe1999:   1f 84 00 00 00 00 00 57 8b c2 48 8b f9 49 8b c8
+0x00007ffdedbe19a9:   f3 aa 49 8b c1 5f c3 cc cc cc cc cc cc 66 66 0f
+0x00007ffdedbe19b9:   1f 84 00 00 00 00 00 48 8b c1 4c 8b c9 4c 8d 15
+0x00007ffdedbe19c9:   33 e6 ff ff 0f b6 d2 49 bb 01 01 01 01 01 01 01
+0x00007ffdedbe19d9:   01 4c 0f af da 66 49 0f 6e c3 49 83 f8 0f 0f 87
+0x00007ffdedbe19e9:   83 00 00 00 0f 1f 00 49 03 c8 47 8b 8c 82 b0 80
+0x00007ffdedbe19f9:   01 00 4d 03 ca 41 ff e1 4c 89 59 f1 44 89 59 f9
+0x00007ffdedbe1a09:   66 44 89 59 fd 44 88 59 ff c3 4c 89 59 f2 44 89
+0x00007ffdedbe1a19:   59 fa 66 44 89 59 fe c3 66 66 66 66 66 66 66 0f
+0x00007ffdedbe1a29:   1f 84 00 00 00 00 00 4c 89 59 f3 44 89 59 fb 44
+0x00007ffdedbe1a39:   88 59 ff c3 0f 1f 00 4c 89 59 f4 44 89 59 fc c3
+0x00007ffdedbe1a49:   4c 89 59 f5 66 44 89 59 fd 44 88 59 ff c3 4c 89
+0x00007ffdedbe1a59:   59 f7 44 88 59 ff c3 4c 89 59 f6 66 44 89 59 fe
+0x00007ffdedbe1a69:   c3 4c 89 59 f8 c3 90 66 0f 6c c0 49 83 f8 20 77
+0x00007ffdedbe1a79:   0c f3 0f 7f 01 f3 42 0f 7f 44 01 f0 c3 83 3d 8b
+0x00007ffdedbe1a89:   45 01 00 03 0f 82 dd 01 00 00 4c 3b 05 86 45 01
+0x00007ffdedbe1a99:   00 76 16 4c 3b 05 85 45 01 00 77 0d f6 05 10 49 
+
+
+
+---------------  P R O C E S S  ---------------
+
+VM state: not at safepoint (not fully initialized)
+
+VM Mutex/Monitor currently owned by a thread: None
+
+Heap address: 0x0000000000000000, size: 0 MB, Compressed Oops mode: 32-bit
+
+CDS archive(s) mapped at: [0x0000000000000000-0x0000000000000000-0x0000000000000000), size 0, SharedBaseAddress: 0x0000000800000000, ArchiveRelocationMode: 1.
+Narrow klass base: 0x0000000000000000, Narrow klass shift: 0, Narrow klass range: 0x0
+
+GC Precious Log:
+<Not initialized>
+
+Deoptimization events (0 events):
+No events
+
+Classes unloaded (0 events):
+No events
+
+Classes redefined (0 events):
+No events
+
+Internal exceptions (0 events):
+No events
+
+VM Operations (0 events):
+No events
+
+Events (0 events):
+No events
+
+
+Dynamic libraries:
+0x00007ff614dc0000 - 0x00007ff614dd0000 	C:\Program Files\Java\jdk-17\bin\java.exe
+0x00007ffe24270000 - 0x00007ffe24468000 	C:\WINDOWS\SYSTEM32\ntdll.dll
+0x00007ffe23310000 - 0x00007ffe233d2000 	C:\WINDOWS\System32\KERNEL32.DLL
+0x00007ffe21e40000 - 0x00007ffe22136000 	C:\WINDOWS\System32\KERNELBASE.dll
+0x00007ffe21b50000 - 0x00007ffe21c50000 	C:\WINDOWS\System32\ucrtbase.dll
+0x00007ffdf0a40000 - 0x00007ffdf0a59000 	C:\Program Files\Java\jdk-17\bin\jli.dll
+0x00007ffe24100000 - 0x00007ffe241b1000 	C:\WINDOWS\System32\ADVAPI32.dll
+0x00007ffe22730000 - 0x00007ffe227ce000 	C:\WINDOWS\System32\msvcrt.dll
+0x00007ffe227d0000 - 0x00007ffe2286f000 	C:\WINDOWS\System32\sechost.dll
+0x00007ffe23410000 - 0x00007ffe23533000 	C:\WINDOWS\System32\RPCRT4.dll
+0x00007ffe21d60000 - 0x00007ffe21d87000 	C:\WINDOWS\System32\bcrypt.dll
+0x00007ffdedbe0000 - 0x00007ffdedbfb000 	C:\Program Files\Java\jdk-17\bin\VCRUNTIME140.dll
+0x00007ffe22870000 - 0x00007ffe22a0d000 	C:\WINDOWS\System32\USER32.dll
+0x00007ffe22260000 - 0x00007ffe22282000 	C:\WINDOWS\System32\win32u.dll
+0x00007ffe23be0000 - 0x00007ffe23c0b000 	C:\WINDOWS\System32\GDI32.dll
+0x00007ffe22140000 - 0x00007ffe22259000 	C:\WINDOWS\System32\gdi32full.dll
+0x00007ffe21ab0000 - 0x00007ffe21b4d000 	C:\WINDOWS\System32\msvcp_win.dll
+0x00007ffe066c0000 - 0x00007ffe0695a000 	C:\WINDOWS\WinSxS\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.19041.5915_none_60b4b9d171f9c7c7\COMCTL32.dll
+0x00007ffe0e670000 - 0x00007ffe0e67a000 	C:\WINDOWS\SYSTEM32\VERSION.dll
+0x00007ffe233e0000 - 0x00007ffe2340f000 	C:\WINDOWS\System32\IMM32.DLL
+0x00007ffe190d0000 - 0x00007ffe190dc000 	C:\Program Files\Java\jdk-17\bin\vcruntime140_1.dll
+0x00007ffde5180000 - 0x00007ffde520e000 	C:\Program Files\Java\jdk-17\bin\msvcp140.dll
+0x00007ffd96e90000 - 0x00007ffd97a70000 	C:\Program Files\Java\jdk-17\bin\server\jvm.dll
+0x00007ffe23ed0000 - 0x00007ffe23ed8000 	C:\WINDOWS\System32\PSAPI.DLL
+0x00007ffe03b90000 - 0x00007ffe03b99000 	C:\WINDOWS\SYSTEM32\WSOCK32.dll
+0x00007ffe241c0000 - 0x00007ffe2422b000 	C:\WINDOWS\System32\WS2_32.dll
+0x00007ffe071f0000 - 0x00007ffe07217000 	C:\WINDOWS\SYSTEM32\WINMM.dll
+0x00007ffe200e0000 - 0x00007ffe200f2000 	C:\WINDOWS\SYSTEM32\kernel.appcore.dll
+0x00007ffe04a30000 - 0x00007ffe04a3a000 	C:\Program Files\Java\jdk-17\bin\jimage.dll
+0x00007ffe1fdd0000 - 0x00007ffe1ffd1000 	C:\WINDOWS\SYSTEM32\DBGHELP.DLL
+0x00007ffdf3b60000 - 0x00007ffdf3b94000 	C:\WINDOWS\SYSTEM32\dbgcore.DLL
+0x00007ffe21cd0000 - 0x00007ffe21d52000 	C:\WINDOWS\System32\bcryptPrimitives.dll
+
+dbghelp: loaded successfully - version: 4.0.5 - missing functions: none
+symbol engine: initialized successfully - sym options: 0x614 - pdb path: .;C:\Program Files\Java\jdk-17\bin;C:\WINDOWS\SYSTEM32;C:\WINDOWS\WinSxS\amd64_microsoft.windows.common-controls_6595b64144ccf1df_6.0.19041.5915_none_60b4b9d171f9c7c7;C:\Program Files\Java\jdk-17\bin\server
+
+VM Arguments:
+jvm_args: -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=53939 -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dspring.jmx.enabled=true -Djava.rmi.server.hostname=localhost -Dspring.application.admin.enabled=true -Dspring.boot.project.name=warehouse-management-backend -XX:+ShowCodeDetailsInExceptionMessages -Dmanagement.endpoints.jmx.exposure.include=* 
+java_command: com.WarehouseApplication
+java_class_path (initial): D:\K22-DATN\warehouse-management\warehouse-management-backend\target\classes;C:\Users\DELL\.m2\repository\org\springframework\boot\spring-boot-starter-web\3.5.13\spring-boot-starter-web-3.5.13.jar;C:\Users\DELL\.m2\repository\org\springframework\boot\spring-boot-starter\3.5.13\spring-boot-starter-3.5.13.jar;C:\Users\DELL\.m2\repository\org\springframework\boot\spring-boot-starter-logging\3.5.13\spring-boot-starter-logging-3.5.13.jar;C:\Users\DELL\.m2\repository\ch\qos\logback\logback-classic\1.5.32\logback-classic-1.5.32.jar;C:\Users\DELL\.m2\repository\ch\qos\logback\logback-core\1.5.32\logback-core-1.5.32.jar;C:\Users\DELL\.m2\repository\org\apache\logging\log4j\log4j-to-slf4j\2.24.3\log4j-to-slf4j-2.24.3.jar;C:\Users\DELL\.m2\repository\org\slf4j\jul-to-slf4j\2.0.17\jul-to-slf4j-2.0.17.jar;C:\Users\DELL\.m2\repository\jakarta\annotation\jakarta.annotation-api\2.1.1\jakarta.annotation-api-2.1.1.jar;C:\Users\DELL\.m2\repository\org\yaml\snakeyaml\2.4\snakeyaml-2.4.jar;C:\Users\DELL\.m2\repository\org\springframework\boot\spring-boot-starter-json\3.5.13\spring-boot-starter-json-3.5.13.jar;C:\Users\DELL\.m2\repository\com\fasterxml\jackson\datatype\jackson-datatype-jdk8\2.21.2\jackson-datatype-jdk8-2.21.2.jar;C:\Users\DELL\.m2\repository\com\fasterxml\jackson\module\jackson-module-parameter-names\2.21.2\jackson-module-parameter-names-2.21.2.jar;C:\Users\DELL\.m2\repository\org\springframework\boot\spring-boot-starter-tomcat\3.5.13\spring-boot-starter-tomcat-3.5.13.jar;C:\Users\DELL\.m2\repository\org\apache\tomcat\embed\tomcat-embed-core\10.1.53\tomcat-embed-core-10.1.53.jar;C:\Users\DELL\.m2\repository\org\apache\tomcat\embed\tomcat-embed-websocket\10.1.53\tomcat-embed-websocket-10.1.53.jar;C:\Users\DELL\.m2\repository\org\springframework\spring-web\6.2.17\spring-web-6.2.17.jar;C:\Users\DELL\.m2\repository\org\springframework\spring-beans\6.2.17\spring-beans-6.2.17.jar;C:\Users\DELL\.m2\repository\org\springframework\spring-webmvc\6.2.17
+Launcher Type: SUN_STANDARD
+
+[Global flags]
+     uint ConcGCThreads                            = 1                                         {product} {ergonomic}
+     uint G1ConcRefinementThreads                  = 4                                         {product} {ergonomic}
+    uintx GCDrainStackTargetSize                   = 64                                        {product} {ergonomic}
+   size_t InitialHeapSize                          = 399852416                                 {product} {ergonomic}
+     bool ManagementServer                         = true                                      {product} {command line}
+   size_t MarkStackSize                            = 4194304                                   {product} {ergonomic}
+   size_t MaxHeapSize                              = 6397638656                                {product} {ergonomic}
+   size_t MinHeapSize                              = 6815736                                   {product} {ergonomic}
+    uintx ReservedCodeCacheSize                    = 251658240                              {pd product} {ergonomic}
+     bool SegmentedCodeCache                       = true                                      {product} {ergonomic}
+     bool ShowCodeDetailsInExceptionMessages       = true                                   {manageable} {command line}
+     bool UseCompressedClassPointers               = true                           {product lp64_product} {ergonomic}
+     bool UseCompressedOops                        = true                           {product lp64_product} {ergonomic}
+     bool UseG1GC                                  = true                                      {product} {ergonomic}
+     bool UseLargePagesIndividualAllocation        = false                                  {pd product} {ergonomic}
+
+Logging:
+Log output configuration:
+ #0: stdout all=warning uptime,level,tags
+ #1: stderr all=off uptime,level,tags
+
+Environment Variables:
+JAVA_HOME=C:\Program Files\Java\jdk-17
+PATH=C:\Program Files\PowerShell\7;c:\Users\DELL\AppData\Roaming\Code\User\globalStorage\github.copilot-chat\debugCommand;c:\Users\DELL\AppData\Roaming\Code\User\globalStorage\github.copilot-chat\copilotCli;C:\Program Files\Common Files\Oracle\Java\javapath;C:\Program Files (x86)\VMware\VMware Player\bin\;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Git\cmd;C:\Users\DELL\AppData\Local\Programs\Python\Python312;C:\Users\DELL\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\DELL\AppData\Local\nvm;C:\Users\DELL\AppData\Local\nvm\nodejs;C:\Users\DELL\AppData\Local\Android\Sdk\platform-tools;C:\Program Files\Git\bin;C:\Program Files\Apache\Maven\maven-mvnd-1.0.3-windows-amd64\bin;C:\Program Files (x86)\cloudflared\;C:\Program Files\PowerShell\7\;C:\Program Files\Common Files\Oracle\Java\javapath;C:\Program Files (x86)\VMware\VMware Player\bin\;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Git\cmd;C:\Users\DELL\AppData\Local\Programs\Python\Python312;C:\Users\DELL\AppData\Local\Programs\Python\Python312\Scripts;C:\Users\DELL\AppData\Local\nvm;C:\Users\DELL\AppData\Local\nvm\nodejs;C:\Program Files\Docker\Docker\resources\bin;C:\Users\DELL\AppData\Local\Android\Sdk\platform-tools;C:\Program Files\PuTTY\;C:\Program Files\Git\bin;C:\Program Files\Kubernetes\Minikube;C:\Users\DELL\AppData\Local\Programs\Python\Launcher\;C:\Users\DELL\AppData\Local\Microsoft\WindowsApps;C:\Users\DELL\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\DELL\AppData\Roaming\npm;C:\flutter\flutter\bin;C:\Program Files\Java\jdk-17\bin;C:\Program Files\heroku\bin;C:\Program Files\Terraform;C:\Program Files\Apache\Maven\maven-mvnd-1.0.3-windows-amd64\bin;C:\Users\DELL\AppData\Local\Microsoft\WinGet\Packages\Genymobile.scrcpy_Microsoft.Winget.Source_8wekyb3d8bbwe\scrcpy-win64-v3.3.3;C:\Users\DELL
+USERNAME=DELL
+LANG=en_US.UTF-8
+OS=Windows_NT
+PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+
+
+
+---------------  S Y S T E M  ---------------
+
+OS:
+ Windows 10 , 64 bit Build 19041 (10.0.19041.5915)
+OS uptime: 1 days 13:00 hours
+
+CPU: total 4 (initial active 4) 
+
+Memory: 4k page, system-wide physical 24405M (11329M free)
+TotalPageFile size 33621M (AvailPageFile size 15385M)
+current process WorkingSet (physical memory assigned to process): 8M, peak: 8M
+current process commit charge ("private bytes"): 3M, peak: 3M
+
+vm_info: Java HotSpot(TM) 64-Bit Server VM (17.0.12+8-LTS-286) for windows-amd64 JRE (17.0.12+8-LTS-286), built on Jun  5 2024 06:46:59 by "mach5one" with MS VC++ 17.6 (VS2022)
+
+END.

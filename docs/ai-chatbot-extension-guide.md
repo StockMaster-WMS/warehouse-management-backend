@@ -15,7 +15,7 @@
 - Intent: `AiIntent` la danh sach question type backend ho tro.
 - Rule: `AiIntentRouterService.deterministic` bat cac pattern tieng Viet/ma nghiep vu de on dinh hon model.
 - Database: `AiToolExecutorService` doc bang `products`, `warehouses`, `locations`, `stock_levels`, `purchase_orders`, `inbound_receipts`, `sales_orders`, `picking_items`, `users`, `audit_logs`, v.v.
-- API/model: `AiProviderRouterClient` chon Ollama/OpenAI-compatible/Gemini theo config hoac request.
+- API/model: `AiProviderRouterClient` chon Ollama hoac OpenAI-compatible theo config hoac request. Mac dinh dung model noi bo `stockmaster-ai`.
 - Context: history gan nhat, intent parameters, tool data, data sources va missing params.
 - Vector/RAG: chua co vector store/RAG; day la intent + SQL tool + prompt-grounded answer.
 
