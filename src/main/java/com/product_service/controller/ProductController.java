@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -111,8 +112,10 @@ public class ProductController {
     @PostMapping
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER')")
     @Operation(summary = "Tạo sản phẩm", description = "Tạo mới sản phẩm; mã SKU do hệ thống tự sinh (tiền tố SP)")
-    public ApiResponse<ProductResponse> create(@Valid @RequestBody CreateProductRequest request) {
-        return ApiResponse.success("Tạo sản phẩm thành công", productService.create(request));
+    public ApiResponse<ProductResponse> create(@Valid @RequestBody CreateProductRequest request,
+            Authentication authentication) {
+        return ApiResponse.success("Tạo sản phẩm thành công",
+                productService.create(request, currentUserId(authentication)));
     }
 
     @PostMapping("/batch")
@@ -127,8 +130,10 @@ public class ProductController {
     @Operation(summary = "Import sản phẩm từ Excel (.xlsx)")
     public ApiResponse<ProductImportResponse> importXlsx(
             @RequestPart("file") MultipartFile file,
-            @Parameter(description = "UUID người tạo; bỏ trống = import hệ thống") @RequestParam(required = false) UUID createdBy) {
-        ProductImportResponse result = productExcelImportService.importFromXlsx(file, createdBy);
+            @Parameter(description = "UUID người tạo; bỏ trống = user hiện tại") @RequestParam(required = false) UUID createdBy,
+            Authentication authentication) {
+        UUID effectiveCreatedBy = createdBy != null ? createdBy : currentUserId(authentication);
+        ProductImportResponse result = productExcelImportService.importFromXlsx(file, effectiveCreatedBy);
         return ApiResponse.success("Import hoàn tất", result);
     }
 
@@ -146,5 +151,20 @@ public class ProductController {
     public ApiResponse<String> delete(@PathVariable UUID id) {
         productService.delete(id);
         return ApiResponse.success("Xóa sản phẩm thành công", id.toString());
+    }
+
+    private UUID currentUserId(Authentication authentication) {
+        if (authentication == null) {
+            return null;
+        }
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof com.auth_service.security.JwtPrincipal jwtPrincipal) {
+            return jwtPrincipal.userId();
+        }
+        try {
+            return UUID.fromString(authentication.getName());
+        } catch (Exception ex) {
+            return null;
+        }
     }
 }

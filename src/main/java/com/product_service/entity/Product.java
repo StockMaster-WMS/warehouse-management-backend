@@ -1,5 +1,6 @@
 package com.product_service.entity;
 
+import com.auth_service.entity.UserAccount;
 import com.common.util.UuidUtils;
 import jakarta.persistence.*;
 import lombok.*;
@@ -90,6 +91,10 @@ public class Product {
 
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by", insertable = false, updatable = false)
+    private UserAccount createdByUser;
 
     @PrePersist
     void prePersist() {

@@ -119,6 +119,12 @@ public class ProductService {
     // Tạo mới sản phẩm và sinh SKU duy nhất.
     @Transactional
     public ProductResponse create(CreateProductRequest request) {
+        return create(request, request.createdBy());
+    }
+
+    // Tạo mới sản phẩm với người tạo đã xác thực.
+    @Transactional
+    public ProductResponse create(CreateProductRequest request, UUID createdBy) {
         validateBarcodeUniqueness(request.barcodeEan13(), null);
 
         Category category = categoryRepository.findById(request.categoryId())
@@ -130,6 +136,9 @@ public class ProductService {
         product.setSku(generateUniqueSku());
         product.setCategory(category);
         product.setPrimarySupplier(supplier);
+        if (createdBy != null) {
+            product.setCreatedBy(createdBy);
+        }
 
         Product saved = productRepository.save(product);
         ProductResponse response = productMapper.toResponse(saved);

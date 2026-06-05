@@ -27,5 +27,6 @@ public record ProductResponse(
                 @Schema(example = "ACTIVE") String status,
                 @Schema(example = "2026-03-14T08:30:00Z") OffsetDateTime createdAt,
                 @Schema(example = "2026-03-14T09:15:00Z") OffsetDateTime updatedAt,
-                @Schema(example = "2e7c6d35-93ff-4d6f-8ec5-4c0900d8c971") UUID createdBy) {
+                @Schema(example = "2e7c6d35-93ff-4d6f-8ec5-4c0900d8c971") UUID createdBy,
+                @Schema(example = "Nguyen Van An") String createdByName) {
 }
