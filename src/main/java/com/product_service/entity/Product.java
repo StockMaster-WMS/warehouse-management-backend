@@ -89,7 +89,7 @@ public class Product {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
-    @Column(name = "created_by", nullable = false)
+    @Column(name = "created_by")
     private UUID createdBy;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -105,9 +105,6 @@ public class Product {
             createdAt = now;
         if (updatedAt == null)
             updatedAt = now;
-        if (createdBy == null) {
-            createdBy = UUID.fromString("00000000-0000-0000-0000-000000000000");
-        }
     }
 
     @PreUpdate

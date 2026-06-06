@@ -43,9 +43,6 @@ import java.util.UUID;
 @Slf4j
 public class PoItemExcelImportService {
 
-    private static final UUID ZERO_UUID =
-            UUID.fromString("00000000-0000-0000-0000-000000000000");
-
     private static final int MAX_DATA_ROWS = 500;
     private static final int MAX_ERROR_DETAILS = 100;
     private static final long MAX_UPLOAD_BYTES = 5L * 1024 * 1024;
@@ -81,11 +78,7 @@ public class PoItemExcelImportService {
                     "Chi import dong hang khi don nhap dang o trang thai DRAFT");
         }
 
-        if (createdBy == null || ZERO_UUID.equals(createdBy)) {
-            throw new AppException(ErrorCode.BAD_REQUEST,
-                    "Khong xac dinh duoc nguoi tao san pham khi import. Vui long dang nhap lai va thu lai.");
-        }
-        UUID effectiveCreatedBy = createdBy;
+        UUID effectiveCreatedBy = normalizeCreatedBy(createdBy);
         List<ImportRowError> errors = new ArrayList<>();
         List<PoItemResponse> createdItems = new ArrayList<>();
         int attempted = 0;
@@ -344,6 +337,13 @@ public class PoItemExcelImportService {
 
     private static String clean(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private static UUID normalizeCreatedBy(UUID createdBy) {
+        if (createdBy == null) {
+            return null;
+        }
+        return "00000000-0000-0000-0000-000000000000".equals(createdBy.toString()) ? null : createdBy;
     }
 
     private void assertPoVisible(PurchaseOrder purchaseOrder, Collection<UUID> visibleWarehouseIds) {

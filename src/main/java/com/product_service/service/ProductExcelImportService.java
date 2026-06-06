@@ -32,10 +32,6 @@ import java.util.UUID;
 @Slf4j
 public class ProductExcelImportService {
 
-    /** Giống {@link com.product_service.entity.Product} @PrePersist khi không có user cụ thể */
-    private static final UUID DEFAULT_IMPORT_CREATED_BY =
-            UUID.fromString("00000000-0000-0000-0000-000000000000");
-
     private static final int MAX_DATA_ROWS = 2_000;
     private static final int MAX_ERROR_DETAILS = 100;
     private static final long MAX_UPLOAD_BYTES = 10L * 1024 * 1024;
@@ -53,7 +49,7 @@ public class ProductExcelImportService {
     // Import sản phẩm từ file Excel và trả thống kê kết quả.
     public ProductImportResponse importFromXlsx(MultipartFile file, UUID createdBy) {
         ExcelImportSupport.requireSafeXlsxFile(file, MAX_UPLOAD_BYTES);
-        UUID effectiveCreatedBy = createdBy != null ? createdBy : DEFAULT_IMPORT_CREATED_BY;
+        UUID effectiveCreatedBy = normalizeCreatedBy(createdBy);
 
         List<ImportRowError> errors = new ArrayList<>();
         int success = 0;
@@ -221,5 +217,12 @@ public class ProductExcelImportService {
             return;
         }
         errors.add(new ImportRowError(rowNumber, message));
+    }
+
+    private static UUID normalizeCreatedBy(UUID createdBy) {
+        if (createdBy == null) {
+            return null;
+        }
+        return "00000000-0000-0000-0000-000000000000".equals(createdBy.toString()) ? null : createdBy;
     }
 }
