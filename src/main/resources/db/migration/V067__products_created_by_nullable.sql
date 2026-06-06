@@ -1,6 +1,6 @@
+ALTER TABLE products
+    ALTER COLUMN created_by DROP NOT NULL;
+
 UPDATE products
 SET created_by = NULL
 WHERE created_by = '00000000-0000-0000-0000-000000000000';
-
-ALTER TABLE products
-    ALTER COLUMN created_by DROP NOT NULL;
