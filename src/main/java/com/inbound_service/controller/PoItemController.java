@@ -93,9 +93,10 @@ public class PoItemController {
     public ApiResponse<PoItemImportResponse> importExcel(
             @PathVariable UUID purchaseOrderId,
             @RequestPart("file") MultipartFile file,
-            @Parameter(description = "UUID nguoi tao; bo trong = import he thong") @RequestParam(required = false) UUID createdBy,
+            @Parameter(description = "UUID nguoi tao; bo trong = user hien tai") @RequestParam(required = false) UUID createdBy,
             Authentication authentication) {
-        PoItemImportResponse result = poItemExcelImportService.importFromXlsx(purchaseOrderId, file, createdBy,
+        UUID effectiveCreatedBy = createdBy != null ? createdBy : currentUserId(authentication);
+        PoItemImportResponse result = poItemExcelImportService.importFromXlsx(purchaseOrderId, file, effectiveCreatedBy,
                 warehouseAccessService.visibleWarehouseIdSet(authentication));
         return ApiResponse.success("Import hoan tat", result);
     }
@@ -106,5 +107,20 @@ public class PoItemController {
     public ApiResponse<String> delete(@PathVariable UUID id, Authentication authentication) {
         poItemService.delete(id, warehouseAccessService.visibleWarehouseIdSet(authentication));
         return ApiResponse.success("Xoa dong don nhap thanh cong", id.toString());
+    }
+
+    private UUID currentUserId(Authentication authentication) {
+        if (authentication == null) {
+            return null;
+        }
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof com.auth_service.security.JwtPrincipal jwtPrincipal) {
+            return jwtPrincipal.userId();
+        }
+        try {
+            return UUID.fromString(authentication.getName());
+        } catch (Exception ex) {
+            return null;
+        }
     }
 }

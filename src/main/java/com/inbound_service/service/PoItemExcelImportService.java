@@ -43,7 +43,7 @@ import java.util.UUID;
 @Slf4j
 public class PoItemExcelImportService {
 
-    private static final UUID DEFAULT_CREATED_BY =
+    private static final UUID ZERO_UUID =
             UUID.fromString("00000000-0000-0000-0000-000000000000");
 
     private static final int MAX_DATA_ROWS = 500;
@@ -81,7 +81,11 @@ public class PoItemExcelImportService {
                     "Chi import dong hang khi don nhap dang o trang thai DRAFT");
         }
 
-        UUID effectiveCreatedBy = createdBy != null ? createdBy : DEFAULT_CREATED_BY;
+        if (createdBy == null || ZERO_UUID.equals(createdBy)) {
+            throw new AppException(ErrorCode.BAD_REQUEST,
+                    "Khong xac dinh duoc nguoi tao san pham khi import. Vui long dang nhap lai va thu lai.");
+        }
+        UUID effectiveCreatedBy = createdBy;
         List<ImportRowError> errors = new ArrayList<>();
         List<PoItemResponse> createdItems = new ArrayList<>();
         int attempted = 0;
