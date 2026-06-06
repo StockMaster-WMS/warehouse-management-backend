@@ -83,6 +83,10 @@ public interface ProductMapper {
         if (product == null) {
             return null;
         }
+        if (product.getCreatedBy() != null
+                && "00000000-0000-0000-0000-000000000000".equals(product.getCreatedBy().toString())) {
+            return "Hệ thống";
+        }
         UserAccount user = product.getCreatedByUser();
         if (user != null) {
             if (user.getFullName() != null && !user.getFullName().isBlank()) {
@@ -94,10 +98,6 @@ public interface ProductMapper {
             if (user.getEmail() != null && !user.getEmail().isBlank()) {
                 return user.getEmail().trim();
             }
-        }
-        if (product.getCreatedBy() != null
-                && "00000000-0000-0000-0000-000000000000".equals(product.getCreatedBy().toString())) {
-            return "Hệ thống";
         }
         return null;
     }
