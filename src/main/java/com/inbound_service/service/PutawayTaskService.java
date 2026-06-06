@@ -10,10 +10,12 @@ import com.inbound_service.dto.request.UpdatePutawayTaskRequest;
 import com.inbound_service.dto.response.PutawayLocationSuggestionResponse;
 import com.inbound_service.dto.response.PutawayTaskResponse;
 import com.inbound_service.entity.InboundReceipt;
+import com.inbound_service.entity.InboundReceiptItem;
 import com.inbound_service.entity.InboundReceiptStatus;
 import com.inbound_service.entity.PutawayStatus;
 import com.inbound_service.entity.PutawayTask;
 import com.inbound_service.mapper.PutawayTaskMapper;
+import com.inbound_service.repository.InboundReceiptItemRepository;
 import com.inbound_service.repository.InboundReceiptRepository;
 import com.inbound_service.repository.PutawayTaskRepository;
 import com.inbound_service.repository.PutawayTaskSpecification;
@@ -61,6 +63,7 @@ public class PutawayTaskService {
     private final StockLevelService stockLevelService;
     private final LocationRepository locationRepository;
     private final StockLevelRepository stockLevelRepository;
+    private final InboundReceiptItemRepository inboundReceiptItemRepository;
 
     public PagedResponse<PutawayTaskResponse> findAll(Pageable pageable, UUID poItemId, String status) {
         return findAll(pageable, poItemId, status, (Collection<UUID>) null);
@@ -266,9 +269,7 @@ public class PutawayTaskService {
     }
 
     private void moveStockFromReceivingLocation(PutawayTask task) {
-        UUID sourceLocationId = task.getSuggestedLocationId() != null
-                ? task.getSuggestedLocationId()
-                : task.getInboundReceipt().getLocationId();
+        UUID sourceLocationId = resolveReceivingLocationId(task);
         UUID targetLocationId = task.getActualLocationId();
         if (sourceLocationId == null) {
             throw new AppException(ErrorCode.BAD_REQUEST,
@@ -301,6 +302,34 @@ public class PutawayTaskService {
                 task.getId()
         );
         stockLevelService.adjust(addCmd);
+    }
+
+    private UUID resolveReceivingLocationId(PutawayTask task) {
+        InboundReceipt receipt = task.getInboundReceipt();
+        if (receipt == null) {
+            return null;
+        }
+
+        List<InboundReceiptItem> receiptItems = inboundReceiptItemRepository.findByReceiptId(receipt.getId());
+        UUID poItemId = task.getPoItem() == null ? null : task.getPoItem().getId();
+        UUID suggestedLocationId = task.getSuggestedLocationId();
+
+        return receiptItems.stream()
+                .filter(item -> task.getProductId().equals(item.getProductId()))
+                .filter(item -> poItemId == null || item.getPoItem() == null || poItemId.equals(item.getPoItem().getId()))
+                .filter(item -> suggestedLocationId == null || suggestedLocationId.equals(item.getLocationId()))
+                .findFirst()
+                .or(() -> receiptItems.stream()
+                        .filter(item -> task.getProductId().equals(item.getProductId()))
+                        .filter(item -> poItemId == null || item.getPoItem() == null || poItemId.equals(item.getPoItem().getId()))
+                        .filter(item -> task.getQtyToPutaway().equals(item.getReceivedQty()))
+                        .findFirst())
+                .or(() -> receiptItems.stream()
+                        .filter(item -> task.getProductId().equals(item.getProductId()))
+                        .filter(item -> poItemId == null || item.getPoItem() == null || poItemId.equals(item.getPoItem().getId()))
+                        .findFirst())
+                .map(InboundReceiptItem::getLocationId)
+                .orElse(receipt.getLocationId());
     }
 
     private void refreshReceiptStatus(UUID receiptId) {

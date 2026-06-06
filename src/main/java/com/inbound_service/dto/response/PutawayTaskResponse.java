@@ -7,6 +7,7 @@ public record PutawayTaskResponse(
         UUID id,
         UUID poItemId,
         UUID inboundReceiptId,
+        UUID warehouseId,
         UUID productId,
         Integer qtyToPutaway,
         UUID suggestedLocationId,

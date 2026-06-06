@@ -10,5 +10,6 @@ public interface PutawayTaskMapper {
 
     @Mapping(target = "poItemId", source = "poItem.id")
     @Mapping(target = "inboundReceiptId", source = "inboundReceipt.id")
+    @Mapping(target = "warehouseId", source = "inboundReceipt.warehouseId")
     PutawayTaskResponse toResponse(PutawayTask task);
 }
