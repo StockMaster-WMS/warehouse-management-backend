@@ -2191,8 +2191,8 @@ public class AiToolExecutorService {
                         GREATEST(pi.qty_to_pick - COALESCE(pi.qty_picked, 0), 0) AS remaining_qty,
                         pi.pick_sequence,
                         pi.lot_number,
-                        COALESCE(p.sku, pi.product_id::text) AS sku,
-                        COALESCE(p.name, 'Sản phẩm ' || pi.product_id::text) AS product_name,
+                        COALESCE(p.sku, soi.product_sku, pi.product_id::text) AS sku,
+                        COALESCE(p.name, soi.product_sku, 'Sản phẩm chưa có tên') AS product_name,
                         l.code AS location_code,
                         w.code AS warehouse_code,
                         COALESCE(assignee.username, assignee.full_name) AS assignee_username

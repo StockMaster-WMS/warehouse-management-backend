@@ -903,6 +903,9 @@ public class AiAnswerComposerService {
     private String pickingReply(List<?> list, AiIntentResult route) {
         String query = routeQuery(route);
         Object first = list.get(0);
+        if (containsAny(query, "don lay hang", "don nao", "don chua", "chua hoan thanh", "chua hoan tat")) {
+            return pickingOrdersReply(list);
+        }
         if (containsAny(query, "con bao nhieu mon", "bao nhieu mon chua", "chua lay", "chua hoan tat")) {
             long remainingSku = list.stream()
                     .filter(row -> longValue(row, "remaining_qty") > 0 || !"PICKED".equalsIgnoreCase(value(row, "status")))
@@ -930,6 +933,40 @@ public class AiAnswerComposerService {
                         + ", cần lấy " + value(row, "qty_to_pick")
                         + ", đã lấy " + value(row, "qty_picked")
                         + ", trạng thái " + statusValue(row, "status"));
+    }
+
+    private String pickingOrdersReply(List<?> list) {
+        Map<String, long[]> byOrder = new LinkedHashMap<>();
+        for (Object row : list) {
+            String soNumber = value(row, "so_number");
+            if ("N/A".equals(soNumber)) {
+                continue;
+            }
+            long[] totals = byOrder.computeIfAbsent(soNumber, ignored -> new long[3]);
+            totals[0]++;
+            totals[1] += longValue(row, "remaining_qty");
+            totals[2] += longValue(row, "qty_to_pick");
+        }
+        if (byOrder.isEmpty()) {
+            return "Hiện chưa xác định được đơn lấy hàng nào chưa hoàn thành.";
+        }
+        List<Map<String, Object>> displayed = byOrder.entrySet().stream()
+                .limit(6)
+                .map(entry -> Map.<String, Object>of(
+                        "so_number", entry.getKey(),
+                        "line_count", entry.getValue()[0],
+                        "remaining_qty", entry.getValue()[1],
+                        "qty_to_pick", entry.getValue()[2]))
+                .toList();
+        String suffix = byOrder.size() > displayed.size()
+                ? "\n\n*Còn " + formatNumber(byOrder.size() - displayed.size()) + " đơn khác chưa hiển thị.*"
+                : "";
+        return "**Có " + formatNumber(byOrder.size()) + " đơn lấy hàng chưa hoàn thành:**\n"
+                + joinRowsAsBulletList(displayed, row -> "**" + value(row, "so_number") + "**"
+                + " - " + formatNumber(longValue(row, "line_count")) + " dòng chưa xong"
+                + ", còn **" + formatNumber(longValue(row, "remaining_qty")) + "** / "
+                + formatNumber(longValue(row, "qty_to_pick")) + " sản phẩm cần lấy")
+                + suffix;
     }
 
     private String stockMovementReply(List<?> list) {
