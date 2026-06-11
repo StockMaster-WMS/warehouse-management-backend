@@ -190,12 +190,44 @@ public class StockLevelExcelExportService {
         List<StockLevel> lowStocks = allStocks.stream()
                 .filter(stock -> {
                     ProductSummaryResponse p = productMap.get(stock.getProductId());
-                    return p != null && p.minQty() != null && stock.getQtyAvailable() < p.minQty();
+                    int available = stock.getQtyAvailable() == null
+                            ? (stock.getQtyOnHand() == null ? 0 : stock.getQtyOnHand())
+                                    - (stock.getQtyReserved() == null ? 0 : stock.getQtyReserved())
+                            : stock.getQtyAvailable();
+                    return p != null && p.minQty() != null && available > 0 && available < p.minQty();
                 })
                 .toList();
 
+        return exportAlertRows(lowStocks, productMap, "LowStockData");
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] exportOutOfStockToXlsx(UUID warehouseId, UUID locationId, UUID productId) {
+        Specification<StockLevel> spec = StockLevelSpecification.hasWarehouseId(warehouseId)
+                .and(StockLevelSpecification.hasLocationId(locationId))
+                .and(StockLevelSpecification.hasProductId(productId));
+
+        Page<StockLevel> page = stockLevelRepository.findAll(spec, Pageable.unpaged());
+        List<StockLevel> allStocks = page.getContent();
+        Map<UUID, ProductSummaryResponse> productMap = loadProducts(allStocks);
+
+        List<StockLevel> outOfStocks = allStocks.stream()
+                .filter(stock -> {
+                    int available = stock.getQtyAvailable() == null
+                            ? (stock.getQtyOnHand() == null ? 0 : stock.getQtyOnHand())
+                                    - (stock.getQtyReserved() == null ? 0 : stock.getQtyReserved())
+                            : stock.getQtyAvailable();
+                    return available <= 0;
+                })
+                .toList();
+
+        return exportAlertRows(outOfStocks, productMap, "OutOfStockData");
+    }
+
+    private byte[] exportAlertRows(List<StockLevel> stocks, Map<UUID, ProductSummaryResponse> productMap,
+            String sheetName) {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            Sheet dataSheet = workbook.createSheet("LowStockData");
+            Sheet dataSheet = workbook.createSheet(sheetName);
             String[] headers = {
                     "warehouseCode", "warehouseName", "locationCode", "productId", "productSku", "productName", 
                     "minQty", "qtyOnHand", "qtyReserved", "qtyAvailable", "lotNumber", "expiryDate"
@@ -207,7 +239,7 @@ public class StockLevelExcelExportService {
             }
 
             int rowIndex = 1;
-            for (StockLevel stock : lowStocks) {
+            for (StockLevel stock : stocks) {
                 ProductSummaryResponse product = productMap.get(stock.getProductId());
                 Row row = dataSheet.createRow(rowIndex++);
                 int col = 0;

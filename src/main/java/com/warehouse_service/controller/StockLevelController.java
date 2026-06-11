@@ -65,10 +65,28 @@ public class StockLevelController {
 
     @GetMapping("/alerts/low-stock")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
-    @Operation(summary = "Cảnh báo tồn kho thấp", description = "Danh sách sản phẩm có tồn khả dụng < mức tối thiểu (minQty)")
-    public ApiResponse<List<StockLevelExpandedResponse>> getLowStock(Authentication authentication) {
+    @Operation(summary = "Cảnh báo tồn kho thấp", description = "Danh sách sản phẩm có 0 < tồn khả dụng < mức tối thiểu (minQty)")
+    public ApiResponse<List<StockLevelExpandedResponse>> getLowStock(
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) UUID locationId,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
         return ApiResponse.success("Lấy danh sách tồn kho thấp thành công",
-                stockLevelService.findLowStock(warehouseAccessService.visibleWarehouseIdSet(authentication)));
+                stockLevelService.findLowStock(warehouseAccessService.visibleWarehouseIdSet(authentication),
+                        warehouseId, locationId));
+    }
+
+    @GetMapping("/alerts/out-of-stock")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
+    @Operation(summary = "Cảnh báo hết hàng", description = "Danh sách dòng tồn có tồn khả dụng <= 0")
+    public ApiResponse<List<StockLevelExpandedResponse>> getOutOfStock(
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) UUID locationId,
+            Authentication authentication) {
+        warehouseAccessService.assertCanAccessWarehouse(authentication, warehouseId);
+        return ApiResponse.success("Lấy danh sách hết hàng thành công",
+                stockLevelService.findOutOfStock(warehouseAccessService.visibleWarehouseIdSet(authentication),
+                        warehouseId, locationId));
     }
 
     @GetMapping("/alerts/near-expiry")
@@ -217,7 +235,7 @@ public class StockLevelController {
 
     @GetMapping(value = "/reports/low-stock-export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
-    @Operation(summary = "Xuất danh sách hàng tồn kho thấp", description = "Lọc các stock level có qtyAvailable < minQty")
+    @Operation(summary = "Xuất danh sách hàng tồn kho thấp", description = "Lọc các stock level có 0 < qtyAvailable < minQty")
     public ResponseEntity<byte[]> exportLowStockXlsx(
             @RequestParam(required = false) UUID warehouseId,
             @RequestParam(required = false) UUID locationId,
@@ -226,6 +244,27 @@ public class StockLevelController {
         warehouseId = exportWarehouseScope(authentication, warehouseId);
         byte[] bytes = stockLevelExcelExportService.exportLowStockToXlsx(warehouseId, locationId, productId);
         String filename = "low-stock-report-" + java.time.LocalDate.now() + ".xlsx";
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(filename, StandardCharsets.UTF_8)
+                .build();
+        return ResponseEntity.ok()
+                .contentType(
+                        MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(bytes);
+    }
+
+    @GetMapping(value = "/reports/out-of-stock-export", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @PreAuthorize("hasAnyAuthority('ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'REPORT_VIEWER')")
+    @Operation(summary = "Xuất danh sách hàng hết hàng", description = "Lọc các stock level có qtyAvailable <= 0")
+    public ResponseEntity<byte[]> exportOutOfStockXlsx(
+            @RequestParam(required = false) UUID warehouseId,
+            @RequestParam(required = false) UUID locationId,
+            @RequestParam(required = false) UUID productId,
+            Authentication authentication) {
+        warehouseId = exportWarehouseScope(authentication, warehouseId);
+        byte[] bytes = stockLevelExcelExportService.exportOutOfStockToXlsx(warehouseId, locationId, productId);
+        String filename = "out-of-stock-report-" + java.time.LocalDate.now() + ".xlsx";
         ContentDisposition disposition = ContentDisposition.attachment()
                 .filename(filename, StandardCharsets.UTF_8)
                 .build();

@@ -25,6 +25,8 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 
 		UUID getWarehouseId();
 
+		UUID getLocationId();
+
 		Integer getQtyOnHand();
 
 		Integer getQtyReserved();
@@ -129,6 +131,7 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, UUID>, J
 	@Query("""
 			select s.id as id,
 			       s.warehouse.id as warehouseId,
+			       s.location.id as locationId,
 			       s.productId as productId,
 			       s.qtyOnHand as qtyOnHand,
 			       s.qtyReserved as qtyReserved

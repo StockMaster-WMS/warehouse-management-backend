@@ -735,18 +735,19 @@ public class StockLevelService {
                 nearExpiry);
     }
 
-    // Lấy danh sách sản phẩm tồn kho thấp (qtyAvailable < minQty).
+    // Lấy danh sách sản phẩm tồn kho thấp (0 < qtyAvailable < minQty).
     public List<StockLevelExpandedResponse> findLowStock() {
-        return findLowStock(null);
+        return findLowStock(null, null, null);
     }
 
     public List<StockLevelExpandedResponse> findLowStock(Collection<UUID> visibleWarehouseIds) {
+        return findLowStock(visibleWarehouseIds, null, null);
+    }
+
+    public List<StockLevelExpandedResponse> findLowStock(Collection<UUID> visibleWarehouseIds,
+            UUID warehouseId, UUID locationId) {
         List<StockLevelRepository.StockQuantityView> stockViews = stockLevelRepository.findQuantityViews();
-        if (visibleWarehouseIds != null) {
-            stockViews = stockViews.stream()
-                    .filter(stock -> visibleWarehouseIds.contains(stock.getWarehouseId()))
-                    .toList();
-        }
+        stockViews = filterStockQuantityViews(stockViews, visibleWarehouseIds, warehouseId, locationId);
         if (stockViews.isEmpty()) return List.of();
 
         Map<UUID, ProductSummaryResponse> productMap = loadProductsSummary(extractProductIdsFromQuantityViews(stockViews));
@@ -758,34 +759,23 @@ public class StockLevelService {
                 lowStockIds.add(stock.getId());
             }
         }
-        if (lowStockIds.isEmpty()) return List.of();
+        return expandStockLevels(lowStockIds, productMap);
+    }
 
-        List<StockLevel> lowStocks = stockLevelRepository.findByIdInWithWarehouseAndLocation(lowStockIds);
-        Map<UUID, StockLevel> stockById = new HashMap<>(lowStocks.size());
-        for (StockLevel stock : lowStocks) {
-            stockById.put(stock.getId(), stock);
+    public List<StockLevelExpandedResponse> findOutOfStock(Collection<UUID> visibleWarehouseIds,
+            UUID warehouseId, UUID locationId) {
+        List<StockLevelRepository.StockQuantityView> stockViews = stockLevelRepository.findQuantityViews();
+        stockViews = filterStockQuantityViews(stockViews, visibleWarehouseIds, warehouseId, locationId);
+        if (stockViews.isEmpty()) return List.of();
+
+        Map<UUID, ProductSummaryResponse> productMap = loadProductsSummary(extractProductIdsFromQuantityViews(stockViews));
+        List<UUID> outOfStockIds = new ArrayList<>();
+        for (StockLevelRepository.StockQuantityView stock : stockViews) {
+            if (availableQty(stock) <= 0) {
+                outOfStockIds.add(stock.getId());
+            }
         }
-
-        Map<UUID, WarehouseSummary> warehouseMap = loadWarehousesSummary(extractWarehouseIds(lowStocks));
-        Map<UUID, LocationSummary> locationMap = loadLocationsSummary(extractLocationIds(lowStocks));
-
-        List<StockLevelExpandedResponse> result = new ArrayList<>();
-        for (UUID stockId : lowStockIds) {
-            StockLevel stock = stockById.get(stockId);
-            if (stock == null) continue;
-            ProductSummaryResponse product = productMap.get(stock.getProductId());
-            if (product == null) continue;
-
-            StockLevelResponse base = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock));
-            result.add(new StockLevelExpandedResponse(
-                    base.id(), base.warehouseId(), base.locationId(), base.productId(),
-                    base.lotNumber(), base.expiryDate(),
-                    base.qtyOnHand(), base.qtyReserved(), base.qtyAvailable(), base.updatedAt(),
-                    warehouseMap.get(base.warehouseId()),
-                    locationMap.get(base.locationId()),
-                    product));
-        }
-        return result;
+        return expandStockLevels(outOfStockIds, productMap);
     }
 
     // Lấy danh sách hàng sắp hết hạn dạng JSON.
@@ -853,11 +843,24 @@ public class StockLevelService {
         long count = 0;
         for (Map.Entry<UUID, Integer> entry : availableByProduct.entrySet()) {
             ProductSummaryResponse product = productMap.get(entry.getKey());
-            if (product != null && product.minQty() != null && entry.getValue() < product.minQty()) {
+            if (product != null && product.minQty() != null
+                    && entry.getValue() > 0 && entry.getValue() < product.minQty()) {
                 count++;
             }
         }
         return count;
+    }
+
+    private List<StockLevelRepository.StockQuantityView> filterStockQuantityViews(
+            List<StockLevelRepository.StockQuantityView> stockViews,
+            Collection<UUID> visibleWarehouseIds,
+            UUID warehouseId,
+            UUID locationId) {
+        return stockViews.stream()
+                .filter(stock -> visibleWarehouseIds == null || visibleWarehouseIds.contains(stock.getWarehouseId()))
+                .filter(stock -> warehouseId == null || warehouseId.equals(stock.getWarehouseId()))
+                .filter(stock -> locationId == null || locationId.equals(stock.getLocationId()))
+                .toList();
     }
 
     private Set<UUID> extractProductIdsFromQuantityViews(Collection<StockLevelRepository.StockQuantityView> stocks) {
@@ -875,9 +878,44 @@ public class StockLevelService {
         if (product == null || product.minQty() == null) {
             return false;
         }
+        int available = availableQty(stock);
+        return available > 0 && available < product.minQty();
+    }
+
+    private int availableQty(StockLevelRepository.StockQuantityView stock) {
         int onHand = stock.getQtyOnHand() == null ? 0 : stock.getQtyOnHand();
         int reserved = stock.getQtyReserved() == null ? 0 : stock.getQtyReserved();
-        return onHand - reserved < product.minQty();
+        return onHand - reserved;
+    }
+
+    private List<StockLevelExpandedResponse> expandStockLevels(Collection<UUID> stockIds,
+            Map<UUID, ProductSummaryResponse> productMap) {
+        if (stockIds.isEmpty()) return List.of();
+
+        List<StockLevel> stocks = stockLevelRepository.findByIdInWithWarehouseAndLocation(stockIds);
+        Map<UUID, StockLevel> stockById = new HashMap<>(stocks.size());
+        for (StockLevel stock : stocks) {
+            stockById.put(stock.getId(), stock);
+        }
+
+        Map<UUID, WarehouseSummary> warehouseMap = loadWarehousesSummary(extractWarehouseIds(stocks));
+        Map<UUID, LocationSummary> locationMap = loadLocationsSummary(extractLocationIds(stocks));
+
+        List<StockLevelExpandedResponse> result = new ArrayList<>();
+        for (UUID stockId : stockIds) {
+            StockLevel stock = stockById.get(stockId);
+            if (stock == null) continue;
+
+            StockLevelResponse base = fillQtyAvailableWhenMissing(stockLevelMapper.toResponse(stock));
+            result.add(new StockLevelExpandedResponse(
+                    base.id(), base.warehouseId(), base.locationId(), base.productId(),
+                    base.lotNumber(), base.expiryDate(),
+                    base.qtyOnHand(), base.qtyReserved(), base.qtyAvailable(), base.updatedAt(),
+                    warehouseMap.get(base.warehouseId()),
+                    locationMap.get(base.locationId()),
+                    productMap.get(base.productId())));
+        }
+        return result;
     }
 
     private void notifyLowStockIfNeeded(StockLevelResponse stock) {
