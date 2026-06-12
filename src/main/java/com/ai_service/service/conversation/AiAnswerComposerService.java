@@ -1569,11 +1569,19 @@ public class AiAnswerComposerService {
     }
 
     private String stockByLocationReply(List<?> list) {
-        return "Vị trí đang chứa: " + joinRows(limit(list, 8), row ->
-                value(row, "warehouse_code") + "/" + value(row, "location_code")
-                        + " - " + value(row, "sku") + " " + value(row, "product_name")
-                        + ", lô " + value(row, "lot_number")
-                        + ", tồn " + value(row, "qty_on_hand"));
+        Object first = list.get(0);
+        List<?> displayed = limit(list, 8);
+        String suffix = list.size() > displayed.size()
+                ? "\n\n*Còn " + formatNumber(list.size() - displayed.size()) + " dòng tồn khác chưa hiển thị.*"
+                : "";
+        return "**Vị trí " + value(first, "warehouse_code") + "/" + value(first, "location_code")
+                + " đang chứa:**\n"
+                + joinRowsAsBulletList(displayed, row -> "`" + value(row, "sku") + "` - "
+                + value(row, "product_name")
+                + ", tồn **" + formatNumber(longValue(row, "qty_on_hand")) + "**"
+                + ", khả dụng **" + formatNumber(longValue(row, "qty_available")) + "**"
+                + ("N/A".equals(value(row, "lot_number")) ? "" : ", lô " + value(row, "lot_number")))
+                + suffix;
     }
 
     private String stockByLotReply(List<?> list) {

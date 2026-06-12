@@ -34,6 +34,9 @@ public class AiIntentRouterService {
     private static final Pattern LABELED_SKU_PATTERN = Pattern.compile("\\bSKU\\s*[:#-]?\\s*([A-Z0-9][A-Z0-9-]{1,49})\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern NUMERIC_SKU_PATTERN = Pattern.compile("\\b(?!20\\d{2}\\b)\\d{4,8}\\b");
     private static final Pattern WAREHOUSE_CODE_PATTERN = Pattern.compile("\\bWH-[A-Z0-9-]+\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LOCATION_CODE_PATTERN = Pattern.compile(
+            "\\b[A-Z]{2,6}-[A-Z0-9]{2,6}-[A-Z0-9]{2,12}-A\\d{1,3}-R\\d{1,3}-L\\d{1,3}-B\\d{1,3}\\b",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern BUSINESS_CODE_PATTERN = Pattern.compile(
             "\\b(?:(?:PO|SO|GR|PT|PK|SC|RT|RMA)-?\\d+[A-Z0-9-]*|(?:SUP|CUS|CUST|KH|NCC)-?\\d+[A-Z0-9-]*)\\b",
             Pattern.CASE_INSENSITIVE);
@@ -571,6 +574,12 @@ public class AiIntentRouterService {
             params.putIfAbsent("location", userMessage);
             return AiIntentResult.of(AiIntent.STOCK_BY_LOCATION, params, 0.92,
                     "deterministic stock by location");
+        }
+
+        if (params.containsKey("location")
+                && containsAny(normalized, "dang chua", "chua gi", "chua hang gi", "co hang gi", "sku nao", "mat hang nao")) {
+            return AiIntentResult.of(AiIntent.STOCK_BY_LOCATION, params, 0.94,
+                    "deterministic stock by explicit location code");
         }
 
         if (containsAny(normalized, "hang chet", "dead stock", "ton lau", "ton dong lau")) {
@@ -1538,6 +1547,11 @@ public class AiIntentRouterService {
             params.put("warehouseCode", warehouseCode);
         }
 
+        String locationCode = extractLocationCode(userMessage);
+        if (locationCode != null) {
+            params.put("location", locationCode);
+        }
+
         String extractedBusinessCode = extractBusinessCode(userMessage);
         if (extractedBusinessCode != null) {
             String code = extractedBusinessCode.toUpperCase(Locale.ROOT);
@@ -1569,7 +1583,7 @@ public class AiIntentRouterService {
         }
 
         Matcher skuMatcher = SKU_PATTERN.matcher(userMessage == null ? "" : userMessage.toUpperCase(Locale.ROOT));
-        if (!params.containsKey("sku") && skuMatcher.find()) {
+        if (!params.containsKey("sku") && !params.containsKey("location") && skuMatcher.find()) {
             String code = skuMatcher.group();
             if (!code.startsWith("WH-") && !code.startsWith("PO-") && !code.startsWith("SO-")
                     && !code.startsWith("GR-") && !code.startsWith("PT-") && !code.startsWith("PK-")
@@ -1638,6 +1652,14 @@ public class AiIntentRouterService {
             return null;
         }
         return canonicalizeWarehouseCode("WH-" + fuzzy.group(1));
+    }
+
+    private String extractLocationCode(String userMessage) {
+        if (userMessage == null) {
+            return null;
+        }
+        Matcher matcher = LOCATION_CODE_PATTERN.matcher(userMessage.toUpperCase(Locale.ROOT));
+        return matcher.find() ? matcher.group().toUpperCase(Locale.ROOT) : null;
     }
 
     private String canonicalizeWarehouseCode(String rawCode) {
