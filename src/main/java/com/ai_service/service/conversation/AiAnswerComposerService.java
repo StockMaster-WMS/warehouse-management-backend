@@ -454,6 +454,12 @@ public class AiAnswerComposerService {
             requestedWarehouseCandidate = routeParam(route, "warehouseCode", "warehouse");
         }
         final String requestedWarehouse = requestedWarehouseCandidate;
+        boolean locationQuestion = containsAny(query, "nam o dau", "dang o dau", "o dau", "tai dau", "vi tri nao")
+                && !containsAny(query, "o kho nao", "tai kho nao", "kho nao");
+
+        if (locationQuestion) {
+            return stockProductLocationsReply(list, productLabel, totalOnHand, totalAvailable);
+        }
 
         if (containsAny(query, "o kho nao", "tai kho nao", "kho nao co", "nam o kho nao")
                 && !(query.contains("nhieu") && query.contains("nhat"))) {
@@ -602,6 +608,35 @@ public class AiAnswerComposerService {
                     + ": tồn **" + formatNumber(summary.onHand) + "**, khả dụng **"
                     + formatNumber(summary.available) + "**, kho: " + warehouses;
         }) + suffix;
+    }
+
+    private String stockProductLocationsReply(List<?> list, String productLabel, long totalOnHand, long totalAvailable) {
+        List<?> locationRows = list.stream()
+                .filter(row -> longValue(row, "qty_on_hand") > 0)
+                .filter(row -> !"N/A".equals(value(row, "warehouse_code")) || !"N/A".equals(value(row, "location_code")))
+                .toList();
+        if (locationRows.isEmpty()) {
+            if (totalOnHand <= 0) {
+                return productLabel + " hiện chưa có tồn kho ở bất kỳ vị trí nào theo dữ liệu hiện tại.";
+            }
+            return productLabel + " có tồn **" + formatNumber(totalOnHand)
+                    + "** đơn vị, nhưng dữ liệu tồn hiện chưa gắn được vị trí cụ thể.";
+        }
+        List<?> displayed = limit(locationRows, 8);
+        String suffix = locationRows.size() > displayed.size()
+                ? "\n\n*Còn " + formatNumber(locationRows.size() - displayed.size()) + " vị trí khác chưa hiển thị.*"
+                : "";
+        return "**" + productLabel + " đang nằm tại:**\n"
+                + "- **Tổng tồn:** **" + formatNumber(totalOnHand) + "** đơn vị\n"
+                + "- **Khả dụng:** **" + formatNumber(totalAvailable) + "** đơn vị\n\n"
+                + joinRowsAsBulletList(displayed, row -> {
+                    String location = value(row, "location_code");
+                    String locationText = "N/A".equals(location) ? "chưa gắn vị trí cụ thể" : location;
+                    return "Kho **" + value(row, "warehouse_code") + "**"
+                            + " - vị trí **" + locationText + "**"
+                            + ": tồn **" + formatNumber(longValue(row, "qty_on_hand")) + "**"
+                            + ", khả dụng **" + formatNumber(longValue(row, "qty_available")) + "**";
+                }) + suffix;
     }
 
     private String stockLowestReply(List<?> list) {
