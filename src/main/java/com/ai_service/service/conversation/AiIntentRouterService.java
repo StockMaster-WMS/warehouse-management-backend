@@ -492,6 +492,11 @@ public class AiIntentRouterService {
                     "deterministic product availability natural");
         }
 
+        if (looksProductLocationQuestion(normalized)) {
+            return AiIntentResult.of(AiIntent.STOCK_BY_PRODUCT, params, 0.9,
+                    "deterministic product location natural");
+        }
+
         if (looksUnsupported(userMessage)) {
             return AiIntentResult.of(AiIntent.UNSUPPORTED, params, 0.95, "deterministic unsupported");
         }
@@ -1502,6 +1507,21 @@ public class AiIntentRouterService {
                 || containsAny(normalized, "co trong kho", "co o kho", "co tai kho", "trong kho khong")
                 || (containsAny(normalized, "co san pham", "co mat hang", "co hang")
                 && containsAny(normalized, "trong kho", "o kho", "tai kho", "kho khong", "hang khong"));
+    }
+
+    private boolean looksProductLocationQuestion(String normalized) {
+        if (!containsAny(normalized, "nam o dau", "dang o dau", "o dau", "tai dau", "vi tri nao")) {
+            return false;
+        }
+        if (containsAnyPhrase(normalized, "don", "phieu", "task", "putaway", "picking", "lo", "lo hang", "lot",
+                "kho nao", "vi tri nao dang chua", "vi tri dang chua", "location dang chua")) {
+            return false;
+        }
+        String cleaned = normalized
+                .replaceAll("\\b(nam|dang|o|dau|tai|vi|tri|nao|san|pham|mat|hang|sku|ma|ma hang)\\b", " ")
+                .replaceAll("[^a-z0-9]+", " ")
+                .trim();
+        return Pattern.compile("[a-z0-9]{2,}").matcher(cleaned).find();
     }
 
     // Trích các tham số chung như query, SKU, mã kho, số ngày.

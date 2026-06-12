@@ -3824,7 +3824,7 @@ public class AiToolExecutorService {
         if (value == null) {
             return "";
         }
-        return value.replaceAll("(?i)tồn kho|ton kho|còn bao nhiêu|con bao nhieu|còn hàng|con hang|còn không|con khong|có trong kho|co trong kho|có ở kho|co o kho|có tại kho|co tai kho|có sản phẩm|co san pham|có mặt hàng|co mat hang|có hàng|co hang|trong kho|ở kho|o kho|tại kho|tai kho|kho không|kho khong|hàng không|hang khong|không|khong|sku|sản phẩm|san pham", "")
+        return value.replaceAll("(?i)tồn kho|ton kho|còn bao nhiêu|con bao nhieu|còn hàng|con hang|còn không|con khong|có trong kho|co trong kho|có ở kho|co o kho|có tại kho|co tai kho|có sản phẩm|co san pham|có mặt hàng|co mat hang|có hàng|co hang|nằm ở đâu|nam o dau|đang ở đâu|dang o dau|ở đâu|o dau|tại đâu|tai dau|vị trí nào|vi tri nao|trong kho|ở kho|o kho|tại kho|tai kho|kho không|kho khong|hàng không|hang khong|không|khong|sku|mã hàng|ma hang|sản phẩm|san pham", "")
                 .replaceAll("[?？]", "")
                 .trim();
     }
@@ -3886,6 +3886,7 @@ public class AiToolExecutorService {
 
         String bestSku = null;
         int bestScore = 0;
+        int bestScoreMatches = 0;
         for (Map<String, Object> product : products) {
             String sku = text(product.get("sku"));
             String name = text(product.get("name"));
@@ -3893,10 +3894,16 @@ public class AiToolExecutorService {
             if (score > bestScore) {
                 bestScore = score;
                 bestSku = sku;
+                bestScoreMatches = 1;
+            } else if (score == bestScore && score > 0) {
+                bestScoreMatches++;
             }
         }
         int threshold = normalizedQuery.contains("iphone") || normalizedQuery.contains("dell")
                 || normalizedQuery.contains("laptop") ? 1 : productMatchThreshold(scoringText);
+        if (bestScore >= threshold && bestScoreMatches > 1 && !containsNumber(scoringText)) {
+            return null;
+        }
         return bestScore >= threshold ? bestSku : null;
     }
 
@@ -4195,6 +4202,12 @@ public class AiToolExecutorService {
                 .map(MatchResult::group)
                 .toList();
         return valueNumbers.containsAll(queryNumbers);
+    }
+
+    private boolean containsNumber(String value) {
+        return Pattern.compile("\\d+")
+                .matcher(value == null ? "" : value)
+                .find();
     }
 
     // Bỏ các từ chung để tránh match sai khi resolve entity.

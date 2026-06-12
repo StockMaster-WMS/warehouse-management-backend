@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -438,6 +439,11 @@ public class AiAnswerComposerService {
     private String stockByProductReply(List<?> list, AiIntentResult route) {
         Object first = list.get(0);
         String query = routeQuery(route);
+        boolean availabilityQuestion = containsAny(query, "co trong kho", "co o kho", "co tai kho", "trong kho khong",
+                "con hang", "con khong");
+        if (distinctSkuCount(list) > 1) {
+            return multiProductStockReply(list, availabilityQuestion);
+        }
         String productLabel = productLabel(first);
         long totalOnHand = sumLong(list, "qty_on_hand");
         long totalReserved = sumLong(list, "qty_reserved");
@@ -448,8 +454,6 @@ public class AiAnswerComposerService {
             requestedWarehouseCandidate = routeParam(route, "warehouseCode", "warehouse");
         }
         final String requestedWarehouse = requestedWarehouseCandidate;
-        boolean availabilityQuestion = containsAny(query, "co trong kho", "co o kho", "co tai kho", "trong kho khong",
-                "con hang", "con khong");
 
         if (containsAny(query, "o kho nao", "tai kho nao", "kho nao co", "nam o kho nao")
                 && !(query.contains("nhieu") && query.contains("nhat"))) {
@@ -562,6 +566,42 @@ public class AiAnswerComposerService {
               .append(formatNumber(entry.getValue()[2])).append("**)\n");
         }
         return sb.toString().trim();
+    }
+
+    private String multiProductStockReply(List<?> list, boolean availabilityQuestion) {
+        Map<String, ProductStockSummary> summaries = new LinkedHashMap<>();
+        for (Object row : list) {
+            String sku = value(row, "sku");
+            if ("N/A".equals(sku)) {
+                continue;
+            }
+            ProductStockSummary summary = summaries.computeIfAbsent(sku,
+                    ignored -> new ProductStockSummary(sku, value(row, "product_name")));
+            summary.onHand += longValue(row, "qty_on_hand");
+            summary.available += longValue(row, "qty_available");
+            String warehouse = value(row, "warehouse_code");
+            if (!"N/A".equals(warehouse) && longValue(row, "qty_on_hand") > 0) {
+                summary.warehouses.add(warehouse);
+            }
+        }
+        List<ProductStockSummary> displayed = summaries.values().stream()
+                .limit(6)
+                .toList();
+        String suffix = summaries.size() > displayed.size()
+                ? "\n\n*Còn " + formatNumber(summaries.size() - displayed.size()) + " sản phẩm khác chưa hiển thị.*"
+                : "";
+        String prefix = availabilityQuestion
+                ? "**Tôi tìm thấy " + formatNumber(summaries.size()) + " sản phẩm khớp với câu hỏi:**\n"
+                : "**Thông tin tồn kho của " + formatNumber(summaries.size()) + " sản phẩm khớp:**\n";
+        return prefix + joinRowsAsBulletList(displayed, item -> {
+            ProductStockSummary summary = (ProductStockSummary) item;
+            String warehouses = summary.warehouses.isEmpty()
+                    ? "chưa có kho còn hàng"
+                    : String.join(", ", summary.warehouses);
+            return "`" + summary.sku + "` - " + summary.name
+                    + ": tồn **" + formatNumber(summary.onHand) + "**, khả dụng **"
+                    + formatNumber(summary.available) + "**, kho: " + warehouses;
+        }) + suffix;
     }
 
     private String stockLowestReply(List<?> list) {
@@ -1749,6 +1789,14 @@ public class AiAnswerComposerService {
         return rows.stream().mapToLong(row -> longValue(row, key)).sum();
     }
 
+    private long distinctSkuCount(List<?> rows) {
+        return rows.stream()
+                .map(row -> value(row, "sku"))
+                .filter(sku -> sku != null && !sku.isBlank() && !"N/A".equals(sku))
+                .distinct()
+                .count();
+    }
+
     private long longValue(Object row, String key) {
         if (row instanceof Map<?, ?> map) {
             return longValue(map.get(key));
@@ -2141,5 +2189,18 @@ public class AiAnswerComposerService {
             return text.substring(0, MAX_TOOL_TEXT_LENGTH) + "...";
         }
         return data;
+    }
+
+    private static final class ProductStockSummary {
+        private final String sku;
+        private final String name;
+        private final LinkedHashSet<String> warehouses = new LinkedHashSet<>();
+        private long onHand;
+        private long available;
+
+        private ProductStockSummary(String sku, String name) {
+            this.sku = sku;
+            this.name = name;
+        }
     }
 }
