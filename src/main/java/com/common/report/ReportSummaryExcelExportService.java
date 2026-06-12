@@ -57,10 +57,7 @@ public class ReportSummaryExcelExportService {
             CellStyle headerStyle = createHeaderStyle(workbook);
             CellStyle numberStyle = createNumberStyle(workbook);
             CellStyle moneyStyle = createMoneyStyle(workbook);
-            writeMetadataSheet(workbook, summary, period, year, fromDate, toDate, warehouseIds, detailRows.size(), headerStyle);
             writeOverviewSheet(workbook, summary, period, year, detailRows.size(), headerStyle, numberStyle, moneyStyle);
-            writeInsightsSheet(workbook, summary, detailRows, headerStyle);
-            writeRevenueSheet(workbook, summary, headerStyle);
             writeTopSkusSheet(workbook, summary, headerStyle);
             writeDetailSheet(workbook, detailRows, warehouses, headerStyle);
             workbook.write(out);
