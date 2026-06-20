@@ -1,17 +1,68 @@
-# Warehouse Management Backend
+# StockMaster Backend
 
-Backend cho hệ thống quản lý kho StockMaster. Dự án cung cấp REST API cho xác thực, quản lý sản phẩm, kho, tồn kho, nhập hàng, xuất hàng, kiểm kê, báo cáo và trợ lý AI.
+Backend cho StockMaster, một hệ thống quản lý kho hỗ trợ doanh nghiệp theo dõi sản phẩm, tồn kho, nhập hàng, xuất hàng, kiểm kê, báo cáo, phân quyền người dùng và trợ lý AI nội bộ. Dự án được xây dựng theo hướng modular monolith với Spring Boot, PostgreSQL, JWT authentication và Flyway migration.
 
-## Công nghệ sử dụng
+Repository này tập trung vào REST API, nghiệp vụ kho và các thành phần nền tảng như bảo mật, phân quyền, migration database, tài liệu Swagger và import/export Excel.
+
+## Vai trò của tôi
+
+- Phân tích nghiệp vụ quản lý kho: sản phẩm, kho, vị trí lưu trữ, tồn kho, nhập hàng, xuất hàng, kiểm kê và hoàn trả.
+- Thiết kế REST API, database schema, migration Flyway và phân tách module theo domain nghiệp vụ.
+- Xây dựng xác thực JWT, refresh token bằng HttpOnly cookie, phân quyền theo vai trò và kiểm soát truy cập theo kho.
+- Phát triển các luồng nghiệp vụ chính: purchase order, inbound receipt, putaway, sales order, picking, stock movement và cycle count.
+- Tích hợp import/export Excel, Swagger UI, báo cáo, thông báo, audit log và trợ lý AI dùng Ollama local.
+- Viết test cho các phần rủi ro cao như security, CORS, JWT, idempotency, stock flow và AI authorization.
+
+## Điểm nổi bật
+
+- Authentication/authorization với JWT access token, refresh cookie và role-based access control.
+- Quản lý kho theo nhiều domain: product, warehouse, inbound, outbound, inventory, report, user management.
+- Theo dõi tồn kho, cảnh báo tồn thấp/gần hết hạn và lịch sử dịch chuyển hàng hóa.
+- Luồng nhập hàng đầy đủ: purchase order, phiếu nhập, gợi ý putaway và cập nhật tồn kho.
+- Luồng xuất hàng đầy đủ: sales order, picking, cập nhật tồn kho và ghi nhận stock movement.
+- Kiểm kê kho, hoàn trả hàng, audit log, notification và dashboard summary.
+- Import/export Excel bằng Apache POI.
+- Database migration bằng Flyway, dễ tái tạo môi trường.
+- Swagger/OpenAPI để kiểm thử và đọc tài liệu API nhanh.
+- Có Docker Compose để chạy backend cùng PostgreSQL.
+
+## Kiến trúc tổng quan
+
+```text
+Frontend Next.js
+      |
+      | REST API + JWT
+      v
+Spring Boot Backend
+      |
+      | JPA / Flyway
+      v
+PostgreSQL
+
+Ollama local được dùng cho các tính năng AI assistant khi cấu hình model.
+```
+
+## Tech stack
 
 - Java 17
 - Spring Boot 3.5
-- Spring Web, Spring Security, Spring Data JPA
+- Spring Web, Spring Security, Spring Data JPA, Validation, Actuator
 - PostgreSQL
 - Flyway
 - MapStruct, Lombok
+- JJWT
+- Apache POI
 - Springdoc OpenAPI / Swagger UI
 - Docker, Docker Compose
+- JUnit / Spring Boot Test
+
+## Tài khoản demo
+
+| Vai trò | Tài khoản | Mật khẩu |
+| --- | --- | --- |
+| Admin | `admin` | `AdmIn@12345` |
+
+> Tài khoản trên dùng cho môi trường demo/local. Không dùng mật khẩu này cho môi trường production.
 
 ## Yêu cầu môi trường
 
@@ -19,6 +70,7 @@ Backend cho hệ thống quản lý kho StockMaster. Dự án cung cấp REST AP
 - Maven Wrapper có sẵn trong dự án
 - PostgreSQL 14+ nếu chạy local không dùng Docker
 - Docker Desktop nếu chạy bằng Docker Compose
+- Ollama nếu muốn chạy tính năng AI local
 
 ## Cấu hình môi trường
 
@@ -51,7 +103,7 @@ Không commit `.env` chứa thông tin thật lên repository.
 
 ## Chạy bằng Docker Compose
 
-Cách này khởi động cả backend và PostgreSQL:
+Cách này khởi động backend và PostgreSQL:
 
 ```powershell
 docker compose up --build
@@ -90,7 +142,40 @@ Chạy file JAR sau khi build:
 java -jar target\warehouse-management-backend-0.0.1-SNAPSHOT.jar
 ```
 
-## Migration database
+## API documentation
+
+Swagger UI:
+
+```text
+http://localhost:9000/swagger-ui.html
+```
+
+Một số nhóm endpoint chính:
+
+- `/api/auth/**` - đăng nhập, đăng ký, refresh token, hồ sơ cá nhân
+- `/api/users/**` - người dùng, vai trò, phân quyền
+- `/api/dashboard/**` - dữ liệu tổng quan
+- `/api/products/**` - sản phẩm
+- `/api/categories/**` - danh mục sản phẩm
+- `/api/suppliers/**` - nhà cung cấp
+- `/api/customers/**` - khách hàng
+- `/api/warehouses/**` - kho
+- `/api/locations/**` - vị trí lưu trữ
+- `/api/stocks/**` - tồn kho, cảnh báo, xuất Excel
+- `/api/stocks/movements/**` - lịch sử dịch chuyển tồn kho
+- `/api/purchase-orders/**` - đơn nhập hàng
+- `/api/inbound-receipts/**` - phiếu nhập
+- `/api/putaway-tasks/**` - tác vụ putaway
+- `/api/sales-orders/**` - đơn xuất hàng
+- `/api/picking-items/**` - tác vụ picking
+- `/api/cycle-counts/**` - kiểm kê
+- `/api/rma/**` - hoàn trả
+- `/api/reports/**` - báo cáo
+- `/api/notifications/**` - thông báo
+- `/api/audit-logs/**` - nhật ký hệ thống
+- `/api/v1/ai/**` - trợ lý AI và gợi ý vị trí
+
+## Database migration
 
 Flyway tự chạy migration khi ứng dụng khởi động nếu `WAREHOUSE_FLYWAY_ENABLED=true`.
 
@@ -109,42 +194,7 @@ V002__add_example_table.sql
 
 Không chỉnh sửa migration đã chạy trên môi trường dùng chung. Nếu cần thay đổi schema, tạo migration mới.
 
-## API chính
-
-Một số nhóm endpoint đang được sử dụng:
-
-- `/api/auth/**` - đăng nhập, đăng ký, refresh token, hồ sơ cá nhân
-- `/api/users/**` - người dùng, vai trò, phân quyền
-- `/api/dashboard/**` - dữ liệu tổng quan
-- `/api/products/**` - sản phẩm
-- `/api/categories/**` - danh mục sản phẩm
-- `/api/suppliers/**` - nhà cung cấp
-- `/api/customers/**` - khách hàng
-- `/api/warehouses/**` - kho
-- `/api/locations/**` - vị trí lưu trữ
-- `/api/stocks/**` - tồn kho, cảnh báo, xuất Excel
-- `/api/stocks/movements/**` - lịch sử dịch chuyển tồn kho
-- `/api/purchase-orders/**` - đơn nhập hàng
-- `/api/po-items/**` - dòng hàng trong đơn nhập
-- `/api/inbound-receipts/**` - phiếu nhập
-- `/api/putaway-tasks/**` - tác vụ putaway
-- `/api/sales-orders/**` - đơn xuất hàng
-- `/api/so-items/**` - dòng hàng trong đơn xuất
-- `/api/picking-items/**` - tác vụ picking
-- `/api/cycle-counts/**` - kiểm kê
-- `/api/rma/**` - hoàn trả
-- `/api/reports/**` - báo cáo
-- `/api/notifications/**` - thông báo
-- `/api/audit-logs/**` - nhật ký hệ thống
-- `/api/v1/ai/**` - trợ lý AI và gợi ý vị trí
-
-Chi tiết request/response xem tại Swagger UI:
-
-```text
-http://localhost:9000/swagger-ui.html
-```
-
-## Kiểm thử và kiểm tra build
+## Kiểm thử và build
 
 Chạy test:
 
@@ -169,7 +219,7 @@ src/main/java/com
 ├─ outbound_service    # SO, picking, khách hàng
 ├─ ai_service          # cấu hình và hội thoại AI
 ├─ ai_putway           # gợi ý vị trí putaway
-├─ common              # dùng chung: dashboard, report, audit, notification
+├─ common              # dashboard, report, audit, notification, tiện ích dùng chung
 └─ config              # cấu hình ứng dụng
 ```
 
@@ -180,5 +230,11 @@ src/main/java/com
 - Hầu hết API nghiệp vụ yêu cầu JWT access token.
 - Swagger, health check và các API auth cần thiết được mở public theo cấu hình bảo mật.
 - Khi deploy HTTPS, đặt `AUTH_COOKIE_SECURE=true` và cấu hình domain CORS chính xác.
-- Nếu frontend và backend khác site, ví dụ frontend ở một domain và API ở domain khác, đặt thêm `AUTH_COOKIE_SAME_SITE=None`; cookie `SameSite=None` bắt buộc phải đi cùng `Secure`.
+- Nếu frontend và backend khác site, đặt `AUTH_COOKIE_SAME_SITE=None`; cookie `SameSite=None` bắt buộc phải đi cùng `Secure`.
 - Nếu để `AUTH_COOKIE_SECURE=auto`, proxy/CDN phải forward đúng `X-Forwarded-Proto: https` để backend tự set refresh cookie thành `Secure; SameSite=None`.
+
+## Trạng thái dự án
+
+- Đã hoàn thành các luồng chính: authentication, dashboard, product, warehouse, inventory, inbound, outbound, cycle count, reports, user management và AI assistant.
+- Có test cho một số nghiệp vụ và lớp bảo mật quan trọng.
+- Có thể cải thiện thêm CI/CD, coverage report, seed data chuẩn hóa và tài liệu API theo từng use case.
